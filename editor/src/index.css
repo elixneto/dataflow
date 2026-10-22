@@ -314,6 +314,11 @@
   stroke: var(--destructive);
 }
 
+.react-flow__edge.is-splice-target .react-flow__edge-path {
+  stroke: var(--primary);
+  stroke-width: 3;
+}
+
 .react-flow__edge.is-error-edge.selected .react-flow__edge-path {
   stroke: var(--destructive);
   stroke-width: 2;

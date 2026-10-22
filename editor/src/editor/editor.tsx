@@ -21,9 +21,9 @@ import '@xyflow/react/dist/style.css';
 import {CircleAlert, Play, X} from 'lucide-react';
 import {CATEGORIES, CATEGORY_COLOR, DRAG_MIME, isFlowNode, END, START, BY_TYPE} from '#components/catalog';
 import {cn} from '#lib/utils';
-import type {Flow, FlowNode} from '#mock/flows';
+import {cleanFlow, type Flow, type FlowNode} from '#mock/flows';
 import {getProject, EXAMPLES_PROJECT} from '#mock/projects';
-import {type RunMode, type WorkflowParameter, type RunRecord} from '@dataflow/core';
+import {type AvailableVariable, type RunMode, type WorkflowParameter, type RunRecord} from '@dataflow/core';
 import {RunPanel} from '#run/run-panel';
 import {cancelOnRunner, runOnRunner, toExecutable} from '#run/runner';
 import {Toolbar, type ValidationResult} from '#editor/toolbar';
@@ -32,7 +32,7 @@ import {CommentNodeMemo, COMMENT_SIZE, type CommentNode} from '#editor/comment-n
 import {GROUP_COLORS, GroupNodeMemo, GROUP_SIZE, GROUP_Z, type GroupNode} from '#editor/group-node';
 import {ComponentNodeMemo, ERROR_PORT, inputCount, outputCount, outputLabel, type ComponentNode} from '#editor/component-node';
 import {Palette} from '#editor/palette';
-import {arrangeHorizontally} from '#editor/layout';
+import {arrange as arrangeNodes, type ArrangeDirection} from '#editor/layout';
 import {FloatingWindow, type WindowPosition, type WindowSize} from '#editor/window';
 import {WorkflowPanel} from '#editor/workflow-panel';
 import {ParametersContext} from '#editor/parameters-context';
@@ -40,6 +40,9 @@ import {WarningsContext, ResultContext} from '#editor/result-context';
 import {PropertiesPanel} from '#editor/properties-panel';
 import {ResizeObserverGuard} from '#editor/resize-observer-guard';
 import {isComponent, receivesRows, validateFlow, type Issue} from '#editor/validation';
+import {loadKnownVariables, saveKnownVariables, updateKnownVariables} from '#editor/known-variables';
+import {VariablesContext, type Variables} from '#editor/variables-context';
+import {edgeUnder, splice, type Box} from '#editor/edge-splice';
 
 type Snapshot = {nodes: FlowNode[]; edges: Edge[]};
 
@@ -49,6 +52,14 @@ const HISTORY_LIMIT = 100;
 const EDIT_WINDOW_MS = 1000;
 const PASTE_OFFSET = 40;
 const VALIDATION_DELAY_MS = 900;
+/** How close to the pointer tip (flow px) an edge must pass for a dragged component to go into it. */
+const SPLICE_REACH = 16;
+
+/** The current run's variables: every node has them, with or without a run. */
+const RUN_VARIABLES: AvailableVariable[] = [
+  {path: '$WORKFLOW_CURRENT_RUN', type: 'object'},
+  ...['id', 'mode', 'project', 'workflow', 'startedAt', 'parentId'].map(field => ({path: `$WORKFLOW_CURRENT_RUN.${field}`, type: 'string'})),
+];
 
 let counter = 0;
 function newId(type: string) {
@@ -86,6 +97,37 @@ function Editor({flow, onSave}: Props) {
   const [run, setRun] = useState<RunRecord | null>(null);
   const [running, setRunning] = useState<RunMode | null>(null);
   const runId = useRef<string | null>(null);
+  // the expression fields suggest what reached each node in the runs so far (kept per flow, per output port)
+  const [known, setKnown] = useState(() => loadKnownVariables(flow.id));
+  const [secretNames, setSecretNames] = useState<string[]>([]);
+  useEffect(() => {
+    const project = encodeURIComponent(flow.projectId ?? EXAMPLES_PROJECT);
+    fetch(`${import.meta.env.BASE_URL}api/projects/${project}/secrets`)
+      .then(response => (response.ok ? response.json() as Promise<{name: string}[]> : []))
+      .then(list => setSecretNames(list.map(s => s.name)))
+      .catch(() => undefined);
+  }, [flow.projectId]);
+  const variables = useMemo<Variables>(() => {
+    /** what went out of the ports feeding the node, in the runs so far (undefined: nothing seen) */
+    const incoming = (nodeId: string, port?: string) => edges
+      .filter(e => e.target === nodeId && (!port || (e.targetHandle ?? 'in-0') === port))
+      .map(e => known[e.source]?.[e.sourceHandle ?? 'out-0']);
+    return {
+      seen: (nodeId, port) => incoming(nodeId, port).some(list => list !== undefined),
+      of: (nodeId, port) => {
+        // what reached the node first, then parameters, secrets and the run
+        const list: AvailableVariable[] = [
+          ...incoming(nodeId, port).flatMap(list => list ?? []),
+          {path: '$PARAMETERS', type: 'object'},
+          ...parameters.filter(p => p.name).map(p => ({path: `$PARAMETERS.${p.name}`, type: p.type, example: p.default || undefined})),
+          {path: '$SECRETS', type: 'object'},
+          ...secretNames.map(name => ({path: `$SECRETS.${name}`, type: 'secret'})),
+          ...RUN_VARIABLES,
+        ];
+        return [...new Map(list.map(v => [v.path, v])).values()];
+      },
+    };
+  }, [known, parameters, secretNames, edges]);
   // each component's output bump is painted by the result (it goes away when the result is closed)
   const lastRunStatus = useMemo(
     () => Object.fromEntries((run?.components ?? []).map(c => [c.nodeId, c])),
@@ -136,13 +178,26 @@ function Editor({flow, onSave}: Props) {
     }),
     [nodes, invalid],
   );
+  // edge a dragged component would be spliced into (highlighted while dragging)
+  const [spliceEdge, setSpliceEdge] = useState<string | null>(null);
+  // a drag that ends without a drop on the canvas (Esc, dropped outside, the window lost the focus): the highlight goes away
+  useEffect(() => {
+    const clear = () => setSpliceEdge(null);
+    window.addEventListener('dragend', clear);
+    window.addEventListener('blur', clear);
+    return () => {
+      window.removeEventListener('dragend', clear);
+      window.removeEventListener('blur', clear);
+    };
+  }, []);
   const shownEdges = useMemo(
     () => edges.map(e => {
       const fromError = e.sourceHandle === ERROR_PORT;
-      if (!fromError && !validating) return e;
-      return {...e, ...(validating && {animated: true}), ...(fromError && {className: 'is-error-edge'})};
+      const target = e.id === spliceEdge;
+      if (!fromError && !validating && !target) return e;
+      return {...e, ...(validating && {animated: true}), className: cn(fromError && 'is-error-edge', target && 'is-splice-target')};
     }),
-    [edges, validating],
+    [edges, validating, spliceEdge],
   );
 
   // ---------- history (Ctrl+Z / Ctrl+Shift+Z) ----------
@@ -243,11 +298,30 @@ function Editor({flow, onSave}: Props) {
 
   // ---------- save ----------
 
+  /** The flow as it is stored, with what is in the editor now (no selection nor run marks): what Save keeps and Download gives. */
+  const currentFlow = useCallback(
+    (): Flow => cleanFlow({...base, name, parameters, nodes: getNodes(), edges: getEdges()}),
+    [base, name, parameters, getNodes, getEdges],
+  );
+
   const save = useCallback(() => {
-    const saved = onSave({...base, name, parameters, nodes: getNodes().map(n => ({...n, selected: false, className: undefined})), edges: getEdges()});
+    const saved = onSave(currentFlow());
     setBase(saved);
     setChanged(false);
-  }, [base, name, parameters, getNodes, getEdges, onSave]);
+  }, [currentFlow, onSave]);
+
+  /** Downloads the flow's definition as JSON (unsaved changes included). Secrets are not in it: they live in the runner. */
+  function download() {
+    const flow = currentFlow();
+    const slug = flow.name.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'flow';
+    const url = URL.createObjectURL(new Blob([`${JSON.stringify(flow, null, 2)}
+`], {type: 'application/json'}));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${slug}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+  }
 
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
@@ -357,9 +431,18 @@ function Editor({flow, onSave}: Props) {
 
   // ---------- drag from the palette ----------
 
+  /** Around the pointer tip: a component dropped there goes into the edge under it. */
+  function cursorBox(event: {clientX: number; clientY: number}): Box {
+    const p = screenToFlowPosition({x: event.clientX, y: event.clientY});
+    return {x: p.x - SPLICE_REACH, y: p.y - SPLICE_REACH, w: SPLICE_REACH * 2, h: SPLICE_REACH * 2};
+  }
+
   function onDragOver(event: DragEvent<HTMLElement>) {
     event.preventDefault();
     event.dataTransfer.dropEffect = 'move';
+    if (!event.dataTransfer.types.includes(DRAG_MIME)) return;
+    const id = edgeUnder(cursorBox(event), getEdges())?.id ?? null;
+    if (id !== spliceEdge) setSpliceEdge(id);
   }
 
   function newNode(type: string, position: {x: number; y: number}): ComponentNode | null {
@@ -373,11 +456,21 @@ function Editor({flow, onSave}: Props) {
 
   function onDrop(event: DragEvent<HTMLElement>) {
     event.preventDefault();
+    setSpliceEdge(null);
     const node = newNode(event.dataTransfer.getData(DRAG_MIME), screenToFlowPosition({x: event.clientX - 128, y: event.clientY - 30}));
     if (!node) return;
+    const edge = canSplice(node) ? edgeUnder(cursorBox(event), getEdges()) : undefined;
     record();
     setNodes(current => [...current.map(n => ({...n, selected: false})), node]);
+    if (edge) setEdges(current => splice(current, edge, node.id));
   }
+
+  /** Only a loose component with an input and an output goes into an edge (not Start/End, not one already connected). */
+  function canSplice(node: FlowNode): boolean {
+    return isComponent(node) && !isFlowNode(node.data.type) && inputCount(node.data) > 0 && outputCount(node.data) > 0
+      && !getEdges().some(e => e.source === node.id || e.target === node.id);
+  }
+
 
   /**
    * Double click on the palette: puts the component on the canvas. With a component selected, the new one goes to its right
@@ -462,7 +555,10 @@ function Editor({flow, onSave}: Props) {
     groupDrag.current = {id: node.id, start: node.position, inside};
   }
 
-  function onDrag(_: unknown, node: FlowNode) {
+  function onDrag(event: MouseEvent | TouchEvent, node: FlowNode) {
+    const pointer = 'touches' in event ? event.touches[0] : event;
+    const edge = pointer && canSplice(node) ? edgeUnder(cursorBox(pointer), getEdges(), node.id) : undefined;
+    if ((edge?.id ?? null) !== spliceEdge) setSpliceEdge(edge?.id ?? null);
     const drag = groupDrag.current;
     if (!drag || drag.id !== node.id || drag.inside.size === 0) return;
     const dx = node.position.x - drag.start.x;
@@ -530,6 +626,12 @@ function Editor({flow, onSave}: Props) {
         runId.current = crypto.randomUUID();
         const result = await runOnRunner(toExecutable(name, parameters, getNodes(), getEdges(), flow.id, flow.projectId), mode, runId.current, undefined, flow.projectId);
         setRun(result);
+        // even a failed run updates the variables of the ports that produced something
+        setKnown(previous => {
+          const next = updateKnownVariables(previous, result);
+          saveKnownVariables(flow.id, next);
+          return next;
+        });
         setIssues(result.components.filter(c => c.status === 'failed').map(c => ({nodeId: c.nodeId, message: `"${c.label}" failed.`})));
         setValidation(result.status === 'failed'
           ? {ok: false, messages: [result.error ?? 'The run failed.']}
@@ -542,10 +644,10 @@ function Editor({flow, onSave}: Props) {
     }, VALIDATION_DELAY_MS);
   }
 
-  /** Arranges the flow from left to right (Dagre) and frames it; undone with Ctrl+Z. */
-  function arrange() {
+  /** Arranges the flow left to right or top to bottom (Dagre) and frames it; undone with Ctrl+Z. */
+  function arrange(direction: ArrangeDirection) {
     record();
-    setNodes(current => arrangeHorizontally(current, getEdges()));
+    setNodes(current => arrangeNodes(current, getEdges(), direction));
     requestAnimationFrame(() => fitView({padding: 0.15, maxZoom: 1, duration: 300}));
   }
 
@@ -560,6 +662,7 @@ function Editor({flow, onSave}: Props) {
     <ParametersContext.Provider value={parameters}>
     <ResultContext.Provider value={lastRunStatus}>
     <WarningsContext.Provider value={warnings}>
+    <VariablesContext.Provider value={variables}>
       <div className="flex h-dvh flex-col">
         <Toolbar
           project={{id: flow.projectId ?? EXAMPLES_PROJECT, name: getProject(flow.projectId ?? EXAMPLES_PROJECT)?.name ?? 'Project'}}
@@ -584,11 +687,13 @@ function Editor({flow, onSave}: Props) {
           canRedo={historySize.future > 0}
           changed={changed}
           onSave={save}
+          onDownload={download}
           onShowIssues={() => setShowIssues(v => !v)}
         />
         <div className="flex min-h-0 flex-1">
           <Palette onAdd={addFromPalette}/>
-          <main ref={wrapperRef} className="relative min-w-0 flex-1" onDragOver={onDragOver} onDrop={onDrop}>
+          <main ref={wrapperRef} className="relative min-w-0 flex-1" onDragOver={onDragOver} onDrop={onDrop}
+                onDragLeave={e => !e.currentTarget.contains(e.relatedTarget as Node | null) && setSpliceEdge(null)}>
             <h1 className="sr-only">Flow canvas</h1>
             <ReactFlow
               nodes={shownNodes}
@@ -605,6 +710,12 @@ function Editor({flow, onSave}: Props) {
               elevateNodesOnSelect={false}
               onNodeDragStart={onDragStart}
               onNodeDrag={onDrag}
+              onNodeDragStop={(_, node) => {
+                // dropped over an edge: goes into it (the same Ctrl+Z as the drag)
+                const edge = spliceEdge ? getEdges().find(e => e.id === spliceEdge) : undefined;
+                setSpliceEdge(null);
+                if (edge && canSplice(node)) setEdges(current => splice(current, edge, node.id));
+              }}
               onSelectionDragStart={record}
               onBeforeDelete={async () => {
                 record();
@@ -722,6 +833,7 @@ function Editor({flow, onSave}: Props) {
           </main>
         </div>
       </div>
+    </VariablesContext.Provider>
     </WarningsContext.Provider>
     </ResultContext.Provider>
     </ParametersContext.Provider>

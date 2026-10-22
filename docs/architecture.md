@@ -72,7 +72,7 @@ type ComponentLogic = {
 }
 ```
 
-The `ctx` gives the component: `fieldValue` (text or expression), `log`, `prepareScript` (TypeScript), `querySqlServer`, `invokeWorkflow`, `wait`/`waitEach` (waits that do not count as active time) and `holding` (memory). Whatever talks to the outside (sandbox, database) is injected by the runner; the core only receives the function.
+The `ctx` gives the component: `fieldValue` (text or expression), `log`, `prepareScript` (TypeScript), `queryDatabase(kind, ...)` (through the driver the runner registered for that database, e.g. `sqlserver`), `invokeWorkflow`, `wait`/`waitEach` (waits that do not count as active time) and `holding` (memory). Whatever talks to the outside (sandbox, database) is injected by the runner; the core only receives the function.
 
 ## 8. Run record
 

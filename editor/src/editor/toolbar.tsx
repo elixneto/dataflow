@@ -1,6 +1,8 @@
+import {useState} from 'react';
 import {Link} from 'react-router';
-import {CheckCircle2, CircleAlert, Eraser, Group, Loader2, MessageSquarePlus, Network, Play, Redo2, Save, Square, Undo2, Workflow} from 'lucide-react';
+import {CheckCircle2, CircleAlert, Download, Eraser, Group, Loader2, MessageSquarePlus, Network, Play, Redo2, Save, Square, Undo2, Workflow} from 'lucide-react';
 import type {RunMode} from '@dataflow/core';
+import type {ArrangeDirection} from '#editor/layout';
 import {Button} from '#ui/button';
 import {ThemeButton} from '#ui/theme';
 
@@ -19,7 +21,7 @@ type Props = {
   validating: boolean;
   running: RunMode | null;
   onClear: () => void;
-  onArrange: () => void;
+  onArrange: (direction: ArrangeDirection) => void;
   onComment: () => void;
   onGroup: () => void;
   onUndo: () => void;
@@ -28,6 +30,7 @@ type Props = {
   canRedo: boolean;
   changed: boolean;
   onSave: () => void;
+  onDownload: () => void;
   onShowIssues: () => void;
 };
 
@@ -84,11 +87,12 @@ export function Toolbar(p: Props) {
         <Button variant="outline" size="sm" onClick={p.onGroup} title="Colored rectangle behind the components">
           <Group className="size-4" aria-hidden="true"/> Group
         </Button>
-        <Button variant="ghost" size="sm" onClick={p.onArrange} title="Arrange from left to right">
-          <Network className="size-4 -rotate-90" aria-hidden="true"/> Arrange
-        </Button>
+        <ArrangeButton onArrange={p.onArrange}/>
         <Button variant="ghost" size="sm" onClick={p.onClear}>
           <Eraser className="size-4" aria-hidden="true"/> Clear
+        </Button>
+        <Button variant="ghost" size="icon-sm" onClick={p.onDownload} aria-label="Download JSON" title="Download JSON">
+          <Download className="size-4" aria-hidden="true"/>
         </Button>
         <Button variant="outline" size="sm" onClick={p.onSave} disabled={!p.changed} title={p.changed ? 'Save (Ctrl+S)' : 'Nothing to save'}>
           <Save className="size-4" aria-hidden="true"/> {p.changed ? 'Save' : 'Saved'}
@@ -105,5 +109,46 @@ export function Toolbar(p: Props) {
         )}
       </div>
     </header>
+  );
+}
+
+const ARRANGE_KEY = 'dataflow-arrange-direction';
+
+function readDirection(): ArrangeDirection {
+  try {
+    return localStorage.getItem(ARRANGE_KEY) === 'vertical' ? 'vertical' : 'horizontal';
+  } catch {
+    return 'horizontal';
+  }
+}
+
+/** Arrange: the click repeats the last direction; hovering shows the two (horizontal and vertical). */
+function ArrangeButton({onArrange}: {onArrange: (direction: ArrangeDirection) => void}) {
+  const [last, setLast] = useState(readDirection);
+  const choose = (direction: ArrangeDirection) => {
+    setLast(direction);
+    try {
+      localStorage.setItem(ARRANGE_KEY, direction);
+    } catch {
+      // no storage: only lasts until reload
+    }
+    onArrange(direction);
+  };
+  const options: [ArrangeDirection, string, string][] = [['horizontal', 'Horizontal', '-rotate-90'], ['vertical', 'Vertical', '']];
+  return (
+    <div className="group relative">
+      <Button variant="ghost" size="sm" onClick={() => choose(last)} title={last === 'vertical' ? 'Arrange from top to bottom' : 'Arrange from left to right'}>
+        <Network className={last === 'vertical' ? 'size-4' : 'size-4 -rotate-90'} aria-hidden="true"/> Arrange
+      </Button>
+      <div role="menu" aria-label="Arrange"
+           className="invisible absolute top-full left-0 z-50 flex min-w-36 flex-col rounded-md border border-border bg-popover p-1 text-sm text-popover-foreground opacity-0 shadow-md transition-opacity group-focus-within:visible group-focus-within:opacity-100 group-hover:visible group-hover:opacity-100">
+        {options.map(([direction, label, rotate]) => (
+          <button key={direction} type="button" role="menuitem" onClick={() => choose(direction)}
+                  className="flex items-center gap-2 rounded px-2 py-1.5 text-left hover:bg-accent">
+            <Network className={`size-4 ${rotate}`} aria-hidden="true"/> {label}
+          </button>
+        ))}
+      </div>
+    </div>
   );
 }

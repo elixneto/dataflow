@@ -4,7 +4,8 @@ import type {ExpressionField} from '#types/expression-field.type';
 import type {LogLevel} from '#types/log-level.type';
 import type {RunRecord} from '#types/run-record.type';
 import type {ScriptFunction} from '#types/script-function.type';
-import type {SqlServerQuery} from '#types/sql-server-query.type';
+import type {DatabaseKind} from '#types/database-kind.type';
+import type {DatabaseQuery} from '#types/database-query.type';
 import type {WorkflowCurrentRun} from '#types/workflow-current-run.type';
 import type {EnvelopeData} from '#types/envelope-data.type';
 
@@ -38,6 +39,9 @@ export type ComponentContext = {
     result: Promise<RunRecord>;
     cancel: () => void;
   };
-  /** SQL Server query (the name of the secret holding the connection string becomes the connection string here) */
-  querySqlServer: (query: Omit<SqlServerQuery, 'connection' | 'signal'> & {secret: string}) => AsyncIterable<Record<string, unknown>>;
+  /**
+   * Query on a database, through the driver the runner registered for that kind. The name of the secret holding the
+   * connection string becomes the connection string here; the run's signal cancels the query.
+   */
+  queryDatabase: (kind: DatabaseKind, query: Omit<DatabaseQuery, 'connection' | 'signal'> & {secret: string}) => AsyncIterable<Record<string, unknown>>;
 };

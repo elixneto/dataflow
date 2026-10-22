@@ -3,7 +3,7 @@ import {logger} from 'hono/logger';
 import {workflowRunner, type RunMode, type RunRecord, type ExecutableWorkflow} from '@dataflow/core';
 import {evaluate} from './expressions';
 import {prepareScript} from './scripts';
-import {querySqlServer} from './sqlserver';
+import {querySqlServer} from './databases/sql-server';
 import {projectRoutes, projectSecrets} from './projects';
 
 /*
@@ -64,7 +64,7 @@ app.post('/runs', async c => {
       workflows: request.workflows,
       evaluate,
       prepareScript,
-      querySqlServer,
+      databases: {sqlserver: querySqlServer},
       secrets: await projectSecrets(request.projectId),
       signal: control.signal,
       timeoutMs: TIMEOUT_MS,

@@ -2,7 +2,8 @@ import type {Envelope} from '#types/envelope.type';
 import type {EvaluateExpression} from '#types/evaluate-expression.type';
 import type {ExecutableWorkflow} from '#types/executable-workflow.type';
 import type {PrepareScript} from '#types/prepare-script.type';
-import type {QuerySqlServer} from '#types/query-sql-server.type';
+import type {DatabaseKind} from '#types/database-kind.type';
+import type {QueryDatabase} from '#types/query-database.type';
 import type {RunMode} from '#types/run-mode.type';
 
 export type RunOptions = {
@@ -18,8 +19,8 @@ export type RunOptions = {
   evaluate: EvaluateExpression;
   /** compiles and isolates scripts (TypeScript component); without it, the component fails */
   prepareScript?: PrepareScript;
-  /** runs queries on SQL Server; without it, the component fails */
-  querySqlServer?: QuerySqlServer;
+  /** database drivers, by kind; a component querying a kind without a driver fails */
+  databases?: Partial<Record<DatabaseKind, QueryDatabase>>;
   /** workflows the Workflow Invoker can call, by id */
   workflows?: Record<string, ExecutableWorkflow>;
   /** run that called this one (filled in by the Workflow Invoker) */

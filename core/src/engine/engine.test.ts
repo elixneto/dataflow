@@ -501,13 +501,13 @@ test('SQL Server Query yields one envelope per row and sends the evaluated param
       {source: 's', sourcePort: 'out-0', target: 'end', targetPort: 'in-0'},
     ],
   };
-  const r = await workflowRunner(wfSql, {mode: 'execution', id: 'sql', evaluate, querySqlServer, secrets: {MY_DB: 'Server=x'}});
+  const r = await workflowRunner(wfSql, {mode: 'execution', id: 'sql', evaluate, databases: {sqlserver: querySqlServer}, secrets: {MY_DB: 'Server=x'}});
   expect(r.status).toBe('completed');
   expect(queries).toEqual([{connection: 'Server=x', parameters: {since: 10}}]);
   expect(r.components.find(c => c.nodeId === 's')!.outputSample['out-0']).toEqual([{id: 1, name: 'ana'}, {id: 2, name: 'bia'}]);
 
   // a secret that does not exist: fails the envelope (default policy = stop)
-  const noSecret = await workflowRunner(wfSql, {mode: 'execution', id: 'sql2', evaluate, querySqlServer, secrets: {}});
+  const noSecret = await workflowRunner(wfSql, {mode: 'execution', id: 'sql2', evaluate, databases: {sqlserver: querySqlServer}, secrets: {}});
   expect(noSecret.status).toBe('failed');
   expect(noSecret.error).toContain('MY_DB');
 });

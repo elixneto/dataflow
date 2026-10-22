@@ -28,11 +28,12 @@ export function componentContext(execution: WorkflowExecution, node: ExecutableN
     },
     waitEach: source => timed(source, stopwatch),
     invokeWorkflow: (workflowId, call) => invokeWorkflow(execution, node, workflowId, call),
-    querySqlServer: ({secret, ...query}) => {
-      if (!options.querySqlServer) throw new Error('This runner does not query databases.');
+    queryDatabase: (kind, {secret, ...query}) => {
+      const driver = options.databases?.[kind];
+      if (!driver) throw new Error(`This runner does not query ${kind}.`);
       const connection = options.secrets?.[secret];
       if (!connection) throw new Error(`The secret "${secret}" does not exist in this runner.`);
-      return options.querySqlServer({...query, connection, signal: execution.control.signal});
+      return driver({...query, connection, signal: execution.control.signal});
     },
     holding: (envelopes, held) => execution.memoryOf(node.id).holding(envelopes, held),
   };

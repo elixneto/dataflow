@@ -133,7 +133,7 @@ export const sqlserver: ComponentLogic = {
       try {
         const values = Object.fromEntries(parameters.map(p => [p.name, ctx.fieldValue(p, doc)]));
         // waiting for the database is not active time
-        const query = ctx.querySqlServer({secret: connection, sql, parameters: values, timeoutMs: timeoutS * 1000});
+        const query = ctx.queryDatabase('sqlserver', {secret: connection, sql, parameters: values, timeoutMs: timeoutS * 1000});
         for await (const row of ctx.waitEach(query)) {
           thisQuery += 1;
           yield {port: 'out-0', doc: mergeFields(doc, row, ctx.node.override)};

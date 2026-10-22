@@ -1,4 +1,3 @@
-/** Each workflow parameter type and the value it becomes (what $PARAMETERS carries). */
 type ParameterValueByType = {text: string; number: number; boolean: boolean};
 
 /** The parameter's type, as stored in its definition and chosen in the panel. */

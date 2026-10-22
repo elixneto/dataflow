@@ -1,8 +1,8 @@
 import sql from 'mssql';
-import {sqlServerReadOnlyIssue, type QuerySqlServer} from '@dataflow/core';
+import {sqlServerReadOnlyIssue, type QueryDatabase} from '@dataflow/core';
 
 /*
- * SQL Server Query: read-only query with the mssql driver (tedious), streaming and with backpressure.
+ * SQL Server Query: read-only query with the mssql driver (@tedious), streaming and with backpressure.
  * Read-only, on top of the core's check (only SELECT/WITH): the query runs inside a transaction that always
  * ends in a rollback, and the connection goes with ApplicationIntent=ReadOnly. Ideally the login has only db_datareader.
  */
@@ -47,7 +47,8 @@ function errorMessage(e: unknown): Error {
   return error;
 }
 
-export const querySqlServer: QuerySqlServer = async function* ({connection, sql: text, parameters, timeoutMs, signal}) {
+/** SQL Server driver (mssql). */
+export const querySqlServer: QueryDatabase = async function* ({connection, sql: text, parameters, timeoutMs, signal}) {
   const issue = sqlServerReadOnlyIssue(text);
   if (issue) throw new Error(`The query ${issue}.`);
   if (signal.aborted) return;

@@ -37,7 +37,7 @@ function readSourceWidth() {
 }
 
 /** Source → target table. The header divider resizes the columns (remembered in the browser). */
-function MapperPanel({config, setConfig}: FieldsProps) {
+function MapperPanel({nodeId, config, setConfig}: FieldsProps) {
   const fields = mapperFields(config);
   const change = (i: number, update: Partial<MapperField>) => setConfig('fields', fields.map((f, j) => (j === i ? {...f, ...update} : f)));
   const [sourcePct, setSourcePct] = useState(readSourceWidth);
@@ -82,7 +82,7 @@ function MapperPanel({config, setConfig}: FieldsProps) {
         </div>
         {fields.map((f, i) => (
           <div key={i} className="grid items-center gap-x-1.5 border-b border-border px-2 py-1.5 last:border-b-0" style={columns}>
-            <ExpressionInput label={`Source of row ${i + 1}`} value={f.value} expression={f.expression}
+            <ExpressionInput nodeId={nodeId} label={`Source of row ${i + 1}`} value={f.value} expression={f.expression}
                              onValue={value => change(i, {value})} onExpression={expression => change(i, {expression})}/>
             <ArrowRight className="size-4 text-muted-foreground" aria-hidden="true"/>
             <KeyInput value={f.target} onValue={target => change(i, {target})} label={`Key in the envelope of row ${i + 1}`}/>

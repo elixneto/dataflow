@@ -18,6 +18,9 @@ type DagreNode = {rank?: number; order?: number; edgeObj?: {v: string; w: string
 
 type Box = {x: number; y: number; w: number; h: number};
 
+/** horizontal: Start on the left, End on the right; vertical: Start at the top, End at the bottom. */
+export type ArrangeDirection = 'horizontal' | 'vertical';
+
 function boxOf(n: FlowNode): Box {
   return {x: n.position.x, y: n.position.y, w: n.measured?.width ?? n.width ?? 0, h: n.measured?.height ?? n.height ?? 0};
 }
@@ -25,11 +28,12 @@ function boxOf(n: FlowNode): Box {
 const inside = (a: Box, b: Box) => a.x >= b.x && a.y >= b.y && a.x + a.w <= b.x + b.w && a.y + a.h <= b.y + b.h;
 
 /**
- * Arranges the components from left to right with Dagre (Start on the left, End on the right, each
+ * Arranges the components with Dagre, left to right or top to bottom (Start first, End last, each
  * branch in a lane). Whatever is entirely inside a group stays together: the group becomes a Dagre "cluster" and is
  * resized around its components. Comments follow the group they are in; loose ones stay where they are.
  */
-export function arrangeHorizontally(nodes: FlowNode[], edges: Edge[]): FlowNode[] {
+export function arrange(nodes: FlowNode[], edges: Edge[], direction: ArrangeDirection = 'horizontal'): FlowNode[] {
+  const rankdir = direction === 'vertical' ? 'TB' : 'LR';
   const groups = nodes.filter(n => n.type === 'group');
   const components = nodes.filter(n => n.type === 'component');
 
@@ -52,8 +56,8 @@ export function arrangeHorizontally(nodes: FlowNode[], edges: Edge[]): FlowNode[
   // With groups: the cluster border sits (edgesep + nodesep) / 2 away from the components (room for the title) and two
   // neighboring groups sit edgesep apart (safety margin).
   graph.setGraph(withComponent.size
-    ? {rankdir: 'LR', nodesep: 80, edgesep: 40, ranksep: 160, marginx: 20, marginy: 20}
-    : {rankdir: 'LR', nodesep: 60, ranksep: 120, marginx: 20, marginy: 20});
+    ? {rankdir, nodesep: 80, edgesep: 40, ranksep: 160, marginx: 20, marginy: 20}
+    : {rankdir, nodesep: 60, ranksep: 120, marginx: 20, marginy: 20});
   graph.setDefaultEdgeLabel(() => ({}));
 
   for (const n of components) {

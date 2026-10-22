@@ -1,8 +1,7 @@
 import {Plus, Split, X} from 'lucide-react';
 import {useReactFlow} from '@xyflow/react';
 import {routerCases, routerElsePort, router, type RouterCase} from '@dataflow/core';
-import {fieldInput} from '#ui/expression-field';
-import {cn} from '#lib/utils';
+import {ExpressionBox, fieldInput} from '#ui/expression-field';
 import type {FieldsProps} from '#types/fields-props.type';
 import type {ComponentDef} from '#types/component-def.type';
 import type {Config} from '#types/config.type';
@@ -62,8 +61,8 @@ function RouterPanel({nodeId: id, config, setConfig}: FieldsProps) {
           <div key={i} className="grid grid-cols-[minmax(0,1fr)_minmax(0,2fr)_32px] items-center gap-x-1.5 border-b border-border px-2 py-1.5">
             <input value={c.label} onChange={e => change(i, {label: e.target.value})} placeholder={`case ${i + 1}`}
                    aria-label={`Output name of case ${i + 1}`} className={fieldInput}/>
-            <input value={c.condition} onChange={e => change(i, {condition: e.target.value})} placeholder='$state === "CA"' spellCheck={false}
-                   aria-label={`Condition of case ${i + 1}`} className={cn(fieldInput, 'border-primary/50 bg-primary/5 font-mono')}/>
+            <ExpressionBox nodeId={id} value={c.condition} onValue={condition => change(i, {condition})} placeholder='$state === "CA"'
+                           label={`Condition of case ${i + 1}`}/>
             <button type="button" onClick={() => remove(i)} aria-label={`Remove case ${i + 1}`}
                     className="flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground">
               <X className="size-4" aria-hidden="true"/>

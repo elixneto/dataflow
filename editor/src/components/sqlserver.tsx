@@ -62,7 +62,7 @@ function SqlServerPanel({id, nodeId, config, setConfig}: FieldsProps) {
                 <input value={p.name} onChange={e => change(i, {name: e.target.value})} placeholder="parameter" spellCheck={false}
                        aria-label={`Name of parameter ${i + 1}`} className={cn(fieldInput, 'font-mono')}/>
               </div>
-              <ExpressionInput label={`Value of parameter ${i + 1}`} value={p.value} expression={p.expression}
+              <ExpressionInput nodeId={nodeId} label={`Value of parameter ${i + 1}`} value={p.value} expression={p.expression}
                                onValue={value => change(i, {value})} onExpression={expression => change(i, {expression})}/>
               <button type="button" onClick={() => setConfig('parameters', parameters.filter((_, j) => j !== i))} aria-label={`Remove parameter ${i + 1}`}
                       className="flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground">

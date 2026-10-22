@@ -1,7 +1,6 @@
 import {Funnel} from 'lucide-react';
 import {filterCondition, filter} from '@dataflow/core';
-import {fieldInput} from '#ui/expression-field';
-import {cn} from '#lib/utils';
+import {ExpressionBox} from '#ui/expression-field';
 import type {FieldsProps} from '#types/fields-props.type';
 import type {ComponentDef} from '#types/component-def.type';
 
@@ -13,13 +12,12 @@ function FilterCard({config}: FieldsProps) {
   return <p className="truncate font-mono text-xs text-primary" title={condition}>{condition}</p>;
 }
 
-function FilterPanel({id, config, setConfig}: FieldsProps) {
+function FilterPanel({id, nodeId, config, setConfig}: FieldsProps) {
   return (
     <div className="flex flex-col gap-1.5">
       <label htmlFor={`${id}-condition`} className="text-xs font-medium text-muted-foreground">Condition</label>
-      <textarea id={`${id}-condition`} value={filterCondition(config)} onChange={e => setConfig('condition', e.target.value)}
-                rows={3} placeholder="$price > 10" spellCheck={false}
-                className={cn(fieldInput, 'h-auto resize-y border-primary/50 bg-primary/5 py-1.5 font-mono')}/>
+      <ExpressionBox id={`${id}-condition`} nodeId={nodeId} value={filterCondition(config)} onValue={v => setConfig('condition', v)}
+                     multiline rows={3} placeholder="$price > 10" label="Condition"/>
     </div>
   );
 }

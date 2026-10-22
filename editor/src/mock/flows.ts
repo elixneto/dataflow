@@ -390,11 +390,30 @@ const EXAMPLES = () => [
   ...invokerExampleFlows(),
 ];
 
+/**
+ * The flow without React Flow's screen state (selection, measured size, dragging, run marks): only the model is
+ * stored and downloaded. Comments and groups keep width/height (their size is part of the model).
+ */
+export function cleanFlow(flow: Flow): Flow {
+  return {
+    ...flow,
+    nodes: flow.nodes.map(n => without(n, NODE_SCREEN_STATE)),
+    edges: flow.edges.map(e => without(e, EDGE_SCREEN_STATE)),
+  };
+}
+
+const NODE_SCREEN_STATE = ['selected', 'dragging', 'measured', 'resizing', 'positionAbsolute', 'className'];
+const EDGE_SCREEN_STATE = ['selected', 'animated', 'className'];
+
+function without<T extends object>(item: T, keys: string[]): T {
+  return Object.fromEntries(Object.entries(item).filter(([key]) => !keys.includes(key))) as T;
+}
+
 export function listFlows(): Flow[] {
   let stored: Flow[] = [];
   try {
     const saved = localStorage.getItem(KEY);
-    if (saved) stored = JSON.parse(saved) as Flow[];
+    if (saved) stored = (JSON.parse(saved) as Flow[]).map(cleanFlow);
   } catch {
     // storage unavailable or corrupted: starts empty
   }

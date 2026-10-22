@@ -1,13 +1,12 @@
 import {Equal, Plus, SearchCheck, X} from 'lucide-react';
 import {lookupConfig, lookup, type LookupKey, type IfNotFound} from '@dataflow/core';
-import {fieldInput} from '#ui/expression-field';
+import {ExpressionBox} from '#ui/expression-field';
 import {cn} from '#lib/utils';
 import type {FieldsProps} from '#types/fields-props.type';
 import type {ComponentDef} from '#types/component-def.type';
 
 // Visual part of the Lookup. The logic (validate and execute) is the core's.
 
-const expressionInput = cn(fieldInput, 'border-primary/50 bg-primary/5 font-mono');
 
 function LookupCard({config}: FieldsProps) {
   const {keys, ifNotFound} = lookupConfig(config);
@@ -49,7 +48,7 @@ const IF_NOT_FOUND: {value: IfNotFound; label: string}[] = [
   {value: 'error', label: 'Error'},
 ];
 
-function LookupPanel({id, config, setConfig}: FieldsProps) {
+function LookupPanel({id, nodeId, config, setConfig}: FieldsProps) {
   const {keys, ifNotFound} = lookupConfig(config);
   const changeKey = (i: number, m: Partial<LookupKey>) => setConfig('keys', keys.map((k, j) => (j === i ? {...k, ...m} : k)));
   const keyColumns = 'grid-cols-[minmax(0,1fr)_16px_minmax(0,1fr)_32px]';
@@ -64,11 +63,11 @@ function LookupPanel({id, config, setConfig}: FieldsProps) {
           </div>
           {keys.map((k, i) => (
             <div key={i} className={cn('grid items-center gap-x-1.5 border-b border-border px-2 py-1.5 last:border-b-0', keyColumns)}>
-              <input value={k.main} onChange={e => changeKey(i, {main: e.target.value})} placeholder="$companyCode" spellCheck={false}
-                     aria-label={`Comparison ${i + 1} on the input`} className={expressionInput}/>
+              <ExpressionBox nodeId={nodeId} port="in-0" value={k.main} onValue={main => changeKey(i, {main})} placeholder="$companyCode"
+                             label={`Comparison ${i + 1} on the input`}/>
               <Equal className="size-4 text-muted-foreground" aria-hidden="true"/>
-              <input value={k.lookup} onChange={e => changeKey(i, {lookup: e.target.value})} placeholder="$code" spellCheck={false}
-                     aria-label={`Comparison ${i + 1} on the lookup`} className={expressionInput}/>
+              <ExpressionBox nodeId={nodeId} port="in-1" value={k.lookup} onValue={lookup => changeKey(i, {lookup})} placeholder="$code"
+                             label={`Comparison ${i + 1} on the lookup`}/>
               <RemoveButton label={`Remove comparison ${i + 1}`} onClick={() => setConfig('keys', keys.filter((_, j) => j !== i))}/>
             </div>
           ))}

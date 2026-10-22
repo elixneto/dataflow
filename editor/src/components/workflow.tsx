@@ -30,7 +30,7 @@ function WorkflowCard({config}: FieldsProps) {
   );
 }
 
-function WorkflowPanel({id, config, setConfig}: FieldsProps) {
+function WorkflowPanel({id, nodeId, config, setConfig}: FieldsProps) {
   const {flowId} = useParams();
   const {workflowId, parameters, sendEnvelope} = workflowInvokerConfig(config);
   const options = listFlows().filter(f => f.id !== flowId).sort((a, b) => a.name.localeCompare(b.name));
@@ -74,7 +74,7 @@ function WorkflowPanel({id, config, setConfig}: FieldsProps) {
                 <span className="truncate font-mono text-xs" title={`${def.type}${def.default ? `, default ${def.default}` : ''}`}>
                   {def.name}{def.required && <span className="text-destructive"> *</span>}
                 </span>
-                <ExpressionInput label={`Value of ${def.name}`} value={value.value} expression={value.expression}
+                <ExpressionInput nodeId={nodeId} label={`Value of ${def.name}`} value={value.value} expression={value.expression}
                                  placeholder={def.default ? `default: ${def.default}` : undefined}
                                  onValue={v => change(def.name, {value: v})} onExpression={e => change(def.name, {expression: e})}/>
               </div>
