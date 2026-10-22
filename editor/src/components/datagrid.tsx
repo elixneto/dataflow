@@ -1,28 +1,29 @@
-import type {ClipboardEvent} from 'react'
-import {Plus, Table, X} from 'lucide-react'
-import {dataGridConfig, datagrid, cellValue, type DataGridColumn, type ParameterType} from '@dataflow/core'
-import {KeyInput, fieldInput} from '@/ui/expression-field'
-import {cn} from '@/lib/utils'
-import type {FieldsProps, ComponentDef} from './types'
+import type {ClipboardEvent} from 'react';
+import {Plus, Table, X} from 'lucide-react';
+import {dataGridConfig, datagrid, cellValue, type DataGridColumn, type ParameterType} from '@dataflow/core';
+import {KeyInput, fieldInput} from '#ui/expression-field';
+import {cn} from '#lib/utils';
+import type {FieldsProps} from '#types/fields-props.type';
+import type {ComponentDef} from '#types/component-def.type';
 
 // Visual part of the Data Grid. The logic is the core's.
 
 function DataGridCard({config}: FieldsProps) {
-  const {columns, rows} = dataGridConfig(config)
-  if (columns.length === 0) return <p className="text-xs italic text-muted-foreground">No columns</p>
+  const {columns, rows} = dataGridConfig(config);
+  if (columns.length === 0) return <p className="text-xs italic text-muted-foreground">No columns</p>;
   return (
     <div className="flex flex-col gap-1 font-mono text-xs">
       <p className="truncate font-semibold" title={columns.map(c => c.name).join(', ')}>{columns.map(c => c.name || '?').join(', ')}</p>
       <p className="text-muted-foreground">{rows.length} row(s)</p>
     </div>
-  )
+  );
 }
 
-const TYPES: [ParameterType, string][] = [['text', 'Text'], ['number', 'Number'], ['boolean', 'Boolean']]
+const TYPES: [ParameterType, string][] = [['text', 'Text'], ['number', 'Number'], ['boolean', 'Boolean']];
 
 /** Text pasted from Excel/a spreadsheet: rows by line break, columns by tab. */
 function readPasted(text: string) {
-  return text.replace(/\r/g, '').replace(/\n$/, '').split('\n').map(l => l.split('\t'))
+  return text.replace(/\r/g, '').replace(/\n$/, '').split('\n').map(l => l.split('\t'));
 }
 
 /**
@@ -31,45 +32,45 @@ function readPasted(text: string) {
  * names and the rest as the grid's rows.
  */
 function DataGridPanel({config, setConfig}: FieldsProps) {
-  const {columns, rows} = dataGridConfig(config)
+  const {columns, rows} = dataGridConfig(config);
 
-  const setColumns = (next: DataGridColumn[]) => setConfig('columns', next)
-  const setRows = (next: string[][]) => setConfig('rows', next)
-  const changeColumn = (j: number, update: Partial<DataGridColumn>) => setColumns(columns.map((c, k) => (k === j ? {...c, ...update} : c)))
+  const setColumns = (next: DataGridColumn[]) => setConfig('columns', next);
+  const setRows = (next: string[][]) => setConfig('rows', next);
+  const changeColumn = (j: number, update: Partial<DataGridColumn>) => setColumns(columns.map((c, k) => (k === j ? {...c, ...update} : c)));
   const changeCell = (i: number, j: number, value: string) =>
-    setRows(rows.map((r, k) => (k === i ? Array.from({length: columns.length}, (_, m) => (m === j ? value : r[m] ?? '')) : r)))
+    setRows(rows.map((r, k) => (k === i ? Array.from({length: columns.length}, (_, m) => (m === j ? value : r[m] ?? '')) : r)));
   const removeColumn = (j: number) => {
-    setColumns(columns.filter((_, k) => k !== j))
-    setRows(rows.map(r => r.filter((_, k) => k !== j)))
-  }
+    setColumns(columns.filter((_, k) => k !== j));
+    setRows(rows.map(r => r.filter((_, k) => k !== j)));
+  };
   /** columns missing to fit `count` starting at `start` */
   const withColumns = (start: number, count: number) =>
-    [...columns, ...Array.from({length: Math.max(0, start + count - columns.length)}, () => ({name: '', type: 'text' as const}))]
+    [...columns, ...Array.from({length: Math.max(0, start + count - columns.length)}, () => ({name: '', type: 'text' as const}))];
 
   function pasteIntoCell(e: ClipboardEvent<HTMLInputElement>, i: number, j: number) {
-    const text = e.clipboardData.getData('text')
-    if (!/[\t\n]/.test(text.replace(/\r?\n$/, ''))) return
-    e.preventDefault()
-    const pasted = readPasted(text)
-    const nextColumns = withColumns(j, Math.max(...pasted.map(r => r.length)))
-    const nextRows = [...rows]
+    const text = e.clipboardData.getData('text');
+    if (!/[\t\n]/.test(text.replace(/\r?\n$/, ''))) return;
+    e.preventDefault();
+    const pasted = readPasted(text);
+    const nextColumns = withColumns(j, Math.max(...pasted.map(r => r.length)));
+    const nextRows = [...rows];
     pasted.forEach((cells, di) => {
-      const row = [...(nextRows[i + di] ?? [])]
-      cells.forEach((v, dj) => (row[j + dj] = v))
-      nextRows[i + di] = Array.from({length: nextColumns.length}, (_, m) => row[m] ?? '')
-    })
-    setColumns(nextColumns)
-    setRows(nextRows)
+      const row = [...(nextRows[i + di] ?? [])];
+      cells.forEach((v, dj) => (row[j + dj] = v));
+      nextRows[i + di] = Array.from({length: nextColumns.length}, (_, m) => row[m] ?? '');
+    });
+    setColumns(nextColumns);
+    setRows(nextRows);
   }
 
   function pasteIntoHeader(e: ClipboardEvent<HTMLInputElement>, j: number) {
-    const text = e.clipboardData.getData('text')
-    if (!/[\t\n]/.test(text.replace(/\r?\n$/, ''))) return
-    e.preventDefault()
-    const [names, ...rest] = readPasted(text)
-    const nextColumns = withColumns(j, names.length).map((c, k) => (k >= j && k < j + names.length ? {...c, name: names[k - j].trim()} : c))
-    setColumns(nextColumns)
-    if (rest.length) setRows(rest.map(cells => Array.from({length: nextColumns.length}, (_, m) => (m >= j ? cells[m - j] ?? '' : ''))))
+    const text = e.clipboardData.getData('text');
+    if (!/[\t\n]/.test(text.replace(/\r?\n$/, ''))) return;
+    e.preventDefault();
+    const [names, ...rest] = readPasted(text);
+    const nextColumns = withColumns(j, names.length).map((c, k) => (k >= j && k < j + names.length ? {...c, name: names[k - j].trim()} : c));
+    setColumns(nextColumns);
+    if (rest.length) setRows(rest.map(cells => Array.from({length: nextColumns.length}, (_, m) => (m >= j ? cells[m - j] ?? '' : ''))));
   }
 
   return (
@@ -100,8 +101,8 @@ function DataGridPanel({config, setConfig}: FieldsProps) {
               ))}
               <th className="w-10 border-b border-l border-border p-1.5">
                 <button type="button" onClick={() => {
-                  setColumns([...columns, {name: '', type: 'text'}])
-                  setRows(rows.map(r => [...r, '']))
+                  setColumns([...columns, {name: '', type: 'text'}]);
+                  setRows(rows.map(r => [...r, '']));
                 }} aria-label="Add column" title="Add column"
                         className="flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground">
                   <Plus className="size-4" aria-hidden="true"/>
@@ -114,7 +115,7 @@ function DataGridPanel({config, setConfig}: FieldsProps) {
               <tr key={i} className="border-b border-border last:border-b-0">
                 <td className="text-center font-mono text-muted-foreground">{i + 1}</td>
                 {columns.map((c, j) => {
-                  const invalid = cellValue(row[j], c.type) === undefined
+                  const invalid = cellValue(row[j], c.type) === undefined;
                   return (
                     <td key={j} className="border-l border-border p-1">
                       <input value={row[j] ?? ''} onChange={e => changeCell(i, j, e.target.value)} onPaste={e => pasteIntoCell(e, i, j)}
@@ -122,7 +123,7 @@ function DataGridPanel({config, setConfig}: FieldsProps) {
                              className={cn(fieldInput, c.type !== 'text' && 'font-mono', c.type === 'number' && 'text-right',
                                invalid && 'border-destructive focus-visible:border-destructive')}/>
                     </td>
-                  )
+                  );
                 })}
                 <td className="border-l border-border p-1">
                   <button type="button" onClick={() => setRows(rows.filter((_, k) => k !== i))} aria-label={`Remove row ${i + 1}`}
@@ -143,7 +144,7 @@ function DataGridPanel({config, setConfig}: FieldsProps) {
         </button>
       )}
     </div>
-  )
+  );
 }
 
 function DataGridDocs() {
@@ -162,7 +163,7 @@ function DataGridDocs() {
       <h4>Override</h4>
       <p>On, the output envelope carries only the grid's columns.</p>
     </>
-  )
+  );
 }
 
 export const DATA_GRID: ComponentDef = {
@@ -181,4 +182,4 @@ export const DATA_GRID: ComponentDef = {
   Panel: DataGridPanel,
   Docs: DataGridDocs,
   validate: config => datagrid.validate(config),
-}
+};

@@ -1,17 +1,17 @@
-import {useState, type ReactNode} from 'react'
-import {ChevronDown, ChevronRight, CircleAlert, CircleCheck, CircleMinus, CircleX, Clock, X} from 'lucide-react'
-import type {ComponentRun, RunRecord} from '@dataflow/core'
-import {cn} from '@/lib/utils'
-import {BY_TYPE} from '@/components/catalog'
+import {useState, type ReactNode} from 'react';
+import {ChevronDown, ChevronRight, CircleAlert, CircleCheck, CircleMinus, CircleX, Clock, X} from 'lucide-react';
+import type {ComponentRun, RunRecord} from '@dataflow/core';
+import {cn} from '#lib/utils';
+import {BY_TYPE} from '#components/catalog';
 
-type Tab = 'logs' | 'metrics' | 'data'
+type Tab = 'logs' | 'metrics' | 'data';
 
 export const STATUS_LABEL: Record<RunRecord['status'], string> = {
   completed: 'Completed',
   'with-warnings': 'Completed with warnings',
   'with-errors': 'Completed with errors',
   failed: 'Failed',
-}
+};
 
 const COMPONENT_STATUS_LABEL: Record<ComponentRun['status'], string> = {
   'not-run': 'Did not run',
@@ -20,21 +20,21 @@ const COMPONENT_STATUS_LABEL: Record<ComponentRun['status'], string> = {
   'with-warnings': 'With warnings',
   'with-errors': 'With errors',
   failed: 'Failed',
-}
+};
 
-export const ms = (value?: number) => (value === undefined ? '—' : value < 1000 ? `${value} ms` : `${(value / 1000).toFixed(2)} s`)
+export const ms = (value?: number) => (value === undefined ? '—' : value < 1000 ? `${value} ms` : `${(value / 1000).toFixed(2)} s`);
 /** Active time: below 10 ms the fraction is worth showing (most components stay in tenths of a ms). */
-const activeMs = (value?: number) => (value === undefined ? '—' : value < 10 ? `${value.toLocaleString('en-US', {maximumFractionDigits: 2})} ms` : ms(Math.round(value)))
-const bytes = (value: number) => (value < 1024 ? `${value} B` : value < 1024 ** 2 ? `${(value / 1024).toFixed(1)} KB` : `${(value / 1024 ** 2).toFixed(1)} MB`)
-const time = (iso?: string) => (iso ? new Date(iso).toLocaleTimeString('en-US', {hour12: false}) + '.' + String(new Date(iso).getMilliseconds()).padStart(3, '0') : '—')
-const total = (port: Record<string, number>) => Object.values(port).reduce((s, n) => s + n, 0)
+const activeMs = (value?: number) => (value === undefined ? '—' : value < 10 ? `${value.toLocaleString('en-US', {maximumFractionDigits: 2})} ms` : ms(Math.round(value)));
+const bytes = (value: number) => (value < 1024 ? `${value} B` : value < 1024 ** 2 ? `${(value / 1024).toFixed(1)} KB` : `${(value / 1024 ** 2).toFixed(1)} MB`);
+const time = (iso?: string) => (iso ? new Date(iso).toLocaleTimeString('en-US', {hour12: false}) + '.' + String(new Date(iso).getMilliseconds()).padStart(3, '0') : '—');
+const total = (port: Record<string, number>) => Object.values(port).reduce((s, n) => s + n, 0);
 /** Readable name of a node port (e.g. "CA", "false", "input 2", "error"). */
-export type PortName = (nodeId: string, port: string) => string
+export type PortName = (nodeId: string, port: string) => string;
 
 /** The total in large and, if it went through more than one port, how much went through each one below. */
 function Count({port, nodeId, portName, noPorts}: {port: Record<string, number>; nodeId: string; portName: PortName; noPorts: boolean}) {
-  if (noPorts) return <span className="text-right font-mono text-xs text-muted-foreground">—</span>
-  const ports = Object.entries(port)
+  if (noPorts) return <span className="text-right font-mono text-xs text-muted-foreground">—</span>;
+  const ports = Object.entries(port);
   return (
     <span className="flex flex-col items-end gap-0.5">
       <span className="font-mono text-xs">{total(port)}</span>
@@ -48,16 +48,16 @@ function Count({port, nodeId, portName, noPorts}: {port: Record<string, number>;
         </span>
       )}
     </span>
-  )
+  );
 }
 
 export function StatusIcon({status}: {status: ComponentRun['status'] | RunRecord['status']}) {
-  if (status === 'completed') return <CircleCheck className="size-4 shrink-0 text-entity" aria-label="Completed"/>
-  if (status === 'with-warnings') return <CircleAlert className="size-4 shrink-0 text-comment" aria-label="With warnings"/>
-  if (status === 'with-errors') return <CircleAlert className="size-4 shrink-0 text-destructive" aria-label="With errors"/>
-  if (status === 'failed') return <CircleX className="size-4 shrink-0 text-destructive" aria-label="Failed"/>
-  if (status === 'disabled') return <CircleMinus className="size-4 shrink-0 text-muted-foreground" aria-label="Disabled"/>
-  return <Clock className="size-4 shrink-0 text-muted-foreground" aria-label="Did not run"/>
+  if (status === 'completed') return <CircleCheck className="size-4 shrink-0 text-entity" aria-label="Completed"/>;
+  if (status === 'with-warnings') return <CircleAlert className="size-4 shrink-0 text-comment" aria-label="With warnings"/>;
+  if (status === 'with-errors') return <CircleAlert className="size-4 shrink-0 text-destructive" aria-label="With errors"/>;
+  if (status === 'failed') return <CircleX className="size-4 shrink-0 text-destructive" aria-label="Failed"/>;
+  if (status === 'disabled') return <CircleMinus className="size-4 shrink-0 text-muted-foreground" aria-label="Disabled"/>;
+  return <Clock className="size-4 shrink-0 text-muted-foreground" aria-label="Did not run"/>;
 }
 
 function Json({value}: {value: unknown}) {
@@ -65,7 +65,7 @@ function Json({value}: {value: unknown}) {
     <pre className="max-h-56 overflow-auto rounded-md border border-border bg-background p-2 font-mono text-xs leading-relaxed">
       {JSON.stringify(value, null, 2)}
     </pre>
-  )
+  );
 }
 
 // ---------- Logs: every component, in time order ----------
@@ -73,8 +73,8 @@ function Json({value}: {value: unknown}) {
 function LogsTab({record}: {record: RunRecord}) {
   const lines = record.components
     .flatMap((c, order) => c.logs.map(l => ({...l, order: order + 1, label: c.label})))
-    .sort((a, b) => a.at.localeCompare(b.at) || a.order - b.order)
-  if (lines.length === 0) return <p className="px-4 py-3 text-sm text-muted-foreground">No logs.</p>
+    .sort((a, b) => a.at.localeCompare(b.at) || a.order - b.order);
+  if (lines.length === 0) return <p className="px-4 py-3 text-sm text-muted-foreground">No logs.</p>;
   return (
     <ul className="flex flex-col gap-0.5 px-4 py-2 font-mono text-xs">
       {lines.map((l, i) => (
@@ -84,15 +84,15 @@ function LogsTab({record}: {record: RunRecord}) {
         </li>
       ))}
     </ul>
-  )
+  );
 }
 
 // ---------- Metrics: one row per component ----------
 
-const METRICS_COLUMNS = 'grid-cols-[16px_minmax(0,1fr)_110px_120px_minmax(90px,200px)_minmax(90px,200px)_80px_80px_100px_110px]'
+const METRICS_COLUMNS = 'grid-cols-[16px_minmax(0,1fr)_110px_120px_minmax(90px,200px)_minmax(90px,200px)_80px_80px_100px_110px]';
 
 /** Component name (Mapper, Filter...); the label is what the user gave the node. */
-const componentName = (type: string) => BY_TYPE[type]?.label ?? type
+const componentName = (type: string) => BY_TYPE[type]?.label ?? type;
 
 function MetricsTab({record, onGoTo, portName}: {record: RunRecord; onGoTo: (nodeId: string) => void; portName: PortName}) {
   return (
@@ -129,24 +129,24 @@ function MetricsTab({record, onGoTo, portName}: {record: RunRecord; onGoTo: (nod
         ))}
       </ul>
     </div>
-  )
+  );
 }
 
 // ---------- Data: input and output preview of each component ----------
 
 function DataTab({record}: {record: RunRecord}) {
-  const [open, setOpen] = useState<Set<string>>(() => new Set(record.components.slice(1, 2).map(c => c.nodeId)))
+  const [open, setOpen] = useState<Set<string>>(() => new Set(record.components.slice(1, 2).map(c => c.nodeId)));
   const toggle = (id: string) => setOpen(current => {
-    const next = new Set(current)
-    if (next.has(id)) next.delete(id)
-    else next.add(id)
-    return next
-  })
+    const next = new Set(current);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    return next;
+  });
   return (
     <ul>
       {record.components.map((c, i) => {
-        const isOpen = open.has(c.nodeId)
-        const ports = Object.keys(c.outputSample)
+        const isOpen = open.has(c.nodeId);
+        const ports = Object.keys(c.outputSample);
         return (
           <li key={c.nodeId} className="border-b border-border last:border-b-0">
             <button type="button" onClick={() => toggle(c.nodeId)} aria-expanded={isOpen}
@@ -173,21 +173,21 @@ function DataTab({record}: {record: RunRecord}) {
               </div>
             )}
           </li>
-        )
+        );
       })}
     </ul>
-  )
+  );
 }
 
 /** A run's result in tabs: Logs (all, by time), Metrics (per component) and Data (input and output). */
 export function RunResult({record, onGoTo, portName, actions}: {
-  record: RunRecord
-  onGoTo: (nodeId: string) => void
-  portName: PortName
+  record: RunRecord;
+  onGoTo: (nodeId: string) => void;
+  portName: PortName;
   /** buttons to the right of the tabs (e.g. close the panel) */
-  actions?: ReactNode
+  actions?: ReactNode;
 }) {
-  const [tab, setTab] = useState<Tab>('logs')
+  const [tab, setTab] = useState<Tab>('logs');
 
   return (
     <>
@@ -215,15 +215,15 @@ export function RunResult({record, onGoTo, portName, actions}: {
         {tab === 'data' && <DataTab record={record}/>}
       </div>
     </>
-  )
+  );
 }
 
 /** The result in the editor's footer, right after running. */
 export function RunPanel({record, onClose, onGoTo, portName}: {
-  record: RunRecord
-  onClose: () => void
-  onGoTo: (nodeId: string) => void
-  portName: PortName
+  record: RunRecord;
+  onClose: () => void;
+  onGoTo: (nodeId: string) => void;
+  portName: PortName;
 }) {
   return (
     <section className="absolute inset-x-0 bottom-0 z-20 flex max-h-[55%] flex-col border-t border-border bg-sidebar shadow-2xl" aria-label="Run result">
@@ -233,5 +233,5 @@ export function RunPanel({record, onClose, onGoTo, portName}: {
         </button>
       }/>
     </section>
-  )
+  );
 }

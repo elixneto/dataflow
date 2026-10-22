@@ -1,16 +1,17 @@
-import {Equal, Plus, SearchCheck, X} from 'lucide-react'
-import {lookupConfig, lookup, type LookupKey, type IfNotFound} from '@dataflow/core'
-import {fieldInput} from '@/ui/expression-field'
-import {cn} from '@/lib/utils'
-import type {FieldsProps, ComponentDef} from './types'
+import {Equal, Plus, SearchCheck, X} from 'lucide-react';
+import {lookupConfig, lookup, type LookupKey, type IfNotFound} from '@dataflow/core';
+import {fieldInput} from '#ui/expression-field';
+import {cn} from '#lib/utils';
+import type {FieldsProps} from '#types/fields-props.type';
+import type {ComponentDef} from '#types/component-def.type';
 
 // Visual part of the Lookup. The logic (validate and execute) is the core's.
 
-const expressionInput = cn(fieldInput, 'border-primary/50 bg-primary/5 font-mono')
+const expressionInput = cn(fieldInput, 'border-primary/50 bg-primary/5 font-mono');
 
 function LookupCard({config}: FieldsProps) {
-  const {keys, ifNotFound} = lookupConfig(config)
-  if (keys.length === 0) return <p className="text-xs italic text-muted-foreground">No comparison</p>
+  const {keys, ifNotFound} = lookupConfig(config);
+  if (keys.length === 0) return <p className="text-xs italic text-muted-foreground">No comparison</p>;
   return (
     <div className="flex flex-col gap-1 font-mono text-xs">
       {keys.map((k, i) => (
@@ -22,7 +23,7 @@ function LookupCard({config}: FieldsProps) {
       ))}
       <p className="text-muted-foreground">if not found: {ifNotFound === 'error' ? 'error' : 'null'}</p>
     </div>
-  )
+  );
 }
 
 function RemoveButton({label, onClick}: {label: string; onClick: () => void}) {
@@ -31,7 +32,7 @@ function RemoveButton({label, onClick}: {label: string; onClick: () => void}) {
             className="flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground">
       <X className="size-4" aria-hidden="true"/>
     </button>
-  )
+  );
 }
 
 function AddButton({children, onClick}: {children: string; onClick: () => void}) {
@@ -40,18 +41,18 @@ function AddButton({children, onClick}: {children: string; onClick: () => void})
             className="flex h-8 items-center justify-center gap-1 rounded-md border border-dashed border-input text-xs text-muted-foreground hover:border-ring hover:text-foreground">
       <Plus className="size-3.5" aria-hidden="true"/> {children}
     </button>
-  )
+  );
 }
 
 const IF_NOT_FOUND: {value: IfNotFound; label: string}[] = [
   {value: 'null', label: 'Write null'},
   {value: 'error', label: 'Error'},
-]
+];
 
 function LookupPanel({id, config, setConfig}: FieldsProps) {
-  const {keys, ifNotFound} = lookupConfig(config)
-  const changeKey = (i: number, m: Partial<LookupKey>) => setConfig('keys', keys.map((k, j) => (j === i ? {...k, ...m} : k)))
-  const keyColumns = 'grid-cols-[minmax(0,1fr)_16px_minmax(0,1fr)_32px]'
+  const {keys, ifNotFound} = lookupConfig(config);
+  const changeKey = (i: number, m: Partial<LookupKey>) => setConfig('keys', keys.map((k, j) => (j === i ? {...k, ...m} : k)));
+  const keyColumns = 'grid-cols-[minmax(0,1fr)_16px_minmax(0,1fr)_32px]';
 
   return (
     <div className="flex flex-col gap-5">
@@ -89,7 +90,7 @@ function LookupPanel({id, config, setConfig}: FieldsProps) {
         </div>
       </section>
     </div>
-  )
+  );
 }
 
 function LookupDocs() {
@@ -109,7 +110,7 @@ function LookupDocs() {
       <h4>Override</h4>
       <p>On, the output <code>DATA</code> becomes only the found envelope (empty if not found).</p>
     </>
-  )
+  );
 }
 
 export const LOOKUP: ComponentDef = {
@@ -128,4 +129,4 @@ export const LOOKUP: ComponentDef = {
   Panel: LookupPanel,
   Docs: LookupDocs,
   validate: config => lookup.validate(config),
-}
+};

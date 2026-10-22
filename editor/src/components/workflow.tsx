@@ -1,20 +1,22 @@
-import {useParams} from 'react-router'
-import {Workflow} from 'lucide-react'
-import {workflowInvokerConfig, MAX_WORKFLOW_DEPTH, workflowInvoker, type InvokerParameter} from '@dataflow/core'
-import {ExpressionInput, fieldInput} from '@/ui/expression-field'
-import {cn} from '@/lib/utils'
-import {listFlows, getFlow, type Flow} from '@/mock/flows'
-import type {FieldsProps, ComponentDef, Config} from './types'
+import {useParams} from 'react-router';
+import {Workflow} from 'lucide-react';
+import {workflowInvokerConfig, MAX_WORKFLOW_DEPTH, workflowInvoker, type InvokerParameter} from '@dataflow/core';
+import {ExpressionInput, fieldInput} from '#ui/expression-field';
+import {cn} from '#lib/utils';
+import {listFlows, getFlow, type Flow} from '#mock/flows';
+import type {FieldsProps} from '#types/fields-props.type';
+import type {ComponentDef} from '#types/component-def.type';
+import type {Config} from '#types/config.type';
 
 // Visual part of the Workflow Invoker. The logic is the core's; the editor sends the called workflows along.
 
 const startAcceptsInput = (flow?: Flow) =>
-  flow?.nodes.some(n => n.type === 'component' && n.data.type === 'start' && n.data.config.acceptsInput === true) ?? false
+  flow?.nodes.some(n => n.type === 'component' && n.data.type === 'start' && n.data.config.acceptsInput === true) ?? false;
 
 function WorkflowCard({config}: FieldsProps) {
-  const {workflowId, parameters} = workflowInvokerConfig(config)
-  const target = workflowId ? getFlow(workflowId) : undefined
-  if (!workflowId) return <p className="text-xs italic text-muted-foreground">No workflow</p>
+  const {workflowId, parameters} = workflowInvokerConfig(config);
+  const target = workflowId ? getFlow(workflowId) : undefined;
+  if (!workflowId) return <p className="text-xs italic text-muted-foreground">No workflow</p>;
   return (
     <div className="flex flex-col gap-1 text-xs">
       <p className={cn('truncate font-medium', !target && 'text-destructive')} title={target?.name}>{target?.name ?? 'Workflow not found'}</p>
@@ -25,24 +27,24 @@ function WorkflowCard({config}: FieldsProps) {
         </p>
       ))}
     </div>
-  )
+  );
 }
 
 function WorkflowPanel({id, config, setConfig}: FieldsProps) {
-  const {flowId} = useParams()
-  const {workflowId, parameters, sendEnvelope} = workflowInvokerConfig(config)
-  const options = listFlows().filter(f => f.id !== flowId).sort((a, b) => a.name.localeCompare(b.name))
-  const target = options.find(f => f.id === workflowId)
-  const acceptsInput = startAcceptsInput(target)
+  const {flowId} = useParams();
+  const {workflowId, parameters, sendEnvelope} = workflowInvokerConfig(config);
+  const options = listFlows().filter(f => f.id !== flowId).sort((a, b) => a.name.localeCompare(b.name));
+  const target = options.find(f => f.id === workflowId);
+  const acceptsInput = startAcceptsInput(target);
   // one row per parameter of the called workflow's Start, with the stored value (if any)
   const rows = (target?.parameters ?? []).map(p => ({
     def: p,
     value: parameters.find(v => v.name === p.name) ?? {name: p.name, value: '', expression: true},
-  }))
+  }));
   const change = (name: string, update: Partial<InvokerParameter>) => {
-    const current = rows.map(r => r.value)
-    setConfig('parameters', current.map(v => (v.name === name ? {...v, ...update} : v)))
-  }
+    const current = rows.map(r => r.value);
+    setConfig('parameters', current.map(v => (v.name === name ? {...v, ...update} : v)));
+  };
 
   return (
     <div className="flex flex-col gap-4">
@@ -50,9 +52,9 @@ function WorkflowPanel({id, config, setConfig}: FieldsProps) {
         <label htmlFor={`${id}-workflow`} className="text-xs font-medium text-muted-foreground">Workflow</label>
         <select id={`${id}-workflow`} value={workflowId} className={fieldInput}
                 onChange={e => {
-                  setConfig('workflowId', e.target.value)
-                  setConfig('parameters', [])
-                  if (!startAcceptsInput(getFlow(e.target.value))) setConfig('sendEnvelope', false)
+                  setConfig('workflowId', e.target.value);
+                  setConfig('parameters', []);
+                  if (!startAcceptsInput(getFlow(e.target.value))) setConfig('sendEnvelope', false);
                 }}>
           <option value="">Choose…</option>
           {workflowId && !target && <option value={workflowId}>(not found)</option>}
@@ -90,7 +92,7 @@ function WorkflowPanel({id, config, setConfig}: FieldsProps) {
         </label>
       )}
     </div>
-  )
+  );
 }
 
 function WorkflowDocs() {
@@ -111,7 +113,7 @@ function WorkflowDocs() {
       <h4>Result</h4>
       <p>Each call shows up in the component's log, and the record keeps the id, status and time of each called run.</p>
     </>
-  )
+  );
 }
 
 export const WORKFLOW_INVOKER: ComponentDef = {
@@ -129,14 +131,14 @@ export const WORKFLOW_INVOKER: ComponentDef = {
   Panel: WorkflowPanel,
   Docs: WorkflowDocs,
   validate: (config: Config) => {
-    const issues = workflowInvoker.validate(config)
-    const {workflowId, parameters} = workflowInvokerConfig(config)
-    const target = workflowId ? getFlow(workflowId) : undefined
-    if (workflowId && !target) return [...issues, 'calls a workflow that no longer exists.']
+    const issues = workflowInvoker.validate(config);
+    const {workflowId, parameters} = workflowInvokerConfig(config);
+    const target = workflowId ? getFlow(workflowId) : undefined;
+    if (workflowId && !target) return [...issues, 'calls a workflow that no longer exists.'];
     for (const p of target?.parameters ?? []) {
-      const value = parameters.find(v => v.name === p.name)?.value ?? ''
-      if (p.required && !value && !p.default) issues.push(`has no value for the required parameter "${p.name}".`)
+      const value = parameters.find(v => v.name === p.name)?.value ?? '';
+      if (p.required && !value && !p.default) issues.push(`has no value for the required parameter "${p.name}".`);
     }
-    return issues
+    return issues;
   },
-}
+};

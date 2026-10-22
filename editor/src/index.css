@@ -319,16 +319,6 @@
   stroke-width: 2;
 }
 
-/* Shape of the port dot by type: envelope = circle, text = square, number = diamond,
-   json = hollow square, any = ring. The type is spelled out in the port's title. */
-.react-flow__handle[data-type='text'] .snap-port-dot { border-radius: 2px; }
-.react-flow__handle[data-type='number'] .snap-port-dot { border-radius: 1px; transform: rotate(45deg) scale(0.85); }
-.react-flow__handle[data-type='number']:hover .snap-port-dot { transform: rotate(45deg) scale(1.3); }
-.react-flow__handle[data-type='json'] .snap-port-dot { border-radius: 2px; background: transparent; box-shadow: inset 0 0 0 2px var(--muted-foreground); }
-.react-flow__handle[data-type='json'].is-connected .snap-port-dot { background: transparent; box-shadow: inset 0 0 0 2px var(--port-accent, var(--primary)); }
-.react-flow__handle[data-type='any'] .snap-port-dot { background: transparent; box-shadow: inset 0 0 0 2px var(--muted-foreground); }
-.react-flow__handle[data-type='any'].is-connected .snap-port-dot { box-shadow: inset 0 0 0 2px var(--port-accent, var(--primary)); background: transparent; }
-
 /* An edge that is not allowed: the target port turns red while dragging */
 .react-flow__handle.connectingto:not(.valid) .snap-port-dot { background: var(--destructive) !important; box-shadow: none; }
 
@@ -351,7 +341,7 @@
 .react-flow__handle.snap-port-error[data-result='error'] .snap-port-dot { background: #fff; }
 
 /* an input that accepts several edges (End): three stacked dots instead of the dot */
-.react-flow__handle.snap-port.is-multiple[data-type] .snap-port-dot {
+.react-flow__handle.snap-port.is-multiple .snap-port-dot {
   width: 4px;
   height: 14px;
   border-radius: 0;
@@ -359,9 +349,9 @@
   color: var(--muted-foreground);
   background: radial-gradient(circle, currentColor 1.6px, transparent 1.9px) center / 4px 5px repeat-y;
 }
-.react-flow__handle.snap-port.is-multiple[data-type].is-connected .snap-port-dot,
-.react-flow__handle.snap-port.is-multiple[data-type]:hover .snap-port-dot,
-.react-flow__handle.snap-port.is-multiple[data-type].connectingto .snap-port-dot {
+.react-flow__handle.snap-port.is-multiple.is-connected .snap-port-dot,
+.react-flow__handle.snap-port.is-multiple:hover .snap-port-dot,
+.react-flow__handle.snap-port.is-multiple.connectingto .snap-port-dot {
   color: var(--port-accent, var(--primary));
   background: radial-gradient(circle, currentColor 1.6px, transparent 1.9px) center / 4px 5px repeat-y;
 }

@@ -1,6 +1,6 @@
-import {Copy} from 'lucide-react'
-import {copy} from '@dataflow/core'
-import type {ComponentDef} from './types'
+import {Copy} from 'lucide-react';
+import {copy} from '@dataflow/core';
+import type {ComponentDef} from '#types/component-def.type';
 
 // Visual part of the Copy. The logic (execute) is the core's.
 
@@ -18,7 +18,7 @@ function CopyDocs() {
       <h4>Disabled</h4>
       <p>The envelopes go out only through the first output.</p>
     </>
-  )
+  );
 }
 
 export const COPY: ComponentDef = {
@@ -33,4 +33,4 @@ export const COPY: ComponentDef = {
   noError: true,
   defaultConfig: {outputCount: 2},
   Docs: CopyDocs,
-}
+};

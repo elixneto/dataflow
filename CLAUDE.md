@@ -5,13 +5,14 @@ Overview, concepts and how to run: [README.md](README.md). Engine architecture: 
 | Folder | What it is | Details |
 |---|---|---|
 | `editor/` | App (Vite + React + React Flow) at the root: projects → flows (editor), runs, secrets, files | see [editor/CLAUDE.md](editor/CLAUDE.md) |
-| `core/` | TypeScript engine without React or Node: contract, envelope, components (logic), envelope-by-envelope execution | used by the editor (alias `@dataflow/core`) and by the runner |
+| `core/` | TypeScript engine without React or Node: contract (`src/types/`, one type per file, imported as `#types/<name>.type`), `src/envelope/` (building envelopes, expression variables), `src/validation/` (key names, cycles), `src/errors/`, `src/engine/` (envelope-by-envelope execution: entry point `workflowRunner` (`workflow-runner.ts`) → class `WorkflowExecution`), components (logic) | used by the editor (alias `@dataflow/core`) and by the runner |
 | `runner/` | Runner in Bun + Hono (port 5190): runs, secrets and files per project, expressions and scripts in `node:vm` | runs separately; the editor talks to it through `/api` |
 
 ## Commands (at the root)
 
 - `npm run setup` — installs the dependencies of the three parts (once).
 - `npm run start` — starts **runner and editor together** (concurrently, one terminal); opens at http://localhost:5180/ (project list).
+- `npm run lint` — ESLint over the three parts (`eslint.config.mjs`); it is the first step of `npm run build`, so a missing `;` or an `any` breaks the build.
 - `npm test` — core and runner tests (`bun test`). `npm run typecheck` — the three parts. `npm run build` — editor build.
 - Each part has an `.npmrc` pointing to the public npm registry, so it installs the same even with another registry configured on the machine.
 
@@ -31,6 +32,8 @@ For now they live in the runner, outside git: `runner/secrets.local.json` (text 
 - Everything in English: code, identifiers, file names, UI text, comments and docs.
 - No explanatory text inside the windows and cards: only short labels. Explanations go in the Notes tab (the component's `Docs`).
 - Smallest text on screen: `text-sm`.
+- Imports with `#` (subpath imports in the part's package.json): in the editor every folder (`#types/...`, `#components/catalog`...), never relative; in the core the folders `#types`, `#envelope`, `#validation`, `#errors` and `#engine` (e.g. `#types/envelope.type`, `#errors/normalize-error`).
+- Semicolon at the end of every statement and type member; never the `any` type (use `unknown`, generics or the real type). Both are lint errors and fail the build.
 
 ## Commits
 

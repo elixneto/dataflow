@@ -1,39 +1,39 @@
-import {useCallback, useEffect, useRef, useState, type FormEvent} from 'react'
-import {Link, useParams, useSearchParams} from 'react-router'
-import {Download, KeyRound, RefreshCw, Trash2, Upload} from 'lucide-react'
-import type {RunRecord} from '@dataflow/core'
-import {StatusIcon, ms, STATUS_LABEL} from '@/run/run-panel'
-import {getProject} from '@/mock/projects'
-import {Button} from '@/ui/button'
-import {fieldInput} from '@/ui/expression-field'
-import {cn} from '@/lib/utils'
-import {FlowsTab} from './flows-tab'
-import {Header, shortDate} from './header'
+import {useCallback, useEffect, useRef, useState, type FormEvent} from 'react';
+import {Link, useParams, useSearchParams} from 'react-router';
+import {Download, KeyRound, RefreshCw, Trash2, Upload} from 'lucide-react';
+import type {RunRecord} from '@dataflow/core';
+import {StatusIcon, ms, STATUS_LABEL} from '#run/run-panel';
+import {getProject} from '#mock/projects';
+import {Button} from '#ui/button';
+import {fieldInput} from '#ui/expression-field';
+import {cn} from '#lib/utils';
+import {FlowsTab} from '#pages/flows-tab';
+import {Header, shortDate} from '#pages/header';
 
-type Tab = 'flows' | 'runs' | 'secrets' | 'files'
+type Tab = 'flows' | 'runs' | 'secrets' | 'files';
 
-const TABS: [Tab, string][] = [['flows', 'Flows'], ['runs', 'Runs'], ['secrets', 'Secrets'], ['files', 'Files']]
+const TABS: [Tab, string][] = [['flows', 'Flows'], ['runs', 'Runs'], ['secrets', 'Secrets'], ['files', 'Files']];
 
-const API = '/api'
+const API = '/api';
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  let response: Response
+  let response: Response;
   try {
-    response = await fetch(`${API}${path}`, init)
+    response = await fetch(`${API}${path}`, init);
   } catch {
-    throw new Error('The runner did not respond. Is it running? (npm run start at the repository root)')
+    throw new Error('The runner did not respond. Is it running? (npm run start at the repository root)');
   }
-  const body = await response.json().catch(() => ({}))
-  if (!response.ok) throw new Error(body.error ?? `The runner returned ${response.status}.`)
-  return body as T
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(body.error ?? `The runner returned ${response.status}.`);
+  return body as T;
 }
 
 /** Project: Flows, Runs, Secrets and Files tabs (the tab lives in the URL, ?tab=). */
 export function ProjectPage() {
-  const {projectId = ''} = useParams()
-  const [search, setSearch] = useSearchParams()
-  const tab = (TABS.find(([value]) => value === search.get('tab'))?.[0] ?? 'flows') as Tab
-  const project = getProject(projectId)
+  const {projectId = ''} = useParams();
+  const [search, setSearch] = useSearchParams();
+  const tab = (TABS.find(([value]) => value === search.get('tab'))?.[0] ?? 'flows') as Tab;
+  const project = getProject(projectId);
 
   if (!project) {
     return (
@@ -41,7 +41,7 @@ export function ProjectPage() {
         Project not found.
         <Link to="/" className="text-primary hover:underline">Back to the projects</Link>
       </div>
-    )
+    );
   }
 
   return (
@@ -69,29 +69,29 @@ export function ProjectPage() {
         </div>
       </main>
     </div>
-  )
+  );
 }
 
 function ErrorMessage({message}: {message: string | null}) {
-  return message ? <p className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">{message}</p> : null
+  return message ? <p className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">{message}</p> : null;
 }
 
 function Empty({children}: {children: string}) {
-  return <p className="rounded-lg border border-dashed border-border p-8 text-center text-sm text-muted-foreground">{children}</p>
+  return <p className="rounded-lg border border-dashed border-border p-8 text-center text-sm text-muted-foreground">{children}</p>;
 }
 
 // ---------- Runs: the runner's latest ones (in memory until there is a database) ----------
 
-type RunSummary = Omit<RunRecord, 'components'> & {workflowId?: string}
+type RunSummary = Omit<RunRecord, 'components'> & {workflowId?: string};
 
 function RunsTab({projectId}: {projectId: string}) {
-  const [list, setList] = useState<RunSummary[] | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const [list, setList] = useState<RunSummary[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const load = useCallback(() => {
-    setError(null)
-    request<RunSummary[]>(`/runs?project=${encodeURIComponent(projectId)}`).then(setList).catch(e => setError(e.message))
-  }, [projectId])
-  useEffect(load, [load])
+    setError(null);
+    request<RunSummary[]>(`/runs?project=${encodeURIComponent(projectId)}`).then(setList).catch(e => setError(e.message));
+  }, [projectId]);
+  useEffect(load, [load]);
 
   return (
     <div className="flex flex-col gap-3">
@@ -124,44 +124,44 @@ function RunsTab({projectId}: {projectId: string}) {
         </div>
       )}
     </div>
-  )
+  );
 }
 
 // ---------- Secrets: only the names; the value goes to the runner and does not come back ----------
 
-type Secret = {name: string; source: 'project' | 'shared'}
+type Secret = {name: string; source: 'project' | 'shared'};
 
 function SecretsTab({projectId}: {projectId: string}) {
-  const [list, setList] = useState<Secret[] | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [name, setName] = useState('')
-  const [value, setValue] = useState('')
-  const base = `/projects/${encodeURIComponent(projectId)}/secrets`
+  const [list, setList] = useState<Secret[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [name, setName] = useState('');
+  const [value, setValue] = useState('');
+  const base = `/projects/${encodeURIComponent(projectId)}/secrets`;
   const load = useCallback(() => {
-    request<Secret[]>(base).then(setList).catch(e => setError(e.message))
-  }, [base])
-  useEffect(load, [load])
+    request<Secret[]>(base).then(setList).catch(e => setError(e.message));
+  }, [base]);
+  useEffect(load, [load]);
 
   async function save(e: FormEvent) {
-    e.preventDefault()
-    setError(null)
+    e.preventDefault();
+    setError(null);
     try {
-      await request(`${base}/${encodeURIComponent(name.trim())}`, {method: 'PUT', headers: {'content-type': 'application/json'}, body: JSON.stringify({value})})
-      setName('')
-      setValue('')
-      load()
+      await request(`${base}/${encodeURIComponent(name.trim())}`, {method: 'PUT', headers: {'content-type': 'application/json'}, body: JSON.stringify({value})});
+      setName('');
+      setValue('');
+      load();
     } catch (e) {
-      setError((e as Error).message)
+      setError((e as Error).message);
     }
   }
 
   async function remove(s: Secret) {
-    if (!window.confirm(`Delete the secret ${s.name}?`)) return
+    if (!window.confirm(`Delete the secret ${s.name}?`)) return;
     try {
-      await request(`${base}/${encodeURIComponent(s.name)}`, {method: 'DELETE'})
-      load()
+      await request(`${base}/${encodeURIComponent(s.name)}`, {method: 'DELETE'});
+      load();
     } catch (e) {
-      setError((e as Error).message)
+      setError((e as Error).message);
     }
   }
 
@@ -199,49 +199,49 @@ function SecretsTab({projectId}: {projectId: string}) {
         </ul>
       )}
     </div>
-  )
+  );
 }
 
 // ---------- Files: stored in the runner, per project ----------
 
-type StoredFile = {name: string; size: number; updatedAt: string}
+type StoredFile = {name: string; size: number; updatedAt: string};
 
-const fileSize = (bytes: number) => (bytes < 1024 ? `${bytes} B` : bytes < 1024 ** 2 ? `${(bytes / 1024).toFixed(1)} KB` : `${(bytes / 1024 ** 2).toFixed(1)} MB`)
+const fileSize = (bytes: number) => (bytes < 1024 ? `${bytes} B` : bytes < 1024 ** 2 ? `${(bytes / 1024).toFixed(1)} KB` : `${(bytes / 1024 ** 2).toFixed(1)} MB`);
 
 function FilesTab({projectId}: {projectId: string}) {
-  const [list, setList] = useState<StoredFile[] | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [uploading, setUploading] = useState(false)
-  const input = useRef<HTMLInputElement>(null)
-  const base = `/projects/${encodeURIComponent(projectId)}/files`
+  const [list, setList] = useState<StoredFile[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const input = useRef<HTMLInputElement>(null);
+  const base = `/projects/${encodeURIComponent(projectId)}/files`;
   const load = useCallback(() => {
-    request<StoredFile[]>(base).then(setList).catch(e => setError(e.message))
-  }, [base])
-  useEffect(load, [load])
+    request<StoredFile[]>(base).then(setList).catch(e => setError(e.message));
+  }, [base]);
+  useEffect(load, [load]);
 
   async function upload(files: FileList | null) {
-    if (!files?.length) return
-    setError(null)
-    setUploading(true)
+    if (!files?.length) return;
+    setError(null);
+    setUploading(true);
     try {
       for (const file of files) {
-        const body = new FormData()
-        body.append('file', file)
-        await request(base, {method: 'POST', body})
+        const body = new FormData();
+        body.append('file', file);
+        await request(base, {method: 'POST', body});
       }
-      load()
+      load();
     } catch (e) {
-      setError((e as Error).message)
+      setError((e as Error).message);
     } finally {
-      setUploading(false)
-      if (input.current) input.current.value = ''
+      setUploading(false);
+      if (input.current) input.current.value = '';
     }
   }
 
   async function remove(a: StoredFile) {
-    if (!window.confirm(`Delete ${a.name}?`)) return
-    await request(`${base}/${encodeURIComponent(a.name)}`, {method: 'DELETE'}).catch(e => setError(e.message))
-    load()
+    if (!window.confirm(`Delete ${a.name}?`)) return;
+    await request(`${base}/${encodeURIComponent(a.name)}`, {method: 'DELETE'}).catch(e => setError(e.message));
+    load();
   }
 
   return (
@@ -270,5 +270,5 @@ function FilesTab({projectId}: {projectId: string}) {
         </ul>
       )}
     </div>
-  )
+  );
 }

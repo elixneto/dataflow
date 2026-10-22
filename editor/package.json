@@ -3,6 +3,16 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
+  "imports": {
+    "#components/*": ["./src/components/*.ts", "./src/components/*.tsx"],
+    "#editor/*": ["./src/editor/*.ts", "./src/editor/*.tsx"],
+    "#lib/*": ["./src/lib/*.ts", "./src/lib/*.tsx"],
+    "#mock/*": ["./src/mock/*.ts", "./src/mock/*.tsx"],
+    "#pages/*": ["./src/pages/*.ts", "./src/pages/*.tsx"],
+    "#run/*": ["./src/run/*.ts", "./src/run/*.tsx"],
+    "#types/*": ["./src/types/*.ts", "./src/types/*.tsx"],
+    "#ui/*": ["./src/ui/*.ts", "./src/ui/*.tsx"]
+  },
   "scripts": {
     "start": "vite",
     "build": "tsc -b && vite build",

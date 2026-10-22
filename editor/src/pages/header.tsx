@@ -1,7 +1,7 @@
-import type {ReactNode} from 'react'
-import {Link} from 'react-router'
-import {Workflow} from 'lucide-react'
-import {ThemeButton} from '@/ui/theme'
+import type {ReactNode} from 'react';
+import {Link} from 'react-router';
+import {Workflow} from 'lucide-react';
+import {ThemeButton} from '#ui/theme';
 
 /** Header of the pages outside the editor: brand, breadcrumb (Projects / ...) and actions on the right. */
 export function Header({breadcrumb = [], children}: {breadcrumb?: {label: string; to?: string}[]; children?: ReactNode}) {
@@ -25,7 +25,7 @@ export function Header({breadcrumb = [], children}: {breadcrumb?: {label: string
         {children}
       </div>
     </header>
-  )
+  );
 }
 
-export const shortDate = (iso: string) => new Date(iso).toLocaleString('en-US', {day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit'})
+export const shortDate = (iso: string) => new Date(iso).toLocaleString('en-US', {day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit'});

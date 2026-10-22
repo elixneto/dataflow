@@ -1,6 +1,6 @@
-import {Merge} from 'lucide-react'
-import {union} from '@dataflow/core'
-import type {ComponentDef} from './types'
+import {Merge} from 'lucide-react';
+import {union} from '@dataflow/core';
+import type {ComponentDef} from '#types/component-def.type';
 
 // Visual part of the Union. The logic (execute) is the core's.
 
@@ -15,7 +15,7 @@ function UnionDocs() {
       <p>Each envelope goes out as soon as it arrives, from any input.</p>
       <p>Unlike a Join, which combines two envelopes into one by a key: the Union only stacks.</p>
     </>
-  )
+  );
 }
 
 export const UNION: ComponentDef = {
@@ -30,4 +30,4 @@ export const UNION: ComponentDef = {
   noError: true,
   defaultConfig: {inputCount: 2},
   Docs: UnionDocs,
-}
+};

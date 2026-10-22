@@ -1,39 +1,39 @@
-import type {Edge} from '@xyflow/react'
-import type {WorkflowParameter} from '@dataflow/core'
-import {END, START} from '@/components/catalog'
-import type {CommentNode} from '@/editor/comment-node'
-import type {GroupNode} from '@/editor/group-node'
-import type {ComponentNode} from '@/editor/component-node'
-import {EXAMPLES_PROJECT} from './projects'
+import type {Edge} from '@xyflow/react';
+import type {WorkflowParameter} from '@dataflow/core';
+import {END, START} from '#components/catalog';
+import type {CommentNode} from '#editor/comment-node';
+import type {GroupNode} from '#editor/group-node';
+import type {ComponentNode} from '#editor/component-node';
+import {EXAMPLES_PROJECT} from '#mock/projects';
 
 /*
  * Mock flows, stored in the browser's localStorage. When the backend exists, this becomes API calls
  * and the flows move to the database.
  */
 
-export type FlowNode = ComponentNode | CommentNode | GroupNode
+export type FlowNode = ComponentNode | CommentNode | GroupNode;
 
 export type Flow = {
-  id: string
+  id: string;
   /** project that owns the flow (an old flow without a project goes to the examples one) */
-  projectId?: string
+  projectId?: string;
   /** folder inside the project, as a path ("Sales/Invoices"); empty = root */
-  folder?: string
-  name: string
-  description: string
-  status: 'draft' | 'published'
-  version: number
-  updatedAt: string
+  folder?: string;
+  name: string;
+  description: string;
+  status: 'draft' | 'published';
+  version: number;
+  updatedAt: string;
   /** parameters the workflow expects (each trigger passes the values; whatever is missing uses the default) */
-  parameters?: WorkflowParameter[]
-  nodes: FlowNode[]
-  edges: Edge[]
-}
+  parameters?: WorkflowParameter[];
+  nodes: FlowNode[];
+  edges: Edge[];
+};
 
-const KEY = 'dataflow-flows-v1'
+const KEY = 'dataflow-flows-v1';
 
 function component(id: string, type: string, label: string, x: number, y: number, config: Record<string, unknown> = {}): ComponentNode {
-  return {id, type: 'component', position: {x, y}, data: {type, label, config}}
+  return {id, type: 'component', position: {x, y}, data: {type, label, config}};
 }
 
 export function emptyFlow(projectId: string, folder = ''): Flow {
@@ -46,29 +46,29 @@ export function emptyFlow(projectId: string, folder = ''): Flow {
       {...component(END, END, 'End', 900, 100), deletable: false},
     ],
     edges: [],
-  }
+  };
 }
 
 // ---------- Fixed examples: recreated on every load (whatever is changed in them is not kept) ----------
 
-export const EXAMPLE_ID = 'example-errors'
+export const EXAMPLE_ID = 'example-errors';
 
 const EXAMPLE_ITEMS = Array.from({length: 10}, (_, i) => {
-  const id = i + 1
+  const id = i + 1;
   // items 3 and 7 come without a price: Mapper 1 fails on them and they go to the error port
-  return id === 3 || id === 7 ? {id, name: `Item ${id}`} : {id, name: `Item ${id}`, price: id * 10.5}
-})
+  return id === 3 || id === 7 ? {id, name: `Item ${id}`} : {id, name: `Item ${id}`, price: id * 10.5};
+});
 
 function withOverride(node: ComponentNode): ComponentNode {
-  return {...node, data: {...node.data, override: true}}
+  return {...node, data: {...node.data, override: true}};
 }
 
 function withKey(node: ComponentNode, outputKey: string): ComponentNode {
-  return {...node, data: {...node.data, outputKey}}
+  return {...node, data: {...node.data, outputKey}};
 }
 
 function connect(source: string, target: string, output = 'out-0', input = 'in-0'): Edge {
-  return {id: `e-${source}-${output}-${target}-${input}`, source, sourceHandle: output, target, targetHandle: input}
+  return {id: `e-${source}-${output}-${target}-${input}`, source, sourceHandle: output, target, targetHandle: input};
 }
 
 /** List of 10 items → Mapper 1 (2 fail and are diverted) → Mapper 2 handles the error → Union → End. */
@@ -96,16 +96,16 @@ function exampleFlow(): Flow {
       connect('mapper2', 'union', 'out-0', 'in-1'),
       connect('union', END),
     ],
-  }
+  };
 }
 
-export const FILTER_EXAMPLE_ID = 'example-filter'
+export const FILTER_EXAMPLE_ID = 'example-filter';
 
 /** List of 10 items → Filter ($price > 50) → a Mapper on each output → Union → End. */
 function filterExampleFlow(): Flow {
   const range = (id: string, label: string, x: number, y: number, value: string) =>
-    component(id, 'mapper', label, x, y, {fields: [{target: 'range', value, expression: false}]})
-  const items = Array.from({length: 10}, (_, i) => ({id: i + 1, name: `Item ${i + 1}`, price: (i + 1) * 10.5}))
+    component(id, 'mapper', label, x, y, {fields: [{target: 'range', value, expression: false}]});
+  const items = Array.from({length: 10}, (_, i) => ({id: i + 1, name: `Item ${i + 1}`, price: (i + 1) * 10.5}));
   return {
     id: FILTER_EXAMPLE_ID, name: 'Example: Filter', status: 'draft', version: 0, updatedAt: new Date().toISOString(),
     description: '10 items; the Filter separates those priced above 50 (true) from the others (false), each side gets its range and the Union joins everything.',
@@ -126,17 +126,17 @@ function filterExampleFlow(): Flow {
       connect('cheap', 'union', 'out-0', 'in-1'),
       connect('union', END),
     ],
-  }
+  };
 }
 
-export const ROUTER_EXAMPLE_ID = 'example-router'
+export const ROUTER_EXAMPLE_ID = 'example-router';
 
 /** 10 companies → Router by state (CA, West Coast, else) → a Mapper per output writes the region → Union → End. */
 function routerExampleFlow(): Flow {
-  const states = ['CA', 'OR', 'TX', 'CA', 'WA', 'NY', 'OR', 'CA', 'FL', 'WA']
-  const companies = states.map((state, i) => ({id: i + 1, name: `Company ${i + 1}`, state}))
+  const states = ['CA', 'OR', 'TX', 'CA', 'WA', 'NY', 'OR', 'CA', 'FL', 'WA'];
+  const companies = states.map((state, i) => ({id: i + 1, name: `Company ${i + 1}`, state}));
   const region = (id: string, label: string, x: number, y: number, value: string) =>
-    component(id, 'mapper', label, x, y, {fields: [{target: 'region', value, expression: false}]})
+    component(id, 'mapper', label, x, y, {fields: [{target: 'region', value, expression: false}]});
   return {
     id: ROUTER_EXAMPLE_ID, name: 'Example: Router', status: 'draft', version: 0, updatedAt: new Date().toISOString(),
     description: '10 companies; the Router separates CA, the rest of the West Coast and everything else (else), each output writes the region and the Union joins everything.',
@@ -163,10 +163,10 @@ function routerExampleFlow(): Flow {
       connect('others', 'union', 'out-0', 'in-2'),
       connect('union', END),
     ],
-  }
+  };
 }
 
-export const LOOKUP_EXAMPLE_ID = 'example-lookup'
+export const LOOKUP_EXAMPLE_ID = 'example-lookup';
 
 /**
  * Tickets and companies arrive together at the Start; the Router separates the companies (lookup) from the tickets (main)
@@ -178,9 +178,9 @@ function lookupExampleFlow(): Flow {
     {kind: 'company', code: 10, id: 'co-alpha', name: 'Alpha Inc.'},
     {kind: 'company', code: 20, id: 'co-beta', name: 'Beta LLC'},
     {kind: 'company', code: 30, id: 'co-gamma', name: 'Gamma Co.'},
-  ]
-  const codes = [10, 20, 30, 10, 99, 20, 10, 30]
-  const tickets = codes.map((companyCode, i) => ({kind: 'ticket', id: i + 1, date: `2026-10-${String(i + 1).padStart(2, '0')}`, companyCode}))
+  ];
+  const codes = [10, 20, 30, 10, 99, 20, 10, 30];
+  const tickets = codes.map((companyCode, i) => ({kind: 'ticket', id: i + 1, date: `2026-10-${String(i + 1).padStart(2, '0')}`, companyCode}));
   return {
     id: LOOKUP_EXAMPLE_ID, name: 'Example: Lookup', status: 'draft', version: 0, updatedAt: new Date().toISOString(),
     description: '8 tickets and 3 companies; the Lookup finds the company of each ticket by code and the Mapper takes the id and the name (99 does not exist and gets the default).',
@@ -205,10 +205,10 @@ function lookupExampleFlow(): Flow {
       connect('lookup', 'fields'),
       connect('fields', END),
     ],
-  }
+  };
 }
 
-export const TYPESCRIPT_EXAMPLE_ID = 'example-typescript'
+export const TYPESCRIPT_EXAMPLE_ID = 'example-typescript';
 
 const EXAMPLE_CODE = `type Order = {id: number; customer: string; items: {product: string; amount: number}[]}
 
@@ -226,14 +226,14 @@ async function process($input: {items: Order[]}): Promise<Data[]> {
 function total(order: Order) {
   return order.items.reduce((sum, item) => sum + item.amount, 0)
 }
-`
+`;
 
 /** 7 orders → Aggregate (batches of 3) → TypeScript (total, range, upper-case customer and the source parameter) → End. */
 function typescriptExampleFlow(): Flow {
   const orders = Array.from({length: 7}, (_, i) => ({
     id: i + 1, customer: `customer ${i + 1}`,
     items: Array.from({length: (i % 3) + 1}, (_, j) => ({product: `P${j + 1}`, amount: 25 * (i + j + 1)})),
-  }))
+  }));
   return {
     id: TYPESCRIPT_EXAMPLE_ID, name: 'Example: TypeScript', status: 'draft', version: 0, updatedAt: new Date().toISOString(),
     description: '7 orders; the Aggregate groups them in batches of 3 and the TypeScript process function computes the total of each order in the batch.',
@@ -245,10 +245,10 @@ function typescriptExampleFlow(): Flow {
       {...component(END, END, 'End', 1120, 200), deletable: false},
     ],
     edges: [connect(START, 'agg'), connect('agg', 'ts'), connect('ts', END)],
-  }
+  };
 }
 
-export const DATA_GRID_EXAMPLE_ID = 'example-data-grid'
+export const DATA_GRID_EXAMPLE_ID = 'example-data-grid';
 
 /**
  * No input at the Start: the Copy sends the Start envelope to two Data Grids, one with the tickets (main) and
@@ -289,10 +289,10 @@ function dataGridExampleFlow(): Flow {
       connect('lookup', 'fields'),
       connect('fields', END),
     ],
-  }
+  };
 }
 
-export const SQL_SERVER_EXAMPLE_ID = 'example-sql-server'
+export const SQL_SERVER_EXAMPLE_ID = 'example-sql-server';
 
 /** Lists the tables of any SQL Server database (secret MY_SQL_DB in runner/secrets.local.json). */
 function sqlServerExampleFlow(): Flow {
@@ -313,19 +313,19 @@ ORDER BY name`,
       {...component(END, END, 'End', 760, 200), deletable: false},
     ],
     edges: [connect(START, 'tables'), connect('tables', END)],
-  }
+  };
 }
 
-export const INVOKER_EXAMPLE_ID = 'example-workflow-invoker'
-const INVOKER_CALLED_EXAMPLE_ID = 'example-workflow-invoker-multiply'
-const INVOKER_ERROR_EXAMPLE_ID = 'example-workflow-invoker-error-handling'
+export const INVOKER_EXAMPLE_ID = 'example-workflow-invoker';
+const INVOKER_CALLED_EXAMPLE_ID = 'example-workflow-invoker-multiply';
+const INVOKER_ERROR_EXAMPLE_ID = 'example-workflow-invoker-error-handling';
 
 /**
  * Three workflows: the parent yields n = 1, 2, 3 and calls "Multiply" with times = n - 1; with times 0 it fails, and the error
  * port calls "Error handling" with the envelope.
  */
 function invokerExampleFlows(): Flow[] {
-  const now = new Date().toISOString()
+  const now = new Date().toISOString();
   const multiply: Flow = {
     id: INVOKER_CALLED_EXAMPLE_ID, name: 'Example: Invoker (Multiply)', status: 'draft', version: 0, updatedAt: now,
     description: 'Called by "Example: Workflow Invoker": receives the envelope and multiplies n by the times parameter (times 0 fails).',
@@ -339,7 +339,7 @@ function invokerExampleFlows(): Flow[] {
       {...component(END, END, 'End', 760, 200), deletable: false},
     ],
     edges: [connect(START, 'total'), connect('total', END)],
-  }
+  };
   const handling: Flow = {
     id: INVOKER_ERROR_EXAMPLE_ID, name: 'Example: Invoker (Error handling)', status: 'draft', version: 0, updatedAt: now,
     description: 'Called by the error port of "Example: Workflow Invoker": receives the envelope that failed and marks it as handled.',
@@ -350,7 +350,7 @@ function invokerExampleFlows(): Flow[] {
       {...component(END, END, 'End', 760, 200), deletable: false},
     ],
     edges: [connect(START, 'mark'), connect('mark', END)],
-  }
+  };
   const parent: Flow = {
     id: INVOKER_EXAMPLE_ID, name: 'Example: Workflow Invoker', status: 'draft', version: 0, updatedAt: now,
     description: 'Calls "Multiply" for each number; whatever fails goes through the error port to "Error handling".',
@@ -369,32 +369,32 @@ function invokerExampleFlows(): Flow[] {
       connect(START, 'numbers'), connect('numbers', 'multiply'), connect('multiply', END),
       connect('multiply', 'handling', 'error'), connect('handling', END),
     ],
-  }
-  return [parent, multiply, handling]
+  };
+  return [parent, multiply, handling];
 }
 
 /** Factory folder of each example. */
 function exampleFolder(id: string) {
-  if (id === SQL_SERVER_EXAMPLE_ID) return 'Data sources'
-  if (id.startsWith(INVOKER_EXAMPLE_ID)) return 'Workflow Invoker'
-  return 'Components'
+  if (id === SQL_SERVER_EXAMPLE_ID) return 'Data sources';
+  if (id.startsWith(INVOKER_EXAMPLE_ID)) return 'Workflow Invoker';
+  return 'Components';
 }
 
 /** Every example lives in the examples project. */
 function exampleProject(_id: string) {
-  return EXAMPLES_PROJECT
+  return EXAMPLES_PROJECT;
 }
 
 const EXAMPLES = () => [
   exampleFlow(), filterExampleFlow(), routerExampleFlow(), lookupExampleFlow(), typescriptExampleFlow(), dataGridExampleFlow(), sqlServerExampleFlow(),
   ...invokerExampleFlows(),
-]
+];
 
 export function listFlows(): Flow[] {
-  let stored: Flow[] = []
+  let stored: Flow[] = [];
   try {
-    const saved = localStorage.getItem(KEY)
-    if (saved) stored = JSON.parse(saved) as Flow[]
+    const saved = localStorage.getItem(KEY);
+    if (saved) stored = JSON.parse(saved) as Flow[];
   } catch {
     // storage unavailable or corrupted: starts empty
   }
@@ -402,55 +402,55 @@ export function listFlows(): Flow[] {
   // an example can be moved to another folder (the saved folder applies; the rest goes back to the original)
   const examples = EXAMPLES().map(f => ({
     ...f, projectId: exampleProject(f.id), folder: stored.find(s => s.id === f.id)?.folder ?? exampleFolder(f.id),
-  }))
-  return [...examples, ...stored.filter(f => !examples.some(e => e.id === f.id))].map(f => ({...f, projectId: f.projectId ?? EXAMPLES_PROJECT}))
+  }));
+  return [...examples, ...stored.filter(f => !examples.some(e => e.id === f.id))].map(f => ({...f, projectId: f.projectId ?? EXAMPLES_PROJECT}));
 }
 
 /** Moves the flow to another folder of the project. */
 export function moveFlow(id: string, folder: string) {
-  store(listFlows().map(f => (f.id === id ? {...f, folder} : f)))
+  store(listFlows().map(f => (f.id === id ? {...f, folder} : f)));
 }
 
 /** Replaces the beginning of the folder path of the flows (folder renamed or moved). */
 export function renameFlowsFolder(projectId: string, from: string, to: string) {
-  store(listFlows().map(f => (f.projectId === projectId && isInside(f.folder ?? '', from) ? {...f, folder: to + (f.folder ?? '').slice(from.length)} : f)))
+  store(listFlows().map(f => (f.projectId === projectId && isInside(f.folder ?? '', from) ? {...f, folder: to + (f.folder ?? '').slice(from.length)} : f)));
 }
 
 /** the folder is `base` or sits inside it */
-export const isInside = (folder: string, base: string) => folder === base || folder.startsWith(base + '/')
+export const isInside = (folder: string, base: string) => folder === base || folder.startsWith(base + '/');
 
 /** Flows of a project. */
 export function projectFlows(projectId: string): Flow[] {
-  return listFlows().filter(f => f.projectId === projectId)
+  return listFlows().filter(f => f.projectId === projectId);
 }
 
 function store(flows: Flow[]) {
   try {
-    localStorage.setItem(KEY, JSON.stringify(flows))
+    localStorage.setItem(KEY, JSON.stringify(flows));
   } catch {
     // no storage: the mock only lasts until reload
   }
 }
 
 export function getFlow(id: string): Flow | undefined {
-  return listFlows().find(f => f.id === id)
+  return listFlows().find(f => f.id === id);
 }
 
 export function saveFlow(flow: Flow): Flow {
-  const flows = listFlows()
-  const saved: Flow = {...flow, version: flow.version + 1, updatedAt: new Date().toISOString()}
-  const exists = flows.some(f => f.id === flow.id)
-  store(exists ? flows.map(f => f.id === flow.id ? saved : f) : [...flows, saved])
-  return saved
+  const flows = listFlows();
+  const saved: Flow = {...flow, version: flow.version + 1, updatedAt: new Date().toISOString()};
+  const exists = flows.some(f => f.id === flow.id);
+  store(exists ? flows.map(f => f.id === flow.id ? saved : f) : [...flows, saved]);
+  return saved;
 }
 
 export function deleteFlow(id: string) {
-  store(listFlows().filter(f => f.id !== id))
+  store(listFlows().filter(f => f.id !== id));
 }
 
 export function duplicateFlow(id: string): Flow | undefined {
-  const original = getFlow(id)
-  if (!original) return undefined
-  const copy: Flow = {...structuredClone(original), id: 'f-' + Date.now().toString(36), name: `${original.name} (copy)`, status: 'draft', version: 0}
-  return saveFlow(copy)
+  const original = getFlow(id);
+  if (!original) return undefined;
+  const copy: Flow = {...structuredClone(original), id: 'f-' + Date.now().toString(36), name: `${original.name} (copy)`, status: 'draft', version: 0};
+  return saveFlow(copy);
 }

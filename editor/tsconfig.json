@@ -22,9 +22,6 @@
     ],
     "baseUrl": ".",
     "paths": {
-      "@/*": [
-        "./src/*"
-      ],
       "@dataflow/core": [
         "../core/src/index.ts"
       ]

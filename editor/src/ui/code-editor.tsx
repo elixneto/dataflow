@@ -1,16 +1,16 @@
-import {useEffect, useState} from 'react'
-import Editor, {loader} from '@monaco-editor/react'
-import * as monaco from 'monaco-editor'
-import editorWorker from 'monaco-editor/esm/vs/editor/editor.worker?worker'
-import tsWorker from 'monaco-editor/esm/vs/language/typescript/ts.worker?worker'
+import {useEffect, useState} from 'react';
+import Editor, {loader} from '@monaco-editor/react';
+import * as monaco from 'monaco-editor';
+import editorWorker from 'monaco-editor/esm/vs/editor/editor.worker?worker';
+import tsWorker from 'monaco-editor/esm/vs/language/typescript/ts.worker?worker';
 
 // Monaco bundled in (no CDN), with Vite's workers
 self.MonacoEnvironment = {
   getWorker: (_, label) => (label === 'typescript' || label === 'javascript' ? new tsWorker() : new editorWorker()),
-}
-loader.config({monaco})
+};
+loader.config({monaco});
 
-const ts = monaco.languages.typescript
+const ts = monaco.languages.typescript;
 ts.typescriptDefaults.setCompilerOptions({
   target: ts.ScriptTarget.ESNext,
   lib: ['esnext', 'dom'],
@@ -19,7 +19,7 @@ ts.typescriptDefaults.setCompilerOptions({
   allowNonTsExtensions: true,
   // each component is a module: two open TypeScript components do not fight over the process function
   moduleDetection: 3,
-} as monaco.languages.typescript.CompilerOptions)
+} as monaco.languages.typescript.CompilerOptions);
 
 /** Globals the runner makes available to the code (see runner/src/scripts.ts). */
 ts.typescriptDefaults.addExtraLib(`
@@ -31,10 +31,10 @@ declare const $SECRETS: Record<string, string>
 declare const $WORKFLOW_CURRENT_RUN: {id: string; mode: 'validation' | 'execution'; project: string; workflow: string; startedAt: string}
 /** Writes to the component's log (Logs tab of the result). */
 declare function log(...parts: unknown[]): void
-`, 'file:///dataflow-globals.d.ts')
+`, 'file:///dataflow-globals.d.ts');
 
 function currentTheme() {
-  return document.documentElement.classList.contains('dark') ? 'vs-dark' : 'light'
+  return document.documentElement.classList.contains('dark') ? 'vs-dark' : 'light';
 }
 
 /**
@@ -42,19 +42,19 @@ function currentTheme() {
  * Fills the whole parent (which must be `relative` and have a height).
  */
 export function CodeEditor({value, onValue, path, label, language = 'typescript'}: {
-  value: string
-  onValue: (value: string) => void
+  value: string;
+  onValue: (value: string) => void;
   /** one per component (e.g. the node id), so Monaco does not mix the models */
-  path: string
-  label: string
-  language?: 'typescript' | 'sql'
+  path: string;
+  label: string;
+  language?: 'typescript' | 'sql';
 }) {
-  const [theme, setTheme] = useState(currentTheme)
+  const [theme, setTheme] = useState(currentTheme);
   useEffect(() => {
-    const observer = new MutationObserver(() => setTheme(currentTheme()))
-    observer.observe(document.documentElement, {attributes: true, attributeFilter: ['class']})
-    return () => observer.disconnect()
-  }, [])
+    const observer = new MutationObserver(() => setTheme(currentTheme()));
+    observer.observe(document.documentElement, {attributes: true, attributeFilter: ['class']});
+    return () => observer.disconnect();
+  }, []);
 
   return (
     <div className="nodrag nowheel absolute inset-0 overflow-hidden rounded-md border border-input" aria-label={label}>
@@ -75,5 +75,5 @@ export function CodeEditor({value, onValue, path, label, language = 'typescript'
         }}
       />
     </div>
-  )
+  );
 }

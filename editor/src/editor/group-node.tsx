@@ -1,30 +1,30 @@
-import {memo} from 'react'
-import {NodeResizer, useReactFlow, type Node, type NodeProps} from '@xyflow/react'
-import {cn} from '@/lib/utils'
-import {useHistory} from './history'
+import {memo} from 'react';
+import {NodeResizer, useReactFlow, type Node, type NodeProps} from '@xyflow/react';
+import {cn} from '#lib/utils';
+import {useHistory} from '#editor/history';
 
 /** Colored rectangle behind the components, only to group them visually (not part of the run). */
 export type GroupData = {
-  title: string
-  color: string
-}
+  title: string;
+  color: string;
+};
 
-export type GroupNode = Node<GroupData, 'group'>
+export type GroupNode = Node<GroupData, 'group'>;
 
-export const GROUP_SIZE = {width: 600, height: 360}
+export const GROUP_SIZE = {width: 600, height: 360};
 
-export const GROUP_COLORS = ['#3b82f6', '#22c55e', '#f59e0b', '#ef4444', '#a855f7', '#ec4899', '#14b8a6', '#64748b']
+export const GROUP_COLORS = ['#3b82f6', '#22c55e', '#f59e0b', '#ef4444', '#a855f7', '#ec4899', '#14b8a6', '#64748b'];
 
 /** Stays behind the edges and the components. */
-export const GROUP_Z = -1
+export const GROUP_Z = -1;
 
 function GroupNodeView({id, data, selected}: NodeProps<GroupNode>) {
-  const {updateNodeData} = useReactFlow<GroupNode>()
-  const {record, recordEdit} = useHistory()
+  const {updateNodeData} = useReactFlow<GroupNode>();
+  const {record, recordEdit} = useHistory();
 
   function setField(key: keyof GroupData, value: string) {
-    recordEdit(`${id}:${key}`)
-    updateNodeData(id, {[key]: value})
+    recordEdit(`${id}:${key}`);
+    updateNodeData(id, {[key]: value});
   }
 
   return (
@@ -59,7 +59,7 @@ function GroupNodeView({id, data, selected}: NodeProps<GroupNode>) {
         </header>
       </div>
     </>
-  )
+  );
 }
 
-export const GroupNodeMemo = memo(GroupNodeView)
+export const GroupNodeMemo = memo(GroupNodeView);

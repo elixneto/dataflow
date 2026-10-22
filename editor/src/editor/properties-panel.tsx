@@ -1,29 +1,29 @@
-import {useState} from 'react'
-import {CircleAlert} from 'lucide-react'
-import {BY_TYPE} from '@/components/catalog'
-import {cn} from '@/lib/utils'
-import type {ComponentData, ComponentNode} from './component-node'
+import {useState} from 'react';
+import {CircleAlert} from 'lucide-react';
+import {BY_TYPE} from '#components/catalog';
+import {cn} from '#lib/utils';
+import type {ComponentData, ComponentNode} from '#editor/component-node';
 
-type Tab = 'configuration' | 'notes'
+type Tab = 'configuration' | 'notes';
 
 type Props = {
-  node: ComponentNode
-  receivesRows: boolean
-  onLabel: (id: string, label: string) => void
-  onData: (id: string, update: Partial<Pick<ComponentData, 'outputKey' | 'override' | 'notes'>>) => void
-  onConfig: (id: string, key: string, value: unknown) => void
-}
+  node: ComponentNode;
+  receivesRows: boolean;
+  onLabel: (id: string, label: string) => void;
+  onData: (id: string, update: Partial<Pick<ComponentData, 'outputKey' | 'override' | 'notes'>>) => void;
+  onConfig: (id: string, key: string, value: unknown) => void;
+};
 
 const inputClass =
-  'h-9 w-full rounded-md border border-input bg-background px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30'
+  'h-9 w-full rounded-md border border-input bg-background px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30';
 
 /** Body of a component's window: the Configuration tab and the Notes tab (free notes + the component's docs). */
 export function PropertiesPanel({node, receivesRows, onLabel, onData, onConfig}: Props) {
-  const [tab, setTab] = useState<Tab>('configuration')
-  const def = BY_TYPE[node.data.type]
-  const Content = def.Panel ?? def.Card
-  const Docs = def.Docs
-  const issues = def.validate?.(node.data.config, {receivesRows}) ?? []
+  const [tab, setTab] = useState<Tab>('configuration');
+  const def = BY_TYPE[node.data.type];
+  const Content = def.Panel ?? def.Card;
+  const Docs = def.Docs;
+  const issues = def.validate?.(node.data.config, {receivesRows}) ?? [];
 
   return (
     <>
@@ -87,5 +87,5 @@ export function PropertiesPanel({node, receivesRows, onLabel, onData, onConfig}:
         </div>
       )}
     </>
-  )
+  );
 }

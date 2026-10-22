@@ -1,123 +1,138 @@
-import {useState, type FormEvent, type ReactNode} from 'react'
-import {Link, useNavigate, useSearchParams} from 'react-router'
-import {ChevronDown, ChevronRight, Copy, Folder, FolderOpen, FolderPlus, LayoutGrid, ListTree, Pencil, Plus, Trash2, Workflow, X} from 'lucide-react'
-import {CATEGORIES, isFlowNode, BY_TYPE} from '@/components/catalog'
-import {isComponent} from '@/editor/validation'
-import {isInside, duplicateFlow, deleteFlow, projectFlows, moveFlow, renameFlowsFolder, type Flow} from '@/mock/flows'
-import {createFolder, getProject, replaceFolders} from '@/mock/projects'
-import {Button} from '@/ui/button'
-import {fieldInput} from '@/ui/expression-field'
-import {cn} from '@/lib/utils'
-import {shortDate} from './header'
+import {useState, type DragEvent, type FormEvent, type ReactNode} from 'react';
+import {Link, useNavigate, useSearchParams} from 'react-router';
+import {ChevronDown, ChevronRight, Copy, Folder, FolderInput, FolderOpen, FolderPlus, LayoutGrid, ListTree, Pencil, Plus, Trash2, Workflow, X} from 'lucide-react';
+import {CATEGORIES, isFlowNode, BY_TYPE} from '#components/catalog';
+import {isComponent} from '#editor/validation';
+import {isInside, duplicateFlow, deleteFlow, projectFlows, moveFlow, renameFlowsFolder, type Flow} from '#mock/flows';
+import {createFolder, getProject, replaceFolders} from '#mock/projects';
+import {Button} from '#ui/button';
+import {fieldInput} from '#ui/expression-field';
+import {cn} from '#lib/utils';
+import {shortDate} from '#pages/header';
 
 function entitiesOf(flow: Flow) {
   const names = flow.nodes
     .filter(isComponent)
     .filter(n => BY_TYPE[n.data.type]?.category === 'entity')
-    .map(n => BY_TYPE[n.data.type].label.replace('Create ', ''))
-  return [...new Set(names)]
+    .map(n => BY_TYPE[n.data.type].label.replace('Create ', ''));
+  return [...new Set(names)];
 }
 
 function componentsOf(flow: Flow) {
-  return flow.nodes.filter(n => isComponent(n) && !isFlowNode(n.data.type)).length
+  return flow.nodes.filter(n => isComponent(n) && !isFlowNode(n.data.type)).length;
 }
 
-const join = (folder: string, name: string) => (folder ? `${folder}/${name}` : name)
-const nameOf = (folder: string) => folder.split('/').pop() ?? folder
-const parentOf = (folder: string) => folder.split('/').slice(0, -1).join('/')
+const join = (folder: string, name: string) => (folder ? `${folder}/${name}` : name);
+const nameOf = (folder: string) => folder.split('/').pop() ?? folder;
+const parentOf = (folder: string) => folder.split('/').slice(0, -1).join('/');
 
 /** Every folder of the project: the stored ones, the ones with a flow and the ones above them. */
 function foldersOf(projectId: string, flows: Flow[]) {
-  const paths = new Set<string>()
+  const paths = new Set<string>();
   for (const c of [...(getProject(projectId)?.folders ?? []), ...flows.map(f => f.folder ?? '')]) {
-    const parts = c.split('/').filter(Boolean)
-    parts.forEach((_, i) => paths.add(parts.slice(0, i + 1).join('/')))
+    const parts = c.split('/').filter(Boolean);
+    parts.forEach((_, i) => paths.add(parts.slice(0, i + 1).join('/')));
   }
-  return [...paths].sort((a, b) => a.localeCompare(b))
+  return [...paths].sort((a, b) => a.localeCompare(b));
 }
 
-type View = 'cards' | 'tree'
-const VIEW_KEY = 'dataflow-flows-view'
+type View = 'cards' | 'tree';
+const VIEW_KEY = 'dataflow-flows-view';
 
 function readView(): View {
   try {
-    return localStorage.getItem(VIEW_KEY) === 'tree' ? 'tree' : 'cards'
+    return localStorage.getItem(VIEW_KEY) === 'tree' ? 'tree' : 'cards';
   } catch {
-    return 'cards'
+    return 'cards';
   }
 }
 
-const invalidName = (name: string) => !name.trim() ? 'Enter a name.' : name.includes('/') ? 'The name cannot contain "/".' : null
+const invalidName = (name: string) => !name.trim() ? 'Enter a name.' : name.includes('/') ? 'The name cannot contain "/".' : null;
 
 /** The project's Flows tab, browsing by folders (the open folder lives in the URL, ?folder=). */
 export function FlowsTab({projectId}: {projectId: string}) {
-  const navigate = useNavigate()
-  const [search, setSearch] = useSearchParams()
-  const current = search.get('folder') ?? ''
-  const [flows, setFlows] = useState(() => projectFlows(projectId))
-  const [version, setVersion] = useState(0)
+  const navigate = useNavigate();
+  const [search, setSearch] = useSearchParams();
+  const current = search.get('folder') ?? '';
+  const [flows, setFlows] = useState(() => projectFlows(projectId));
+  const [version, setVersion] = useState(0);
   const reload = () => {
-    setFlows(projectFlows(projectId))
-    setVersion(v => v + 1)
-  }
-  const [view, setView] = useState(readView)
+    setFlows(projectFlows(projectId));
+    setVersion(v => v + 1);
+  };
+  const [view, setView] = useState(readView);
   const changeView = (v: View) => {
-    setView(v)
+    setView(v);
     try {
-      localStorage.setItem(VIEW_KEY, v)
+      localStorage.setItem(VIEW_KEY, v);
     } catch {
       // no storage: only lasts until reload
     }
-  }
-  const [creatingFolder, setCreatingFolder] = useState(false)
-  const [folderName, setFolderName] = useState('')
-  const pathOf = (id: string) => `/projects/${projectId}/flows/${id}`
-  const open = (folder: string) => setSearch(folder ? {folder} : {})
+  };
+  const [creatingFolder, setCreatingFolder] = useState(false);
+  const [folderName, setFolderName] = useState('');
+  const pathOf = (id: string) => `/projects/${projectId}/flows/${id}`;
+  const open = (folder: string) => setSearch(folder ? {folder} : {});
 
-  void version // the stored folders come from the project (mock): reload reads them again
-  const folders = foldersOf(projectId, flows)
-  const subfolders = folders.filter(p => parentOf(p) === current && p !== current)
-  const here = flows.filter(f => (f.folder ?? '') === current)
-  const countIn = (folder: string) => flows.filter(f => isInside(f.folder ?? '', folder)).length
+  void version; // the stored folders come from the project (mock): reload reads them again
+  const folders = foldersOf(projectId, flows);
+  const subfolders = folders.filter(p => parentOf(p) === current && p !== current);
+  const here = flows.filter(f => (f.folder ?? '') === current);
+  const countIn = (folder: string) => flows.filter(f => isInside(f.folder ?? '', folder)).length;
 
   function newFolder(e: FormEvent) {
-    e.preventDefault()
-    const issue = invalidName(folderName)
-    if (issue) return window.alert(issue)
-    createFolder(projectId, join(current, folderName.trim()))
-    setFolderName('')
-    setCreatingFolder(false)
-    reload()
+    e.preventDefault();
+    const issue = invalidName(folderName);
+    if (issue) return window.alert(issue);
+    createFolder(projectId, join(current, folderName.trim()));
+    setFolderName('');
+    setCreatingFolder(false);
+    reload();
   }
 
   function rename(folder: string) {
-    const name = window.prompt('New folder name', nameOf(folder))
-    if (name === null || name.trim() === nameOf(folder)) return
-    const issue = invalidName(name)
-    if (issue) return window.alert(issue)
-    const renamed = join(parentOf(folder), name.trim())
-    if (folders.includes(renamed)) return window.alert('A folder with that name already exists here.')
-    renameFlowsFolder(projectId, folder, renamed)
-    replaceFolders(projectId, folder, renamed)
-    reload()
+    const name = window.prompt('New folder name', nameOf(folder));
+    if (name === null || name.trim() === nameOf(folder)) return;
+    const issue = invalidName(name);
+    if (issue) return window.alert(issue);
+    const renamed = join(parentOf(folder), name.trim());
+    if (folders.includes(renamed)) return window.alert('A folder with that name already exists here.');
+    relocate(folder, renamed);
+  }
+
+  /** Moves the folder (with everything inside it) into `parent`; '' is the root. */
+  function moveFolder(folder: string, parent: string) {
+    if (parent === parentOf(folder)) return;
+    if (isInside(parent, folder)) return window.alert('A folder cannot go inside itself.');
+    const moved = join(parent, nameOf(folder));
+    if (folders.includes(moved)) return window.alert('A folder with that name already exists there.');
+    relocate(folder, moved);
+    if (isInside(current, folder)) open(moved + current.slice(folder.length));
+  }
+
+  function relocate(from: string, to: string) {
+    renameFlowsFolder(projectId, from, to);
+    replaceFolders(projectId, from, to);
+    createFolder(projectId, to); // keeps the folder even when only its flows held it
+    reload();
   }
 
   function removeFolder(folder: string) {
-    const count = countIn(folder)
-    if (count > 0) return window.alert(`The folder "${nameOf(folder)}" has ${count} flow(s). Move or delete the flows first.`)
-    if (!window.confirm(`Delete the folder "${nameOf(folder)}"?`)) return
-    replaceFolders(projectId, folder, '')
-    reload()
+    const count = countIn(folder);
+    if (count > 0) return window.alert(`The folder "${nameOf(folder)}" has ${count} flow(s). Move or delete the flows first.`);
+    if (!window.confirm(`Delete the folder "${nameOf(folder)}"?`)) return;
+    replaceFolders(projectId, folder, '');
+    reload();
   }
 
   function remove(f: Flow) {
-    if (!window.confirm(`Delete the flow "${f.name}"?`)) return
-    deleteFlow(f.id)
-    reload()
+    if (!window.confirm(`Delete the flow "${f.name}"?`)) return;
+    deleteFlow(f.id);
+    reload();
   }
 
-  const entityColor = CATEGORIES.entity
-  const breadcrumb = current ? current.split('/') : []
+  const entityColor = CATEGORIES.entity;
+  const breadcrumb = current ? current.split('/') : [];
 
   return (
     <div className="flex flex-col gap-4">
@@ -161,9 +176,12 @@ export function FlowsTab({projectId}: {projectId: string}) {
 
       {view === 'tree' && (
         <Tree folders={folders} flows={flows} current={current} pathOf={pathOf} onOpen={folder => {
-          changeView('cards')
-          open(folder)
-        }} onRename={rename} onRemoveFolder={removeFolder} onRemove={remove}/>
+          changeView('cards');
+          open(folder);
+        }} onMoveFlow={(id, folder) => {
+          moveFlow(id, folder);
+          reload();
+        }} onRename={rename} onMoveFolder={moveFolder} onRemoveFolder={removeFolder} onRemove={remove}/>
       )}
 
       {view === 'cards' && subfolders.length > 0 && (
@@ -179,6 +197,7 @@ export function FlowsTab({projectId}: {projectId: string}) {
                   </span>
                 </button>
                 <Button variant="ghost" size="icon-sm" onClick={() => rename(p)} aria-label={`Rename ${nameOf(p)}`} title="Rename"><Pencil className="size-4"/></Button>
+                <MoveFolder folder={p} folders={folders} onMove={moveFolder}/>
                 <Button variant="ghost" size="icon-sm" onClick={() => removeFolder(p)} aria-label={`Delete ${nameOf(p)}`} title="Delete"><Trash2 className="size-4"/></Button>
               </div>
             </li>
@@ -192,7 +211,7 @@ export function FlowsTab({projectId}: {projectId: string}) {
             <article className="group flex h-full flex-col gap-4 rounded-xl border border-border bg-card p-5 transition-colors hover:border-primary/60">
               <div className="flex items-start gap-3">
                 <div className="min-w-0 flex-1">
-                  <Link to={pathOf(f.id)} className="text-base font-semibold hover:underline">{f.name}</Link>
+                  <Link to={pathOf(f.id)} draggable={false} className="text-base font-semibold hover:underline">{f.name}</Link>
                   <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">{f.description || 'No description.'}</p>
                 </div>
                 <span className={cn('shrink-0 rounded-full px-2 py-0.5 text-sm font-medium',
@@ -215,8 +234,8 @@ export function FlowsTab({projectId}: {projectId: string}) {
                 <div className="flex min-w-0 items-center gap-1">
                   <select value={f.folder ?? ''} aria-label={`Move ${f.name} to the folder`} title="Move to the folder"
                           onChange={e => {
-                            moveFlow(f.id, e.target.value)
-                            reload()
+                            moveFlow(f.id, e.target.value);
+                            reload();
                           }}
                           className="mr-auto h-8 min-w-0 max-w-full truncate rounded-md border border-transparent bg-transparent px-1 text-sm text-muted-foreground hover:border-border">
                     <option value="">Flows (root)</option>
@@ -224,8 +243,8 @@ export function FlowsTab({projectId}: {projectId: string}) {
                   </select>
                   <Button variant="ghost" size="icon-sm" onClick={() => navigate(pathOf(f.id))} aria-label="Edit" title="Edit"><Pencil className="size-4"/></Button>
                   <Button variant="ghost" size="icon-sm" onClick={() => {
-                    duplicateFlow(f.id)
-                    reload()
+                    duplicateFlow(f.id);
+                    reload();
                   }} aria-label="Duplicate" title="Duplicate"><Copy className="size-4"/></Button>
                   <Button variant="ghost" size="icon-sm" onClick={() => remove(f)} aria-label="Delete" title="Delete"><Trash2 className="size-4"/></Button>
                 </div>
@@ -240,44 +259,105 @@ export function FlowsTab({projectId}: {projectId: string}) {
         </p>
       )}
     </div>
-  )
+  );
+}
+
+/** Icon button that opens the list of destinations (any folder outside this one, or the root). */
+function MoveFolder({folder, folders, onMove}: {folder: string; folders: string[]; onMove: (folder: string, parent: string) => void}) {
+  const destinations = folders.filter(p => !isInside(p, folder) && p !== parentOf(folder));
+  return (
+    <span className="relative inline-flex size-7 shrink-0 items-center justify-center rounded-[min(var(--radius-md),12px)] hover:bg-muted hover:text-foreground focus-within:ring-3 focus-within:ring-ring/50" title="Move to the folder">
+      <FolderInput className="size-4" aria-hidden="true"/>
+      <select value="" aria-label={`Move ${nameOf(folder)} to the folder`} onChange={e => onMove(folder, e.target.value === '/' ? '' : e.target.value)}
+              className="absolute inset-0 cursor-pointer opacity-0">
+        <option value="" disabled>Move to…</option>
+        {parentOf(folder) !== '' && <option value="/">Flows (root)</option>}
+        {destinations.map(p => <option key={p} value={p}>{p}</option>)}
+      </select>
+    </span>
+  );
 }
 
 /**
  * Tree view: the whole project, with the folders open or closed and the flows as leaves. It starts with
- * everything open; clicking a folder opens or closes it.
+ * everything open; clicking a folder opens or closes it. Flows and folders can be dragged onto a folder to move them.
  */
-function Tree({folders, flows, current, pathOf, onOpen, onRename, onRemoveFolder, onRemove}: {
-  folders: string[]
-  flows: Flow[]
-  current: string
-  pathOf: (id: string) => string
-  onOpen: (folder: string) => void
-  onRename: (folder: string) => void
-  onRemoveFolder: (folder: string) => void
-  onRemove: (flow: Flow) => void
+function Tree({folders, flows, current, pathOf, onOpen, onMoveFlow, onRename, onMoveFolder, onRemoveFolder, onRemove}: {
+  folders: string[];
+  flows: Flow[];
+  current: string;
+  pathOf: (id: string) => string;
+  onOpen: (folder: string) => void;
+  onMoveFlow: (id: string, folder: string) => void;
+  onRename: (folder: string) => void;
+  onMoveFolder: (folder: string, parent: string) => void;
+  onRemoveFolder: (folder: string) => void;
+  onRemove: (flow: Flow) => void;
 }) {
-  const navigate = useNavigate()
-  const [closed, setClosed] = useState<Set<string>>(new Set())
+  const navigate = useNavigate();
+  const [closed, setClosed] = useState<Set<string>>(new Set());
   const toggle = (folder: string) => setClosed(before => {
-    const next = new Set(before)
-    if (next.has(folder)) next.delete(folder)
-    else next.add(folder)
-    return next
-  })
-  const indent = (level: number) => ({paddingLeft: `${12 + level * 20}px`})
-  const actions = 'flex opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100'
+    const next = new Set(before);
+    if (next.has(folder)) next.delete(folder);
+    else next.add(folder);
+    return next;
+  });
+  const indent = (level: number) => ({paddingLeft: `${12 + level * 20}px`});
+  const [dragging, setDragging] = useState<{flow: Flow} | {folder: string} | null>(null);
+  const [over, setOver] = useState<string | null>(null);
+  /** where the dragged item can go: not where it already is, and a folder not inside itself */
+  const accepts = (folder: string) => !dragging ? false : 'flow' in dragging
+    ? (dragging.flow.folder ?? '') !== folder
+    : parentOf(dragging.folder) !== folder && !isInside(folder, dragging.folder);
+  const dragProps = (item: {flow: Flow} | {folder: string}) => ({
+    draggable: true,
+    onDragStart: (e: DragEvent) => {
+      e.stopPropagation();
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', 'flow' in item ? item.flow.id : item.folder);
+      setDragging(item);
+    },
+    onDragEnd: () => {
+      setDragging(null);
+      setOver(null);
+    },
+  });
+  /** drop target: the folder row, a flow row (its folder) or the empty area (the open folder) */
+  const dropOn = (folder: string) => ({
+    onDragOver: (e: DragEvent) => {
+      if (!dragging) return;
+      e.stopPropagation();
+      setOver(folder);
+      if (!accepts(folder)) return;
+      e.preventDefault();
+      e.stopPropagation();
+      e.dataTransfer.dropEffect = 'move';
+    },
+    onDrop: (e: DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (dragging && accepts(folder)) {
+        if ('flow' in dragging) onMoveFlow(dragging.flow.id, folder);
+        else onMoveFolder(dragging.folder, folder);
+      }
+      setDragging(null);
+      setOver(null);
+    },
+  });
+  const target = (folder: string) => over === folder && accepts(folder) && 'bg-primary/10 ring-1 ring-inset ring-primary';
+  const actions = 'flex opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100';
 
   function level(folder: string, depth: number): ReactNode {
-    const children = folders.filter(p => parentOf(p) === folder && p !== folder)
-    const leaves = flows.filter(f => (f.folder ?? '') === folder).sort((a, b) => a.name.localeCompare(b.name))
+    const children = folders.filter(p => parentOf(p) === folder && p !== folder);
+    const leaves = flows.filter(f => (f.folder ?? '') === folder).sort((a, b) => a.name.localeCompare(b.name));
     return (
       <>
         {children.map(p => {
-          const isOpen = !closed.has(p)
+          const isOpen = !closed.has(p);
           return (
             <li key={p}>
-              <div className={cn('group flex items-center gap-2 border-b border-border py-1.5 pr-2 text-sm hover:bg-accent', p === current && 'bg-primary/5')} style={indent(depth)}>
+              <div {...dragProps({folder: p})} {...dropOn(p)}
+                   className={cn('group flex cursor-grab items-center gap-2 border-b border-border py-1.5 pr-2 text-sm hover:bg-accent active:cursor-grabbing', target(p), dragging && 'folder' in dragging && dragging.folder === p && 'opacity-50')} style={indent(depth)}>
                 <button type="button" onClick={() => toggle(p)} aria-expanded={isOpen} className="flex min-w-0 flex-1 items-center gap-2 text-left">
                   {isOpen ? <ChevronDown className="size-4 text-muted-foreground"/> : <ChevronRight className="size-4 text-muted-foreground"/>}
                   {isOpen ? <FolderOpen className="size-4 shrink-0 text-primary" aria-hidden="true"/> : <Folder className="size-4 shrink-0 text-primary" aria-hidden="true"/>}
@@ -287,16 +367,18 @@ function Tree({folders, flows, current, pathOf, onOpen, onRename, onRemoveFolder
                 <div className={actions}>
                   <Button variant="ghost" size="icon-sm" onClick={() => onOpen(p)} aria-label={`Open ${nameOf(p)} in the cards`} title="Open the folder in the cards"><LayoutGrid className="size-4"/></Button>
                   <Button variant="ghost" size="icon-sm" onClick={() => onRename(p)} aria-label={`Rename ${nameOf(p)}`} title="Rename"><Pencil className="size-4"/></Button>
+                  <MoveFolder folder={p} folders={folders} onMove={onMoveFolder}/>
                   <Button variant="ghost" size="icon-sm" onClick={() => onRemoveFolder(p)} aria-label={`Delete ${nameOf(p)}`} title="Delete"><Trash2 className="size-4"/></Button>
                 </div>
               </div>
               {isOpen && <ul>{level(p, depth + 1)}</ul>}
             </li>
-          )
+          );
         })}
         {leaves.map(f => (
           <li key={f.id}>
-            <div className="group flex items-center gap-2 border-b border-border py-1.5 pr-2 text-sm hover:bg-accent" style={indent(depth)}>
+            <div {...dragProps({flow: f})} {...dropOn(folder)}
+                 className={cn('group flex cursor-grab items-center gap-2 border-b border-border py-1.5 pr-2 text-sm hover:bg-accent active:cursor-grabbing', dragging && 'flow' in dragging && dragging.flow.id === f.id && 'opacity-50')} style={indent(depth)}>
               <span className="size-4 shrink-0"/>
               <Workflow className="size-4 shrink-0 text-muted-foreground" aria-hidden="true"/>
               <Link to={pathOf(f.id)} className="min-w-0 flex-1 truncate hover:underline" title={f.description || undefined}>{f.name}</Link>
@@ -313,11 +395,18 @@ function Tree({folders, flows, current, pathOf, onOpen, onRename, onRemoveFolder
           </li>
         ))}
       </>
-    )
+    );
   }
 
-  if (flows.length === 0 && folders.length === 0) {
-    return <p className="rounded-lg border border-dashed border-border p-8 text-center text-sm text-muted-foreground">No flows yet. Create a new one to start.</p>
+  // starts at the open folder: only what is inside it
+  const empty = !flows.some(f => isInside(f.folder ?? '', current)) && !folders.some(p => p !== current && (current === '' || isInside(p, current)));
+  if (empty) {
+    return <p className="rounded-lg border border-dashed border-border p-8 text-center text-sm text-muted-foreground">{current ? 'Empty folder.' : 'No flows yet. Create a new one to start.'}</p>;
   }
-  return <ul className="overflow-hidden rounded-lg border border-border">{level('', 0)}</ul>
+  return (
+    <ul {...dropOn(current)} onDragLeave={e => !e.currentTarget.contains(e.relatedTarget as Node) && setOver(null)}
+        className={cn('overflow-hidden rounded-lg border border-border pb-6', target(current))}>
+      {level(current, 0)}
+    </ul>
+  );
 }

@@ -10,9 +10,13 @@
     "setup": "npm --prefix editor install && bun install --cwd=runner && bun install --cwd=core && npm install",
     "test": "bun test --cwd=core && bun test --cwd=runner",
     "typecheck": "bun run --cwd=core typecheck && bun run --cwd=runner typecheck && npm --prefix editor run typecheck",
-    "build": "npm --prefix editor run build"
+    "lint": "eslint . --max-warnings 0",
+    "build": "npm run lint && npm --prefix editor run build"
   },
   "devDependencies": {
-    "concurrently": "^10.0.6"
+    "@stylistic/eslint-plugin": "^5.10.0",
+    "concurrently": "^10.0.6",
+    "eslint": "^10.13.0",
+    "typescript-eslint": "^8.72.0"
   }
 }

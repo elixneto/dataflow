@@ -1,39 +1,39 @@
-import {memo} from 'react'
-import {NodeResizer, useReactFlow, type Node, type NodeProps} from '@xyflow/react'
-import {ChevronDown, ChevronRight, MessageSquareText} from 'lucide-react'
-import {cn} from '@/lib/utils'
-import {useHistory} from './history'
+import {memo} from 'react';
+import {NodeResizer, useReactFlow, type Node, type NodeProps} from '@xyflow/react';
+import {ChevronDown, ChevronRight, MessageSquareText} from 'lucide-react';
+import {cn} from '#lib/utils';
+import {useHistory} from '#editor/history';
 
 export type CommentData = {
-  title: string
-  text: string
-  collapsed: boolean
-  expandedHeight?: number
-}
+  title: string;
+  text: string;
+  collapsed: boolean;
+  expandedHeight?: number;
+};
 
-export type CommentNode = Node<CommentData, 'comment'>
+export type CommentNode = Node<CommentData, 'comment'>;
 
-export const COMMENT_SIZE = {width: 280, height: 160}
+export const COMMENT_SIZE = {width: 280, height: 160};
 
 function CommentNodeView({id, data, selected, height}: NodeProps<CommentNode>) {
-  const {updateNodeData, updateNode} = useReactFlow<CommentNode>()
-  const {record, recordEdit} = useHistory()
+  const {updateNodeData, updateNode} = useReactFlow<CommentNode>();
+  const {record, recordEdit} = useHistory();
 
   function toggle() {
-    record()
+    record();
     if (data.collapsed) {
-      updateNode(id, node => ({height: node.data.expandedHeight ?? COMMENT_SIZE.height, data: {...node.data, collapsed: false}}))
+      updateNode(id, node => ({height: node.data.expandedHeight ?? COMMENT_SIZE.height, data: {...node.data, collapsed: false}}));
     } else {
-      updateNode(id, node => ({height: undefined, data: {...node.data, collapsed: true, expandedHeight: height ?? COMMENT_SIZE.height}}))
+      updateNode(id, node => ({height: undefined, data: {...node.data, collapsed: true, expandedHeight: height ?? COMMENT_SIZE.height}}));
     }
   }
 
   function setField(key: 'title' | 'text', value: string) {
-    recordEdit(`${id}:${key}`)
-    updateNodeData(id, {[key]: value})
+    recordEdit(`${id}:${key}`);
+    updateNodeData(id, {[key]: value});
   }
 
-  const preview = data.text.split('\n')[0]
+  const preview = data.text.split('\n')[0];
 
   return (
     <>
@@ -66,7 +66,7 @@ function CommentNodeView({id, data, selected, height}: NodeProps<CommentNode>) {
         )}
       </div>
     </>
-  )
+  );
 }
 
-export const CommentNodeMemo = memo(CommentNodeView)
+export const CommentNodeMemo = memo(CommentNodeView);

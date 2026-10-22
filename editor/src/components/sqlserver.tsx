@@ -1,15 +1,16 @@
-import {Database, Plus, X} from 'lucide-react'
-import {sqlServerConfig, usedParameters, sqlserver, DEFAULT_SQL_TIMEOUT_S, type SqlParameter} from '@dataflow/core'
-import {ExpressionInput, fieldInput} from '@/ui/expression-field'
-import {CodeEditor} from '@/ui/code-editor'
-import {cn} from '@/lib/utils'
-import type {FieldsProps, ComponentDef} from './types'
+import {Database, Plus, X} from 'lucide-react';
+import {sqlServerConfig, sqlServerUsedParameters, sqlserver, DEFAULT_SQL_SERVER_TIMEOUT_S, type SqlServerParameter} from '@dataflow/core';
+import {ExpressionInput, fieldInput} from '#ui/expression-field';
+import {CodeEditor} from '#ui/code-editor';
+import {cn} from '#lib/utils';
+import type {FieldsProps} from '#types/fields-props.type';
+import type {ComponentDef} from '#types/component-def.type';
 
 // Visual part of the SQL Server Query. The logic is the core's; the runner talks to the database.
 
 function SqlServerCard({config}: FieldsProps) {
-  const {connection, sql} = sqlServerConfig(config)
-  const firstLine = sql.trim().split('\n')[0] ?? ''
+  const {connection, sql} = sqlServerConfig(config);
+  const firstLine = sql.trim().split('\n')[0] ?? '';
   return (
     <div className="flex flex-col gap-1 font-mono text-xs">
       <p className="truncate"><span className="text-muted-foreground">$SECRETS.</span><span className="font-semibold">{connection || '?'}</span></p>
@@ -17,14 +18,14 @@ function SqlServerCard({config}: FieldsProps) {
         ? <p className="truncate text-primary" title={sql}>{firstLine}</p>
         : <p className="italic text-muted-foreground">No query</p>}
     </div>
-  )
+  );
 }
 
 function SqlServerPanel({id, nodeId, config, setConfig}: FieldsProps) {
-  const {connection, sql, parameters, timeoutS} = sqlServerConfig(config)
-  const change = (i: number, update: Partial<SqlParameter>) => setConfig('parameters', parameters.map((p, j) => (j === i ? {...p, ...update} : p)))
-  const declared = new Set(parameters.map(p => p.name.toLowerCase()))
-  const missing = usedParameters(sql).filter(n => !declared.has(n.toLowerCase()))
+  const {connection, sql, parameters, timeoutS} = sqlServerConfig(config);
+  const change = (i: number, update: Partial<SqlServerParameter>) => setConfig('parameters', parameters.map((p, j) => (j === i ? {...p, ...update} : p)));
+  const declared = new Set(parameters.map(p => p.name.toLowerCase()));
+  const missing = sqlServerUsedParameters(sql).filter(n => !declared.has(n.toLowerCase()));
 
   return (
     <div className="flex min-h-[520px] flex-1 !shrink flex-col gap-4">
@@ -37,7 +38,7 @@ function SqlServerPanel({id, nodeId, config, setConfig}: FieldsProps) {
         </div>
         <label htmlFor={`${id}-timeout`} className="text-xs font-medium text-muted-foreground">Timeout (s)</label>
         <input id={`${id}-timeout`} type="number" min={1} value={timeoutS}
-               onChange={e => setConfig('timeoutS', Math.max(1, Math.round(Number(e.target.value) || DEFAULT_SQL_TIMEOUT_S)))}
+               onChange={e => setConfig('timeoutS', Math.max(1, Math.round(Number(e.target.value) || DEFAULT_SQL_SERVER_TIMEOUT_S)))}
                className={cn(fieldInput, 'w-24 font-mono')}/>
       </div>
 
@@ -85,7 +86,7 @@ function SqlServerPanel({id, nodeId, config, setConfig}: FieldsProps) {
         </div>
       </section>
     </div>
-  )
+  );
 }
 
 function SqlServerDocs() {
@@ -112,7 +113,7 @@ WHERE date >= @since`}</pre>
       <h4>Override</h4>
       <p>On, the output envelope carries only the query's columns.</p>
     </>
-  )
+  );
 }
 
 export const SQL_SERVER: ComponentDef = {
@@ -125,9 +126,9 @@ export const SQL_SERVER: ComponentDef = {
   outputs: sqlserver.outputs,
   usesOverride: true,
   windowSize: {w: 760, h: 680},
-  defaultConfig: {connection: '', sql: 'SELECT TOP 100 *\nFROM ', parameters: [], timeoutS: DEFAULT_SQL_TIMEOUT_S},
+  defaultConfig: {connection: '', sql: 'SELECT TOP 100 *\nFROM ', parameters: [], timeoutS: DEFAULT_SQL_SERVER_TIMEOUT_S},
   Card: SqlServerCard,
   Panel: SqlServerPanel,
   Docs: SqlServerDocs,
   validate: config => sqlserver.validate(config),
-}
+};

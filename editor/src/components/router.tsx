@@ -1,17 +1,19 @@
-import {Plus, Split, X} from 'lucide-react'
-import {useReactFlow} from '@xyflow/react'
-import {routerCases, routerElsePort, router, type RouterCase} from '@dataflow/core'
-import {fieldInput} from '@/ui/expression-field'
-import {cn} from '@/lib/utils'
-import type {FieldsProps, ComponentDef, Config} from './types'
+import {Plus, Split, X} from 'lucide-react';
+import {useReactFlow} from '@xyflow/react';
+import {routerCases, routerElsePort, router, type RouterCase} from '@dataflow/core';
+import {fieldInput} from '#ui/expression-field';
+import {cn} from '#lib/utils';
+import type {FieldsProps} from '#types/fields-props.type';
+import type {ComponentDef} from '#types/component-def.type';
+import type {Config} from '#types/config.type';
 
 // Visual part of the Router. The logic (validate and execute) is the core's.
 
-const caseLabel = (c: RouterCase, i: number) => c.label.trim() || `case ${i + 1}`
+const caseLabel = (c: RouterCase, i: number) => c.label.trim() || `case ${i + 1}`;
 
 function RouterCard({config}: FieldsProps) {
-  const cases = routerCases(config)
-  if (cases.length === 0) return <p className="text-xs italic text-muted-foreground">No cases</p>
+  const cases = routerCases(config);
+  if (cases.length === 0) return <p className="text-xs italic text-muted-foreground">No cases</p>;
   return (
     <ul className="flex flex-col gap-1">
       {cases.slice(0, 6).map((c, i) => (
@@ -22,7 +24,7 @@ function RouterCard({config}: FieldsProps) {
       ))}
       {cases.length > 6 && <li className="text-xs text-muted-foreground">+{cases.length - 6} cases</li>}
     </ul>
-  )
+  );
 }
 
 /**
@@ -30,24 +32,24 @@ function RouterCard({config}: FieldsProps) {
  * or removing a case renumbers the edges leaving the Router so that each one stays on the same case.
  */
 function RouterPanel({nodeId: id, config, setConfig}: FieldsProps) {
-  const {setEdges} = useReactFlow()
-  const cases = routerCases(config)
-  const change = (i: number, update: Partial<RouterCase>) => setConfig('cases', cases.map((c, j) => (j === i ? {...c, ...update} : c)))
+  const {setEdges} = useReactFlow();
+  const cases = routerCases(config);
+  const change = (i: number, update: Partial<RouterCase>) => setConfig('cases', cases.map((c, j) => (j === i ? {...c, ...update} : c)));
 
   function add() {
-    const elseBefore = routerElsePort(config)
-    setConfig('cases', [...cases, {label: '', condition: ''}])
-    setEdges(list => list.map(e => (e.source === id && e.sourceHandle === elseBefore ? {...e, sourceHandle: `out-${cases.length + 1}`} : e)))
+    const elseBefore = routerElsePort(config);
+    setConfig('cases', [...cases, {label: '', condition: ''}]);
+    setEdges(list => list.map(e => (e.source === id && e.sourceHandle === elseBefore ? {...e, sourceHandle: `out-${cases.length + 1}`} : e)));
   }
 
   function remove(i: number) {
-    setConfig('cases', cases.filter((_, j) => j !== i))
+    setConfig('cases', cases.filter((_, j) => j !== i));
     setEdges(list => list
       .filter(e => !(e.source === id && e.sourceHandle === `out-${i}`))
       .map(e => {
-        const n = e.source === id ? Number(e.sourceHandle?.match(/^out-(\d+)$/)?.[1]) : NaN
-        return n > i ? {...e, sourceHandle: `out-${n - 1}`} : e
-      }))
+        const n = e.source === id ? Number(e.sourceHandle?.match(/^out-(\d+)$/)?.[1]) : NaN;
+        return n > i ? {...e, sourceHandle: `out-${n - 1}`} : e;
+      }));
   }
 
   return (
@@ -77,7 +79,7 @@ function RouterPanel({nodeId: id, config, setConfig}: FieldsProps) {
         <Plus className="size-3.5" aria-hidden="true"/> Add case
       </button>
     </div>
-  )
+  );
 }
 
 function RouterDocs() {
@@ -96,7 +98,7 @@ function RouterDocs() {
       <h4>Errors</h4>
       <p>A condition that fails is an error of the envelope and follows the card's "On error" policy.</p>
     </>
-  )
+  );
 }
 
 export const ROUTER: ComponentDef = {
@@ -114,4 +116,4 @@ export const ROUTER: ComponentDef = {
   Panel: RouterPanel,
   Docs: RouterDocs,
   validate: config => router.validate(config),
-}
+};

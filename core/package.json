@@ -4,11 +4,19 @@
   "version": "0.1.0",
   "type": "module",
   "main": "src/index.ts",
+  "imports": {
+    "#types/*": "./src/types/*.ts",
+    "#envelope/*": "./src/envelope/*.ts",
+    "#validation/*": "./src/validation/*.ts",
+    "#errors/*": "./src/errors/*.ts",
+    "#engine/*": "./src/engine/*.ts"
+  },
   "scripts": {
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.test.json",
     "test": "bun test"
   },
   "devDependencies": {
+    "@types/bun": "^1.4.3",
     "typescript": "~5.9.3"
   }
 }

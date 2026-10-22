@@ -1,35 +1,35 @@
-import {Link} from 'react-router'
-import {CheckCircle2, CircleAlert, Eraser, Group, Loader2, MessageSquarePlus, Network, Play, Redo2, Save, Square, Undo2, Workflow} from 'lucide-react'
-import type {RunMode} from '@dataflow/core'
-import {Button} from '@/ui/button'
-import {ThemeButton} from '@/ui/theme'
+import {Link} from 'react-router';
+import {CheckCircle2, CircleAlert, Eraser, Group, Loader2, MessageSquarePlus, Network, Play, Redo2, Save, Square, Undo2, Workflow} from 'lucide-react';
+import type {RunMode} from '@dataflow/core';
+import {Button} from '#ui/button';
+import {ThemeButton} from '#ui/theme';
 
-export type ValidationResult = {ok: boolean; messages: string[]} | null
+export type ValidationResult = {ok: boolean; messages: string[]} | null;
 
 type Props = {
   /** the flow's project: the link on the left goes back to it */
-  project: {id: string; name: string}
+  project: {id: string; name: string};
   /** the flow's folder in the project (empty = root) */
-  folder?: string
-  name: string
-  onName: (name: string) => void
-  validation: ValidationResult
-  onRun: () => void
-  onStop: () => void
-  validating: boolean
-  running: RunMode | null
-  onClear: () => void
-  onArrange: () => void
-  onComment: () => void
-  onGroup: () => void
-  onUndo: () => void
-  onRedo: () => void
-  canUndo: boolean
-  canRedo: boolean
-  changed: boolean
-  onSave: () => void
-  onShowIssues: () => void
-}
+  folder?: string;
+  name: string;
+  onName: (name: string) => void;
+  validation: ValidationResult;
+  onRun: () => void;
+  onStop: () => void;
+  validating: boolean;
+  running: RunMode | null;
+  onClear: () => void;
+  onArrange: () => void;
+  onComment: () => void;
+  onGroup: () => void;
+  onUndo: () => void;
+  onRedo: () => void;
+  canUndo: boolean;
+  canRedo: boolean;
+  changed: boolean;
+  onSave: () => void;
+  onShowIssues: () => void;
+};
 
 export function Toolbar(p: Props) {
   return (
@@ -105,5 +105,5 @@ export function Toolbar(p: Props) {
         )}
       </div>
     </header>
-  )
+  );
 }

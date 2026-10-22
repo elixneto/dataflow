@@ -1,6 +1,6 @@
-import type {ButtonHTMLAttributes} from 'react'
-import {cva, type VariantProps} from 'class-variance-authority'
-import {cn} from '@/lib/utils'
+import type {ButtonHTMLAttributes} from 'react';
+import {cva, type VariantProps} from 'class-variance-authority';
+import {cn} from '#lib/utils';
 
 // Same look as the shadcn button that came from v0, without depending on @base-ui.
 const buttonVariants = cva(
@@ -25,10 +25,10 @@ const buttonVariants = cva(
     },
     defaultVariants: {variant: 'default', size: 'default'},
   },
-)
+);
 
-type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & VariantProps<typeof buttonVariants>
+type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & VariantProps<typeof buttonVariants>;
 
 export function Button({className, variant, size, type = 'button', ...props}: ButtonProps) {
-  return <button type={type} data-slot="button" className={cn(buttonVariants({variant, size, className}))} {...props} />
+  return <button type={type} data-slot="button" className={cn(buttonVariants({variant, size, className}))} {...props} />;
 }

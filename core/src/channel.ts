@@ -1,63 +1,82 @@
 /**
  * Async queue between two ports. The writer waits when the queue is full (backpressure),
- * so only a few envelopes are in transit, whatever the size of the file.
+ * so only a few <T> (envelopes) are in transit, whatever the size of the file.
  */
 export class Channel<T> implements AsyncIterable<T> {
-  private readonly items: T[] = []
-  private closed = false
-  private waitingForItem: (() => void) | null = null
-  private waitingForSpace: (() => void) | null = null
 
-  constructor(private readonly capacity = 64) {}
+    private readonly items: T[] = [];
 
-  private aborted = false
+    private isClosed = false;
+    private waitingForItemFn: (() => void) | null = null;
+    private waitingForSpaceFn: (() => void) | null = null;
 
-  async send(item: T): Promise<void> {
-    if (this.aborted) return
-    while (this.items.length >= this.capacity) {
-      if (this.aborted) return
-      await new Promise<void>(resolve => (this.waitingForSpace = resolve))
+    constructor(private readonly capacity = 64) {
     }
-    this.items.push(item)
-    this.wake()
-  }
 
-  close() {
-    this.closed = true
-    this.wake()
-  }
+    private aborted = false;
 
-  /** Run interrupted: drops what is in the queue and releases whoever is waiting on either side. */
-  abort() {
-    this.aborted = true
-    this.items.length = 0
-    this.close()
-    const r = this.waitingForSpace
-    this.waitingForSpace = null
-    r?.()
-  }
+    async send(item: T): Promise<void> {
+        if (this.aborted) {
+            return;
+        }
 
-  private wake() {
-    const r = this.waitingForItem
-    this.waitingForItem = null
-    r?.()
-  }
+        while (this.items.length >= this.capacity) {
+            if (this.aborted) {
+                return;
+            }
 
-  async* [Symbol.asyncIterator](): AsyncIterator<T> {
-    while (true) {
-      if (this.items.length > 0) {
-        const item = this.items.shift()!
-        const r = this.waitingForSpace
-        this.waitingForSpace = null
-        r?.()
-        yield item
-        continue
-      }
-      if (this.closed) return
-      await new Promise<void>(resolve => (this.waitingForItem = resolve))
+            await new Promise<void>(resolve => (this.waitingForSpaceFn = resolve));
+        }
+
+        this.items.push(item);
+        this.wake();
     }
-  }
+
+    close() {
+        this.isClosed = true;
+        this.wake();
+    }
+
+    /** Run interrupted: drops what is in the queue and releases whoever is waiting on either side */
+    abort() {
+        this.aborted = true;
+        this.items.length = 0;
+
+        this.close();
+
+        const resolveFunction = this.waitingForSpaceFn;
+        this.waitingForSpaceFn = null;
+        resolveFunction?.();
+    }
+
+    private wake() {
+        const resolveFunction = this.waitingForItemFn;
+        this.waitingForItemFn = null;
+        resolveFunction?.();
+    }
+
+    async* [Symbol.asyncIterator](): AsyncIterator<T> {
+        while (true) {
+            if (this.items.length > 0) {
+                const item = this.items.shift()!;
+                const resolveFunction = this.waitingForSpaceFn;
+                this.waitingForSpaceFn = null;
+                resolveFunction?.();
+
+                yield item;
+
+                continue;
+            }
+
+            if (this.isClosed) {
+                return;
+            }
+
+            await new Promise<void>(resolve => (this.waitingForItemFn = resolve));
+        }
+    }
 }
 
 /** Unconnected input: sends nothing. */
-export async function* empty<T>(): AsyncIterable<T> {}
+export async function* empty<T>(): AsyncIterable<T> {
+}

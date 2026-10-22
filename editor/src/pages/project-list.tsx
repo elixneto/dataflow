@@ -1,37 +1,37 @@
-import {useState, type FormEvent} from 'react'
-import {Link, useNavigate} from 'react-router'
-import {FolderKanban, Plus, Trash2, X} from 'lucide-react'
-import {projectFlows} from '@/mock/flows'
-import {createProject, deleteProject, listProjects, type Project} from '@/mock/projects'
-import {Button} from '@/ui/button'
-import {fieldInput} from '@/ui/expression-field'
-import {cn} from '@/lib/utils'
-import {Header, shortDate} from './header'
+import {useState, type FormEvent} from 'react';
+import {Link, useNavigate} from 'react-router';
+import {FolderKanban, Plus, Trash2, X} from 'lucide-react';
+import {projectFlows} from '#mock/flows';
+import {createProject, deleteProject, listProjects, type Project} from '#mock/projects';
+import {Button} from '#ui/button';
+import {fieldInput} from '#ui/expression-field';
+import {cn} from '#lib/utils';
+import {Header, shortDate} from '#pages/header';
 
 /** Home page: the projects. Each project has flows, runs, secrets and files. */
 export function ProjectList() {
-  const navigate = useNavigate()
-  const [projects, setProjects] = useState(listProjects)
-  const [creating, setCreating] = useState(false)
-  const [name, setName] = useState('')
-  const [description, setDescription] = useState('')
+  const navigate = useNavigate();
+  const [projects, setProjects] = useState(listProjects);
+  const [creating, setCreating] = useState(false);
+  const [name, setName] = useState('');
+  const [description, setDescription] = useState('');
 
   function create(e: FormEvent) {
-    e.preventDefault()
-    if (!name.trim()) return
-    const project = createProject(name.trim(), description.trim())
-    navigate(`/projects/${project.id}`)
+    e.preventDefault();
+    if (!name.trim()) return;
+    const project = createProject(name.trim(), description.trim());
+    navigate(`/projects/${project.id}`);
   }
 
   function remove(p: Project) {
-    const count = projectFlows(p.id).length
+    const count = projectFlows(p.id).length;
     if (count > 0) {
-      window.alert(`The project "${p.name}" has ${count} flow(s). Delete or move the flows first.`)
-      return
+      window.alert(`The project "${p.name}" has ${count} flow(s). Delete or move the flows first.`);
+      return;
     }
-    if (!window.confirm(`Delete the project "${p.name}"?`)) return
-    deleteProject(p.id)
-    setProjects(listProjects())
+    if (!window.confirm(`Delete the project "${p.name}"?`)) return;
+    deleteProject(p.id);
+    setProjects(listProjects());
   }
 
   return (
@@ -62,7 +62,7 @@ export function ProjectList() {
 
         <ul className="grid grid-cols-[repeat(auto-fill,minmax(320px,1fr))] gap-4">
           {projects.map(p => {
-            const flows = projectFlows(p.id)
+            const flows = projectFlows(p.id);
             return (
               <li key={p.id}>
                 <article className="group flex h-full flex-col gap-4 rounded-xl border border-border bg-card p-5 transition-colors hover:border-primary/60">
@@ -88,10 +88,10 @@ export function ProjectList() {
                   </div>
                 </article>
               </li>
-            )
+            );
           })}
         </ul>
       </main>
     </div>
-  )
+  );
 }

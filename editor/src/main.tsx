@@ -1,14 +1,14 @@
-import {StrictMode} from 'react'
-import {createRoot} from 'react-dom/client'
-import {BrowserRouter, Navigate, Route, Routes} from 'react-router'
-import './index.css'
-import {ProjectList} from '@/pages/project-list'
-import {ProjectPage} from '@/pages/project-page'
-import {RunPage} from '@/pages/run-page'
-import {EditorPage, RedirectLegacyFlow} from '@/pages/editor-page'
-import {applySavedTheme} from '@/ui/theme'
+import {StrictMode} from 'react';
+import {createRoot} from 'react-dom/client';
+import {BrowserRouter, Navigate, Route, Routes} from 'react-router';
+import './index.css';
+import {ProjectList} from '#pages/project-list';
+import {ProjectPage} from '#pages/project-page';
+import {RunPage} from '#pages/run-page';
+import {EditorPage, RedirectLegacyFlow} from '#pages/editor-page';
+import {applySavedTheme} from '#ui/theme';
 
-applySavedTheme()
+applySavedTheme();
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
@@ -24,4 +24,4 @@ createRoot(document.getElementById('root')!).render(
       </Routes>
     </BrowserRouter>
   </StrictMode>,
-)
+);

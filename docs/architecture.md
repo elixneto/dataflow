@@ -17,7 +17,7 @@ How the engine works inside. To run and use it, see the [README](../README.md).
 | **Project** | Groups flows (in folders), secrets and files. |
 | **Flow** (workflow) | A Start, an End and components in between, connected by ports. Declares the **parameters** it expects, each with a default value. |
 | **Run** | One round of a flow, with the record per component. |
-| **Component** | A palette piece: typed ports, configuration (with expressions) and the `execute` function. |
+| **Component** | A palette piece: ports, configuration (with expressions) and the `execute` function. |
 | **Envelope** | What goes from one component to another. |
 
 ## 3. The envelope
@@ -44,13 +44,9 @@ How the engine works inside. To run and use it, see the [README](../README.md).
 
 ## 5. Ports
 
-| Type | What goes through |
-|---|---|
-| `envelope` | Many envelopes, in sequence (the default) |
-| `text`, `number`, `json` | A single value |
-| `any` | Wildcard, connects to everything |
+Every port receives and sends **envelopes**, in sequence: there is no port type, any output connects to any input.
 
-- The editor only connects compatible ports. Each output connects to a single input (the End is the exception: it accepts several). To send the same envelope to several places, use **Copy**; to join paths, **Union**.
+- Each output connects to a single input (the End is the exception: it accepts several). To send the same envelope to several places, use **Copy**; to join paths, **Union**.
 - Components that can fail per envelope have the **On error** policy: Stop (default), Continue (the envelope moves on as it came in) or Divert (it goes out through the error port).
 - Cycles are not allowed (they would be an infinite loop of envelopes).
 
@@ -65,8 +61,8 @@ How the engine works inside. To run and use it, see the [README](../README.md).
 ```ts
 type ComponentLogic = {
   type: string
-  inputs: PortType[]
-  outputs: PortType[]
+  inputs: number                                          // number of ports; all of them carry envelopes
+  outputs: number
   optionalOutputs?: string[] | ((config) => string[])     // may stay unconnected (e.g. the Filter's false)
   variableInputs?: {min, max, key}                        // e.g. Union
   variableOutputs?: {min, max, key}                       // e.g. Copy
@@ -76,7 +72,7 @@ type ComponentLogic = {
 }
 ```
 
-The `ctx` gives the component: `fieldValue` (text or expression), `log`, `prepareScript` (TypeScript), `querySql`, `invokeWorkflow`, `wait`/`waitEach` (waits that do not count as active time) and `holding` (memory). Whatever talks to the outside (sandbox, database) is injected by the runner; the core only receives the function.
+The `ctx` gives the component: `fieldValue` (text or expression), `log`, `prepareScript` (TypeScript), `querySqlServer`, `invokeWorkflow`, `wait`/`waitEach` (waits that do not count as active time) and `holding` (memory). Whatever talks to the outside (sandbox, database) is injected by the runner; the core only receives the function.
 
 ## 8. Run record
 

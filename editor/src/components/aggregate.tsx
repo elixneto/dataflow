@@ -1,18 +1,19 @@
-import {Layers} from 'lucide-react'
-import {aggregate, aggregateConfig, MAX_BATCH_SIZE} from '@dataflow/core'
-import {KeyInput, fieldInput} from '@/ui/expression-field'
-import {cn} from '@/lib/utils'
-import type {FieldsProps, ComponentDef} from './types'
+import {Layers} from 'lucide-react';
+import {aggregate, aggregateConfig, MAX_BATCH_SIZE} from '@dataflow/core';
+import {KeyInput, fieldInput} from '#ui/expression-field';
+import {cn} from '#lib/utils';
+import type {FieldsProps} from '#types/fields-props.type';
+import type {ComponentDef} from '#types/component-def.type';
 
 // Visual part of the Aggregate. The logic is the core's.
 
 function AggregateCard({config}: FieldsProps) {
-  const {size, field} = aggregateConfig(config)
-  return <p className="font-mono text-xs"><span className="font-semibold">{field}</span>: <span className="text-muted-foreground">batches of</span> {size}</p>
+  const {size, field} = aggregateConfig(config);
+  return <p className="font-mono text-xs"><span className="font-semibold">{field}</span>: <span className="text-muted-foreground">batches of</span> {size}</p>;
 }
 
 function AggregatePanel({id, config, setConfig}: FieldsProps) {
-  const {size, field} = aggregateConfig(config)
+  const {size, field} = aggregateConfig(config);
   return (
     <div className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-3 gap-y-3">
       <label htmlFor={`${id}-size`} className="text-xs font-medium text-muted-foreground">Batch size</label>
@@ -22,7 +23,7 @@ function AggregatePanel({id, config, setConfig}: FieldsProps) {
       <label htmlFor={`${id}-field`} className="text-xs font-medium text-muted-foreground">Key in the envelope</label>
       <KeyInput id={`${id}-field`} value={field} onValue={v => setConfig('field', v)} placeholder="items" className="w-44"/>
     </div>
-  )
+  );
 }
 
 function AggregateDocs() {
@@ -38,7 +39,7 @@ function AggregateDocs() {
       <h4>Disabled</h4>
       <p>The envelopes pass through without being grouped.</p>
     </>
-  )
+  );
 }
 
 export const AGGREGATE: ComponentDef = {
@@ -55,4 +56,4 @@ export const AGGREGATE: ComponentDef = {
   Panel: AggregatePanel,
   Docs: AggregateDocs,
   validate: config => aggregate.validate(config),
-}
+};

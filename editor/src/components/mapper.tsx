@@ -1,14 +1,15 @@
-import {useRef, useState, type PointerEvent} from 'react'
-import {ArrowRight, Plus, Shuffle, X} from 'lucide-react'
-import {mapperFields, mapper, type MapperField} from '@dataflow/core'
-import {KeyInput, ExpressionInput} from '@/ui/expression-field'
-import type {FieldsProps, ComponentDef} from './types'
+import {useRef, useState, type PointerEvent} from 'react';
+import {ArrowRight, Plus, Shuffle, X} from 'lucide-react';
+import {mapperFields, mapper, type MapperField} from '@dataflow/core';
+import {KeyInput, ExpressionInput} from '#ui/expression-field';
+import type {FieldsProps} from '#types/fields-props.type';
+import type {ComponentDef} from '#types/component-def.type';
 
 // Visual part of the Mapper. The logic (validate and execute) is the core's.
 
 function MapperCard({config}: FieldsProps) {
-  const fields = mapperFields(config)
-  if (fields.length === 0) return <p className="text-xs italic text-muted-foreground">No keys</p>
+  const fields = mapperFields(config);
+  if (fields.length === 0) return <p className="text-xs italic text-muted-foreground">No keys</p>;
   return (
     <ul className="flex flex-col gap-1">
       {fields.slice(0, 4).map((f, i) => (
@@ -21,45 +22,45 @@ function MapperCard({config}: FieldsProps) {
       ))}
       {fields.length > 4 && <li className="text-xs text-muted-foreground">+{fields.length - 4} keys</li>}
     </ul>
-  )
+  );
 }
 
-const COLUMN_KEY = 'dataflow-mapper-source-column'
+const COLUMN_KEY = 'dataflow-mapper-source-column';
 
 function readSourceWidth() {
   try {
-    const v = Number(localStorage.getItem(COLUMN_KEY))
-    return v >= 20 && v <= 85 ? v : 60
+    const v = Number(localStorage.getItem(COLUMN_KEY));
+    return v >= 20 && v <= 85 ? v : 60;
   } catch {
-    return 60
+    return 60;
   }
 }
 
 /** Source → target table. The header divider resizes the columns (remembered in the browser). */
 function MapperPanel({config, setConfig}: FieldsProps) {
-  const fields = mapperFields(config)
-  const change = (i: number, update: Partial<MapperField>) => setConfig('fields', fields.map((f, j) => (j === i ? {...f, ...update} : f)))
-  const [sourcePct, setSourcePct] = useState(readSourceWidth)
-  const tableRef = useRef<HTMLDivElement>(null)
-  const dragging = useRef(false)
+  const fields = mapperFields(config);
+  const change = (i: number, update: Partial<MapperField>) => setConfig('fields', fields.map((f, j) => (j === i ? {...f, ...update} : f)));
+  const [sourcePct, setSourcePct] = useState(readSourceWidth);
+  const tableRef = useRef<HTMLDivElement>(null);
+  const dragging = useRef(false);
 
   function moveDivider(e: PointerEvent<HTMLDivElement>) {
-    if (!dragging.current || !tableRef.current) return
-    const r = tableRef.current.getBoundingClientRect()
-    const pct = Math.min(Math.max(((e.clientX - r.left) / r.width) * 100, 20), 85)
-    setSourcePct(pct)
+    if (!dragging.current || !tableRef.current) return;
+    const r = tableRef.current.getBoundingClientRect();
+    const pct = Math.min(Math.max(((e.clientX - r.left) / r.width) * 100, 20), 85);
+    setSourcePct(pct);
   }
 
   function releaseDivider() {
-    dragging.current = false
+    dragging.current = false;
     try {
-      localStorage.setItem(COLUMN_KEY, String(Math.round(sourcePct)))
+      localStorage.setItem(COLUMN_KEY, String(Math.round(sourcePct)));
     } catch {
       // no storage: only lasts until reload
     }
   }
 
-  const columns = {gridTemplateColumns: `minmax(0, ${sourcePct}fr) 16px minmax(0, ${100 - sourcePct}fr) 32px`}
+  const columns = {gridTemplateColumns: `minmax(0, ${sourcePct}fr) 16px minmax(0, ${100 - sourcePct}fr) 32px`};
 
   return (
     <div className="flex flex-col gap-3">
@@ -69,8 +70,8 @@ function MapperPanel({config, setConfig}: FieldsProps) {
           {/* divider between the columns (in the arrow column): drag to resize, double-click goes back to the default */}
           <div role="separator" aria-orientation="vertical" aria-label="Resize columns"
                onPointerDown={e => {
-                 dragging.current = true
-                 e.currentTarget.setPointerCapture(e.pointerId)
+                 dragging.current = true;
+                 e.currentTarget.setPointerCapture(e.pointerId);
                }}
                onPointerMove={moveDivider} onPointerUp={releaseDivider} onDoubleClick={() => setSourcePct(60)}
                className="group flex h-5 cursor-col-resize touch-none justify-center">
@@ -98,7 +99,7 @@ function MapperPanel({config, setConfig}: FieldsProps) {
         <Plus className="size-3.5" aria-hidden="true"/> Add row
       </button>
     </div>
-  )
+  );
 }
 
 function MapperDocs() {
@@ -118,7 +119,7 @@ function MapperDocs() {
       <h4>Errors</h4>
       <p>An expression that fails (e.g. a field that does not exist) is an error of the envelope and follows the card's "On error" policy. With Divert, the envelope goes out through the error port with <code>{'$errors: [{error, message, component}]'}</code>.</p>
     </>
-  )
+  );
 }
 
 export const MAPPER: ComponentDef = {
@@ -135,4 +136,4 @@ export const MAPPER: ComponentDef = {
   Panel: MapperPanel,
   Docs: MapperDocs,
   validate: config => mapper.validate(config),
-}
+};

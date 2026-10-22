@@ -1,20 +1,20 @@
-import {Plus, X} from 'lucide-react'
-import {nameIssue, type WorkflowParameter, type ParameterType} from '@dataflow/core'
-import {fieldInput} from '@/ui/expression-field'
+import {Plus, X} from 'lucide-react';
+import {nameIssue, type WorkflowParameter, type ParameterType} from '@dataflow/core';
+import {fieldInput} from '#ui/expression-field';
 
 const TYPES: {value: ParameterType; label: string}[] = [
   {value: 'text', label: 'Text'},
   {value: 'number', label: 'Number'},
   {value: 'boolean', label: 'Yes/no'},
-]
+];
 
 function jsonError(text: string) {
-  if (!text.trim()) return null
+  if (!text.trim()) return null;
   try {
-    JSON.parse(text)
-    return null
+    JSON.parse(text);
+    return null;
   } catch (e) {
-    return `Invalid JSON: ${e instanceof Error ? e.message : String(e)}`
+    return `Invalid JSON: ${e instanceof Error ? e.message : String(e)}`;
   }
 }
 
@@ -23,16 +23,16 @@ function jsonError(text: string) {
  * whatever is missing uses the default. In expressions: $PARAMETERS.name.
  */
 export function WorkflowPanel({parameters, onChange, acceptsInput, onAcceptsInput, testInput, onTestInput}: {
-  parameters: WorkflowParameter[]
-  onChange: (parameters: WorkflowParameter[]) => void
-  acceptsInput: boolean
-  onAcceptsInput: (yes: boolean) => void
-  testInput: string
-  onTestInput: (json: string) => void
+  parameters: WorkflowParameter[];
+  onChange: (parameters: WorkflowParameter[]) => void;
+  acceptsInput: boolean;
+  onAcceptsInput: (yes: boolean) => void;
+  testInput: string;
+  onTestInput: (json: string) => void;
 }) {
-  const inputError = jsonError(testInput)
-  const change = (i: number, update: Partial<WorkflowParameter>) => onChange(parameters.map((p, j) => (j === i ? {...p, ...update} : p)))
-  const names = parameters.map(p => p.name)
+  const inputError = jsonError(testInput);
+  const change = (i: number, update: Partial<WorkflowParameter>) => onChange(parameters.map((p, j) => (j === i ? {...p, ...update} : p)));
+  const names = parameters.map(p => p.name);
 
   return (
     <>
@@ -46,7 +46,7 @@ export function WorkflowPanel({parameters, onChange, acceptsInput, onAcceptsInpu
             <div className="flex flex-col gap-1.5">
               <label htmlFor="test-input" className="text-xs font-medium text-muted-foreground">Default input (JSON)</label>
               <textarea id="test-input" value={testInput} onChange={e => onTestInput(e.target.value)} spellCheck={false}
-                        placeholder={'{"name": "Élix"}'}
+                        placeholder={'{"id": "123"}'}
                         className="min-h-24 w-full resize-y rounded-md border border-input bg-background px-3 py-2 font-mono text-xs outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30"/>
               {inputError && <span className="text-xs text-destructive">{inputError}</span>}
             </div>
@@ -55,7 +55,7 @@ export function WorkflowPanel({parameters, onChange, acceptsInput, onAcceptsInpu
 
 
         {parameters.map((p, i) => {
-          const issue = nameIssue(p.name) ?? (names.indexOf(p.name) !== i ? `"${p.name}" is repeated` : null)
+          const issue = nameIssue(p.name) ?? (names.indexOf(p.name) !== i ? `"${p.name}" is repeated` : null);
           return (
             <div key={i} className="flex flex-col gap-2 rounded-md border border-border p-3">
               <div className="flex items-center gap-1.5">
@@ -87,7 +87,7 @@ export function WorkflowPanel({parameters, onChange, acceptsInput, onAcceptsInpu
                 Required
               </label>
             </div>
-          )
+          );
         })}
 
         <button type="button" onClick={() => onChange([...parameters, {name: '', type: 'text', default: ''}])}
@@ -96,5 +96,5 @@ export function WorkflowPanel({parameters, onChange, acceptsInput, onAcceptsInpu
         </button>
       </div>
     </>
-  )
+  );
 }

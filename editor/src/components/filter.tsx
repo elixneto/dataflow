@@ -1,15 +1,16 @@
-import {Funnel} from 'lucide-react'
-import {filterCondition, filter} from '@dataflow/core'
-import {fieldInput} from '@/ui/expression-field'
-import {cn} from '@/lib/utils'
-import type {FieldsProps, ComponentDef} from './types'
+import {Funnel} from 'lucide-react';
+import {filterCondition, filter} from '@dataflow/core';
+import {fieldInput} from '#ui/expression-field';
+import {cn} from '#lib/utils';
+import type {FieldsProps} from '#types/fields-props.type';
+import type {ComponentDef} from '#types/component-def.type';
 
 // Visual part of the Filter. The logic (validate and execute) is the core's.
 
 function FilterCard({config}: FieldsProps) {
-  const condition = filterCondition(config)
-  if (!condition.trim()) return <p className="text-xs italic text-muted-foreground">No condition</p>
-  return <p className="truncate font-mono text-xs text-primary" title={condition}>{condition}</p>
+  const condition = filterCondition(config);
+  if (!condition.trim()) return <p className="text-xs italic text-muted-foreground">No condition</p>;
+  return <p className="truncate font-mono text-xs text-primary" title={condition}>{condition}</p>;
 }
 
 function FilterPanel({id, config, setConfig}: FieldsProps) {
@@ -20,7 +21,7 @@ function FilterPanel({id, config, setConfig}: FieldsProps) {
                 rows={3} placeholder="$price > 10" spellCheck={false}
                 className={cn(fieldInput, 'h-auto resize-y border-primary/50 bg-primary/5 py-1.5 font-mono')}/>
     </div>
-  )
+  );
 }
 
 function FilterDocs() {
@@ -40,7 +41,7 @@ function FilterDocs() {
       <h4>Errors</h4>
       <p>A condition that fails (e.g. <code>$doesNotExist.field</code>) is an error of the envelope and follows the card's "On error" policy.</p>
     </>
-  )
+  );
 }
 
 export const FILTER: ComponentDef = {
@@ -58,4 +59,4 @@ export const FILTER: ComponentDef = {
   Panel: FilterPanel,
   Docs: FilterDocs,
   validate: config => filter.validate(config),
-}
+};
