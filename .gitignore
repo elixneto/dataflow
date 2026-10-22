@@ -4,8 +4,8 @@ dist
 .idea
 .vscode
 
-# segredos locais do runner ($SECRETS)
+# runner's local secrets ($SECRETS)
 runner/secrets.local.json
 
-# arquivos dos projetos enviados ao runner
-runner/arquivos.local/
+# project files uploaded to the runner
+runner/files.local/

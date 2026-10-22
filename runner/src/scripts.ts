@@ -1,53 +1,53 @@
 import vm from 'node:vm'
-import {comoErro, type PrepararScript} from '@dataflow/core'
+import {toError, type PrepareScript} from '@dataflow/core'
 
-/** Tempo da parte síncrona de uma chamada (loop infinito vira erro, não trava o runner). */
-const TEMPO_SINCRONO_MS = 5_000
-/** Tempo total de uma chamada do process, contando o que ela espera (fetch etc.). */
-const TEMPO_DA_CHAMADA_MS = Number(process.env.RUNNER_SCRIPT_TEMPO_MS ?? 30_000)
+/** Time of the synchronous part of a call (an infinite loop becomes an error, it does not hang the runner). */
+const SYNC_TIMEOUT_MS = 5_000
+/** Total time of a process call, counting what it awaits (fetch etc.). */
+const CALL_TIMEOUT_MS = Number(process.env.RUNNER_SCRIPT_TIMEOUT_MS ?? 30_000)
 
-const transpilador = new Bun.Transpiler({loader: 'ts', deadCodeElimination: false, treeShaking: false, trimUnusedImports: false})
+const transpiler = new Bun.Transpiler({loader: 'ts', deadCodeElimination: false, treeShaking: false, trimUnusedImports: false})
 
 /**
- * Componente TypeScript: tira os tipos (Bun.Transpiler) e roda o código num contexto novo do node:vm, com as
- * globais do run e o mínimo para chamar APIs (fetch, URL, setTimeout...). Sem require, process, disco.
- * O node:vm separa o escopo, mas não é uma barreira de segurança: o código é de quem tem acesso ao editor (rode o runner só em ambiente de confiança).
+ * TypeScript component: strips the types (Bun.Transpiler) and runs the code in a new node:vm context, with the
+ * run's globals and the minimum to call APIs (fetch, URL, setTimeout...). No require, process, disk.
+ * node:vm separates the scope, but it is not a security boundary: the code belongs to whoever has access to the editor (run the runner only in a trusted environment).
  */
-export const prepararScript: PrepararScript = async (codigo, globais) => {
+export const prepareScript: PrepareScript = async (code, globals) => {
   let js: string
   try {
-    js = transpilador.transformSync(codigo)
+    js = transpiler.transformSync(code)
   } catch (e) {
-    throw new SyntaxError(`O código não compila: ${comoErro(e).message}`)
+    throw new SyntaxError(`The code does not compile: ${toError(e).message}`)
   }
-  const contexto = vm.createContext({
-    $PARAMETERS: globais.parametros,
-    $SECRETS: globais.segredos,
-    $WORKFLOW_CURRENT_RUN: globais.run,
-    log: (...partes: unknown[]) => globais.log(partes.map(p => (typeof p === 'string' ? p : JSON.stringify(p))).join(' ')),
-    console: {log: (...partes: unknown[]) => globais.log(partes.map(p => (typeof p === 'string' ? p : JSON.stringify(p))).join(' '))},
+  const context = vm.createContext({
+    $PARAMETERS: globals.parameters,
+    $SECRETS: globals.secrets,
+    $WORKFLOW_CURRENT_RUN: globals.run,
+    log: (...parts: unknown[]) => globals.log(parts.map(p => (typeof p === 'string' ? p : JSON.stringify(p))).join(' ')),
+    console: {log: (...parts: unknown[]) => globals.log(parts.map(p => (typeof p === 'string' ? p : JSON.stringify(p))).join(' '))},
     fetch, Headers, Request, Response, URL, URLSearchParams, AbortController, FormData, Blob,
     TextEncoder, TextDecoder, atob, btoa, structuredClone, setTimeout, clearTimeout,
     crypto: {randomUUID: () => crypto.randomUUID()},
   })
   try {
-    vm.runInContext(js, contexto, {timeout: TEMPO_SINCRONO_MS, filename: 'componente.ts'})
+    vm.runInContext(js, context, {timeout: SYNC_TIMEOUT_MS, filename: 'component.ts'})
   } catch (e) {
-    throw comoErro(e)
+    throw toError(e)
   }
-  if (vm.runInContext('typeof process', contexto) !== 'function') throw new Error('O código não tem a função process.')
+  if (vm.runInContext('typeof process', context) !== 'function') throw new Error('The code has no process function.')
 
   return async input => {
-    contexto.__input = input
-    const promessa = vm.runInContext('process(__input)', contexto, {timeout: TEMPO_SINCRONO_MS}) as Promise<unknown>
-    let relogio: ReturnType<typeof setTimeout> | undefined
-    const estouro = new Promise<never>((_, rejeitar) => {
-      relogio = setTimeout(() => rejeitar(new Error(`process passou de ${TEMPO_DA_CHAMADA_MS / 1000} s.`)), TEMPO_DA_CHAMADA_MS)
+    context.__input = input
+    const promise = vm.runInContext('process(__input)', context, {timeout: SYNC_TIMEOUT_MS}) as Promise<unknown>
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const overrun = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new Error(`process exceeded ${CALL_TIMEOUT_MS / 1000} s.`)), CALL_TIMEOUT_MS)
     })
     try {
-      return await Promise.race([promessa, estouro])
+      return await Promise.race([promise, overrun])
     } finally {
-      clearTimeout(relogio)
+      clearTimeout(timer)
     }
   }
 }

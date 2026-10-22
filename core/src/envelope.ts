@@ -1,103 +1,103 @@
-import type {Envelope, TipoDePorta} from './tipos'
+import type {Envelope, PortType} from './types'
 
-/** Nomes que não podem ser chave do DATA (são as variáveis do sistema nas expressions). */
-export const NOMES_RESERVADOS = ['WORKFLOW_CURRENT_RUN', 'PARAMETERS', 'SECRETS', 'DATA']
+/** Names that cannot be DATA keys (they are the system variables in expressions). */
+export const RESERVED_NAMES = ['WORKFLOW_CURRENT_RUN', 'PARAMETERS', 'SECRETS', 'DATA']
 
-const IDENTIFICADOR = /^[A-Za-z_][A-Za-z0-9_]*$/
+const IDENTIFIER = /^[A-Za-z_][A-Za-z0-9_]*$/
 
-/** Pendência do nome de uma chave de saída (ou de um campo), ou null se está ok. */
-export function problemaNoNome(nome: string): string | null {
-  if (!nome) return 'está sem nome'
-  if (!IDENTIFICADOR.test(nome)) return `"${nome}" não é um nome válido (letras, números e _, sem começar por número)`
-  if (NOMES_RESERVADOS.includes(nome)) return `"${nome}" é um nome reservado`
+/** Issue with the name of an output key (or a field), or null if it is fine. */
+export function nameIssue(name: string): string | null {
+  if (!name) return 'has no name'
+  if (!IDENTIFIER.test(name)) return `"${name}" is not a valid name (letters, digits and _, not starting with a digit)`
+  if (RESERVED_NAMES.includes(name)) return `"${name}" is a reserved name`
   return null
 }
 
 /**
- * Variáveis que uma expression enxerga num envelope: as do sistema e, direto, cada chave do DATA.
- * Ex.: $PARAMETERS.prefixo, $WORKFLOW_CURRENT_RUN.startedAt, $linhaCsv.NOME.
+ * Variables an expression sees in an envelope: the system ones and, directly, each DATA key.
+ * E.g.: $PARAMETERS.prefix, $WORKFLOW_CURRENT_RUN.startedAt, $csvLine.NAME.
  */
-export function variaveisDoEnvelope(doc: Envelope, segredos: Record<string, string> = {}): Record<string, unknown> {
-  const variaveis: Record<string, unknown> = {
+export function envelopeVariables(doc: Envelope, secrets: Record<string, string> = {}): Record<string, unknown> {
+  const variables: Record<string, unknown> = {
     $WORKFLOW_CURRENT_RUN: doc.WORKFLOW_CURRENT_RUN,
     $PARAMETERS: doc.PARAMETERS,
-    $SECRETS: segredos,
+    $SECRETS: secrets,
   }
-  for (const [chave, valor] of Object.entries(doc.DATA)) variaveis[`$${chave}`] = valor
-  return variaveis
+  for (const [key, value] of Object.entries(doc.DATA)) variables[`$${key}`] = value
+  return variables
 }
 
-/** Novo envelope com a chave do componente no DATA (Override: só ela). */
-export function acrescentar(doc: Envelope, chave: string, valor: unknown, override = false): Envelope {
+/** New envelope with the component's key in DATA (Override: only that key). */
+export function withKey(doc: Envelope, key: string, value: unknown, override = false): Envelope {
   return {
     WORKFLOW_CURRENT_RUN: doc.WORKFLOW_CURRENT_RUN,
     PARAMETERS: doc.PARAMETERS,
-    DATA: override ? {[chave]: valor} : {...doc.DATA, [chave]: valor},
+    DATA: override ? {[key]: value} : {...doc.DATA, [key]: value},
   }
 }
 
-/** Novo envelope com os campos gravados direto no DATA (adiciona ou troca). Override: só esses campos. */
-export function mesclar(doc: Envelope, campos: Record<string, unknown>, override = false): Envelope {
+/** New envelope with the fields written directly into DATA (adds or replaces). Override: only these fields. */
+export function mergeFields(doc: Envelope, fields: Record<string, unknown>, override = false): Envelope {
   return {
     WORKFLOW_CURRENT_RUN: doc.WORKFLOW_CURRENT_RUN,
     PARAMETERS: doc.PARAMETERS,
-    DATA: override ? {...campos} : {...doc.DATA, ...campos},
+    DATA: override ? {...fields} : {...doc.DATA, ...fields},
   }
 }
 
-export const TIPOS_DE_PORTA: Record<TipoDePorta, string> = {
+export const PORT_TYPES: Record<PortType, string> = {
   envelope: 'Envelopes',
-  texto: 'Texto',
-  numero: 'Número',
+  text: 'Text',
+  number: 'Number',
   json: 'JSON',
-  qualquer: 'Qualquer',
+  any: 'Any',
 }
 
-/** Uma saída pode ligar numa entrada quando o tipo é o mesmo ou um dos lados é `qualquer`. */
-export function portasCompativeis(saida: TipoDePorta, entrada: TipoDePorta) {
-  return saida === entrada || saida === 'qualquer' || entrada === 'qualquer'
+/** An output can connect to an input when the type is the same or one of the sides is `any`. */
+export function compatiblePorts(output: PortType, input: PortType) {
+  return output === input || output === 'any' || input === 'any'
 }
 
 /**
- * Normaliza qualquer coisa lançada num Error, mantendo o tipo (name). Erros vindos do node:vm são de outro
- * "realm" e não passam no `instanceof Error`, por isso a checagem é pelo formato.
+ * Normalizes anything thrown into an Error, keeping its type (name). Errors from node:vm come from another
+ * "realm" and fail `instanceof Error`, so the check is by shape.
  */
-export function comoErro(e: unknown): Error {
+export function toError(e: unknown): Error {
   if (e instanceof Error) return e
   if (e && typeof e === 'object' && 'message' in e) {
-    const erro = new Error(String((e as {message: unknown}).message))
-    erro.name = 'name' in e ? String((e as {name: unknown}).name) : 'Error'
-    return erro
+    const error = new Error(String((e as {message: unknown}).message))
+    error.name = 'name' in e ? String((e as {name: unknown}).name) : 'Error'
+    return error
   }
   return new Error(String(e))
 }
 
 /**
- * Procura um ciclo nas ligações (o workflow tem que ser acíclico: um ciclo é loop infinito de envelopes).
- * Devolve os ids do ciclo na ordem (o primeiro se repete no fim), ou null.
+ * Looks for a cycle in the edges (the workflow must be acyclic: a cycle is an infinite loop of envelopes).
+ * Returns the ids of the cycle in order (the first one repeats at the end), or null.
  */
-export function encontrarCiclo(ids: string[], ligacoes: {origem: string; destino: string}[]): string[] | null {
-  const saidas = new Map(ids.map(id => [id, ligacoes.filter(l => l.origem === id).map(l => l.destino)]))
-  const estado = new Map<string, 'visitando' | 'feito'>()
-  const pilha: string[] = []
-  function visitar(id: string): string[] | null {
-    estado.set(id, 'visitando')
-    pilha.push(id)
-    for (const prox of saidas.get(id) ?? []) {
-      if (estado.get(prox) === 'visitando') return [...pilha.slice(pilha.indexOf(prox)), prox]
-      if (!estado.has(prox)) {
-        const ciclo = visitar(prox)
-        if (ciclo) return ciclo
+export function findCycle(ids: string[], edges: {source: string; target: string}[]): string[] | null {
+  const outputs = new Map(ids.map(id => [id, edges.filter(e => e.source === id).map(e => e.target)]))
+  const state = new Map<string, 'visiting' | 'done'>()
+  const stack: string[] = []
+  function visit(id: string): string[] | null {
+    state.set(id, 'visiting')
+    stack.push(id)
+    for (const next of outputs.get(id) ?? []) {
+      if (state.get(next) === 'visiting') return [...stack.slice(stack.indexOf(next)), next]
+      if (!state.has(next)) {
+        const cycle = visit(next)
+        if (cycle) return cycle
       }
     }
-    pilha.pop()
-    estado.set(id, 'feito')
+    stack.pop()
+    state.set(id, 'done')
     return null
   }
   for (const id of ids) {
-    if (!estado.has(id)) {
-      const ciclo = visitar(id)
-      if (ciclo) return ciclo
+    if (!state.has(id)) {
+      const cycle = visit(id)
+      if (cycle) return cycle
     }
   }
   return null

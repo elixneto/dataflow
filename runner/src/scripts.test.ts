@@ -1,65 +1,65 @@
 import {expect, test} from 'bun:test'
-import {executarWorkflow, type WorkflowParaExecutar} from '@dataflow/core'
-import {avaliar} from './expressions'
-import {prepararScript} from './scripts'
+import {runWorkflow, type ExecutableWorkflow} from '@dataflow/core'
+import {evaluate} from './expressions'
+import {prepareScript} from './scripts'
 
-/** Start → (Aggregate, se tiver lote) → TypeScript → End */
-const fluxo = (codigo: string, lote?: number, override = true): WorkflowParaExecutar => ({
-  projeto: 'Teste', workflow: 'TypeScript', parametros: [{nome: 'sufixo', tipo: 'texto', padrao: '!'}],
-  nos: [
-    {id: 'inicio', tipo: 'inicio', rotulo: 'Start', config: {recebeEntrada: true}},
-    ...(lote ? [{id: 'agg', tipo: 'aggregate', rotulo: 'Aggregate', config: {tamanho: lote}}] : []),
-    {id: 'ts', tipo: 'typescript', rotulo: 'TypeScript', config: {codigo}, override, chaveDeSaida: 'calculo'},
-    {id: 'fim', tipo: 'fim', rotulo: 'End', config: {}},
+/** Start → (Aggregate, if there is a batch) → TypeScript → End */
+const flow = (code: string, batch?: number, override = true): ExecutableWorkflow => ({
+  project: 'Test', workflow: 'TypeScript', parameters: [{name: 'suffix', type: 'text', default: '!'}],
+  nodes: [
+    {id: 'start', type: 'start', label: 'Start', config: {acceptsInput: true}},
+    ...(batch ? [{id: 'agg', type: 'aggregate', label: 'Aggregate', config: {size: batch}}] : []),
+    {id: 'ts', type: 'typescript', label: 'TypeScript', config: {code}, override, outputKey: 'calculation'},
+    {id: 'end', type: 'end', label: 'End', config: {}},
   ],
-  ligacoes: [
-    ...(lote
-      ? [{origem: 'inicio', portaDeOrigem: 'out-0', destino: 'agg', portaDeDestino: 'in-0'}, {origem: 'agg', portaDeOrigem: 'out-0', destino: 'ts', portaDeDestino: 'in-0'}]
-      : [{origem: 'inicio', portaDeOrigem: 'out-0', destino: 'ts', portaDeDestino: 'in-0'}]),
-    {origem: 'ts', portaDeOrigem: 'out-0', destino: 'fim', portaDeDestino: 'in-0'},
+  edges: [
+    ...(batch
+      ? [{source: 'start', sourcePort: 'out-0', target: 'agg', targetPort: 'in-0'}, {source: 'agg', sourcePort: 'out-0', target: 'ts', targetPort: 'in-0'}]
+      : [{source: 'start', sourcePort: 'out-0', target: 'ts', targetPort: 'in-0'}]),
+    {source: 'ts', sourcePort: 'out-0', target: 'end', targetPort: 'in-0'},
   ],
 })
 
-const rodar = (codigo: string, entrada: unknown, lote?: number, override = true) =>
-  executarWorkflow(fluxo(codigo, lote, override), {modo: 'execution', id: 't', avaliar, prepararScript, segredos: {token: 'abc'}, entrada})
+const run = (code: string, input: unknown, batch?: number, override = true) =>
+  runWorkflow(flow(code, batch, override), {mode: 'execution', id: 't', evaluate, prepareScript, secrets: {token: 'abc'}, input})
 
-test('process com tipos, função auxiliar, parâmetros e segredos', async () => {
-  const r = await rodar(`
-    type Pessoa = {nome: string}
-    function maiusculo(texto: string): string { return texto.toUpperCase() }
-    async function process($input: Pessoa) {
-      log('processando', $input.nome)
-      return {nome: maiusculo($input.nome) + $PARAMETERS.sufixo, token: $SECRETS.token}
-    }`, [{nome: 'ana'}, {nome: 'bia'}])
-  expect(r.status).toBe('concluida')
-  const ts = r.componentes.find(c => c.noId === 'ts')!
-  expect(ts.amostraDeSaida['out-0']).toEqual([{nome: 'ANA!', token: 'abc'}, {nome: 'BIA!', token: 'abc'}])
-  expect(ts.logs.some(l => l.mensagem === 'processando ana')).toBe(true)
+test('process with types, a helper function, parameters and secrets', async () => {
+  const r = await run(`
+    type Person = {name: string}
+    function upper(text: string): string { return text.toUpperCase() }
+    async function process($input: Person) {
+      log('processing', $input.name)
+      return {name: upper($input.name) + $PARAMETERS.suffix, token: $SECRETS.token}
+    }`, [{name: 'ana'}, {name: 'bia'}])
+  expect(r.status).toBe('completed')
+  const ts = r.components.find(c => c.nodeId === 'ts')!
+  expect(ts.outputSample['out-0']).toEqual([{name: 'ANA!', token: 'abc'}, {name: 'BIA!', token: 'abc'}])
+  expect(ts.logs.some(l => l.message === 'processing ana')).toBe(true)
 })
 
-test('Aggregate antes: $input.items é o lote e o retorno pode virar vários envelopes ou nenhum', async () => {
-  const r = await rodar(`
+test('Aggregate before: $input.items is the batch and the return can become many envelopes or none', async () => {
+  const r = await run(`
     async function process($input: {items: {n: number}[]}) {
-      const pares = $input.items.filter(i => i.n % 2 === 0)
-      return pares.length ? pares.map(i => ({n: i.n, lote: $input.items.length})) : null
+      const evens = $input.items.filter(i => i.n % 2 === 0)
+      return evens.length ? evens.map(i => ({n: i.n, batch: $input.items.length})) : null
     }`, Array.from({length: 7}, (_, n) => ({n})), 3)
-  expect(r.status).toBe('concluida')
-  const ts = r.componentes.find(c => c.noId === 'ts')!
-  expect(ts.amostraDeSaida['out-0']).toEqual([{n: 0, lote: 3}, {n: 2, lote: 3}, {n: 4, lote: 3}, {n: 6, lote: 1}])
-  expect(ts.logs.at(-1)!.mensagem).toBe('3 envelope(s) entraram e 4 saíram.')
-  expect(r.componentes.find(c => c.noId === 'agg')!.saidas['out-0']).toBe(3)
+  expect(r.status).toBe('completed')
+  const ts = r.components.find(c => c.nodeId === 'ts')!
+  expect(ts.outputSample['out-0']).toEqual([{n: 0, batch: 3}, {n: 2, batch: 3}, {n: 4, batch: 3}, {n: 6, batch: 1}])
+  expect(ts.logs.at(-1)!.message).toBe('3 envelope(s) in and 4 out.')
+  expect(r.components.find(c => c.nodeId === 'agg')!.outputs['out-0']).toBe(3)
 })
 
-test('erro de compilação, exceção e loop infinito', async () => {
-  expect((await rodar('async function process($input) { return {', [{}])).status).toBe('falhou')
-  const comExcecao = await rodar('async function process($input) { throw new TypeError("ruim") }', [{}])
-  expect(comExcecao.erro).toContain('ruim')
-  const comLoop = await rodar('async function process($input) { while (true) {} }', [{}])
-  expect(comLoop.status).toBe('falhou')
+test('compile error, exception and infinite loop', async () => {
+  expect((await run('async function process($input) { return {', [{}])).status).toBe('failed')
+  const withException = await run('async function process($input) { throw new TypeError("bad") }', [{}])
+  expect(withException.error).toContain('bad')
+  const withLoop = await run('async function process($input) { while (true) {} }', [{}])
+  expect(withLoop.status).toBe('failed')
 }, 20_000)
 
-test('sem Override, o retorno vai para a chave de saída e o resto do DATA segue', async () => {
-  const r = await rodar('async function process($input) { return $input.a * 2 }', [{a: 1, b: 'x'}, {a: 5, b: 'y'}], undefined, false)
-  expect(r.status).toBe('concluida')
-  expect(r.componentes.find(c => c.noId === 'ts')!.amostraDeSaida['out-0']).toEqual([{a: 1, b: 'x', calculo: 2}, {a: 5, b: 'y', calculo: 10}])
+test('without Override, the return goes to the output key and the rest of DATA moves on', async () => {
+  const r = await run('async function process($input) { return $input.a * 2 }', [{a: 1, b: 'x'}, {a: 5, b: 'y'}], undefined, false)
+  expect(r.status).toBe('completed')
+  expect(r.components.find(c => c.nodeId === 'ts')!.outputSample['out-0']).toEqual([{a: 1, b: 'x', calculation: 2}, {a: 5, b: 'y', calculation: 10}])
 })

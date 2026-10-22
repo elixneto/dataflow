@@ -1,21 +1,21 @@
 import vm from 'node:vm'
-import {comoErro, type AvaliarExpression} from '@dataflow/core'
+import {toError, type EvaluateExpression} from '@dataflow/core'
 
-/** Tempo máximo de uma expression: loop infinito vira erro da linha, não trava o runner. */
-const TEMPO_MAXIMO_MS = 1000
+/** Maximum time of an expression: an infinite loop becomes an error of the row, it does not hang the runner. */
+const TIMEOUT_MS = 1000
 
 /**
- * Avalia uma expression num contexto novo e vazio do node:vm: só as variáveis do envelope ficam à vista
- * ($WORKFLOW_CURRENT_RUN, $PARAMETERS, $SECRETS e as chaves do DATA). Sem require, process, rede ou disco.
+ * Evaluates an expression in a new, empty node:vm context: only the envelope's variables are visible
+ * ($WORKFLOW_CURRENT_RUN, $PARAMETERS, $SECRETS and the DATA keys). No require, process, network or disk.
  */
-export const avaliar: AvaliarExpression = (expression, variaveis) => {
+export const evaluate: EvaluateExpression = (expression, variables) => {
   try {
-    return vm.runInNewContext(`(${expression}\n)`, {...variaveis}, {timeout: TEMPO_MAXIMO_MS})
+    return vm.runInNewContext(`(${expression}\n)`, {...variables}, {timeout: TIMEOUT_MS})
   } catch (e) {
-    const original = comoErro(e)
-    const erro = new Error(`Expression "${expression}": ${original.message}`)
-    // mantém o tipo original (ReferenceError, TypeError...): vai para DATA.errors[].error
-    erro.name = original.name
-    throw erro
+    const original = toError(e)
+    const error = new Error(`Expression "${expression}": ${original.message}`)
+    // keeps the original type (ReferenceError, TypeError...): goes to DATA.errors[].error
+    error.name = original.name
+    throw error
   }
 }

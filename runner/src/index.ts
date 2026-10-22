@@ -1,100 +1,100 @@
 import {Hono} from 'hono'
 import {logger} from 'hono/logger'
-import {executarWorkflow, type ModoDeExecucao, type RegistroDaExecucao, type WorkflowParaExecutar} from '@dataflow/core'
-import {avaliar} from './expressions'
-import {prepararScript} from './scripts'
-import {consultarSql} from './sqlserver'
-import {rotasDeProjetos, segredosDoProjeto} from './projetos'
+import {runWorkflow, type RunMode, type RunRecord, type ExecutableWorkflow} from '@dataflow/core'
+import {evaluate} from './expressions'
+import {prepareScript} from './scripts'
+import {querySql} from './sqlserver'
+import {projectRoutes, projectSecrets} from './projects'
 
 /*
- * Runner dos workflows (plano em _docs/planejamento/workflow-execucao.md, seção 9).
- * Por enquanto: executa sob demanda e guarda as últimas execuções em memória. MongoDB, Blob, autenticação e
- * agendamento entram nas próximas fases.
+ * Workflow runner (see docs/architecture.md).
+ * For now: runs on demand and keeps the latest runs in memory. A database, blob storage, authentication and
+ * scheduling come in the next phases.
  */
 
-// RUNNER_PORT, não PORT: quem sobe junto (concurrently, preview) costuma passar PORT para o editor
-const PORTA = Number(process.env.RUNNER_PORT ?? 5190)
-const MAX_EXECUCOES_GUARDADAS = 50
-/** tempo máximo de uma execução (padrão 5 min); passou disso, ela é interrompida */
-const TEMPO_MAXIMO_MS = Number(process.env.RUNNER_TEMPO_MAXIMO_MS ?? 5 * 60_000)
+// RUNNER_PORT, not PORT: whatever starts alongside it (concurrently, preview) usually passes PORT to the editor
+const PORT = Number(process.env.RUNNER_PORT ?? 5190)
+const MAX_STORED_RUNS = 50
+/** maximum time of a run (default 5 min); past that, it is interrupted */
+const TIMEOUT_MS = Number(process.env.RUNNER_TIMEOUT_MS ?? 5 * 60_000)
 
-/** execuções rodando agora, para o botão Parar */
-const emAndamento = new Map<string, AbortController>()
+/** runs in progress right now, for the Stop button */
+const inProgress = new Map<string, AbortController>()
 
-/** registro guardado com o projeto e o fluxo de onde veio (para listar por projeto e voltar ao fluxo) */
-type ExecucaoGuardada = RegistroDaExecucao & {projetoId?: string; workflowId?: string}
+/** stored record with the project and flow it came from (to list by project and go back to the flow) */
+type StoredRun = RunRecord & {projectId?: string; workflowId?: string}
 
-const execucoes: ExecucaoGuardada[] = []
+const runs: StoredRun[] = []
 
-type PedidoDeExecucao = {
-  /** id escolhido por quem chama (para poder cancelar enquanto roda); sem ele, o runner gera */
+type RunRequest = {
+  /** id chosen by the caller (so it can cancel while it runs); without it, the runner generates one */
   id?: string
-  workflow: WorkflowParaExecutar
-  modo: ModoDeExecucao
-  parametros?: Record<string, string>
-  /** entrada do workflow (corpo do webhook); só se o Início "recebe entrada" */
-  entrada?: unknown
-  /** projeto do fluxo: escolhe os segredos e agrupa as execuções */
-  projetoId?: string
-  /** workflows que o Workflow Invoker chama, pelo id (por enquanto o editor manda junto; depois vêm do banco) */
-  workflows?: Record<string, WorkflowParaExecutar>
+  workflow: ExecutableWorkflow
+  mode: RunMode
+  parameters?: Record<string, string>
+  /** workflow input (webhook body); only if the Start "accepts input" */
+  input?: unknown
+  /** the flow's project: picks the secrets and groups the runs */
+  projectId?: string
+  /** workflows the Workflow Invoker calls, by id (for now the editor sends them along; later they come from the database) */
+  workflows?: Record<string, ExecutableWorkflow>
 }
 
 const app = new Hono().basePath('/api')
 
 app.use(logger())
 
-app.get('/saude', c => c.json({ok: true}))
+app.get('/health', c => c.json({ok: true}))
 
-app.route('/', rotasDeProjetos)
+app.route('/', projectRoutes)
 
-app.post('/execucoes', async c => {
-  const pedido = await c.req.json<PedidoDeExecucao>()
-  if (!pedido?.workflow?.nos) return c.json({erro: 'Workflow inválido.'}, 400)
-  const id = pedido.id && !emAndamento.has(pedido.id) ? pedido.id : crypto.randomUUID()
-  const controle = new AbortController()
-  emAndamento.set(id, controle)
-  let registro: RegistroDaExecucao
+app.post('/runs', async c => {
+  const request = await c.req.json<RunRequest>()
+  if (!request?.workflow?.nodes) return c.json({error: 'Invalid workflow.'}, 400)
+  const id = request.id && !inProgress.has(request.id) ? request.id : crypto.randomUUID()
+  const control = new AbortController()
+  inProgress.set(id, control)
+  let record: RunRecord
   try {
-    registro = await executarWorkflow(pedido.workflow, {
-      modo: pedido.modo === 'execution' ? 'execution' : 'validation',
+    record = await runWorkflow(request.workflow, {
+      mode: request.mode === 'execution' ? 'execution' : 'validation',
       id,
-      valoresDosParametros: pedido.parametros,
-      entrada: pedido.entrada,
-      workflows: pedido.workflows,
-      avaliar,
-      prepararScript,
-      consultarSql,
-      segredos: await segredosDoProjeto(pedido.projetoId),
-      sinal: controle.signal,
-      tempoMaximoMs: TEMPO_MAXIMO_MS,
+      parameterValues: request.parameters,
+      input: request.input,
+      workflows: request.workflows,
+      evaluate,
+      prepareScript,
+      querySql,
+      secrets: await projectSecrets(request.projectId),
+      signal: control.signal,
+      timeoutMs: TIMEOUT_MS,
     })
   } finally {
-    emAndamento.delete(id)
+    inProgress.delete(id)
   }
-  execucoes.unshift({...registro, projetoId: pedido.projetoId, workflowId: pedido.workflow.id})
-  execucoes.length = Math.min(execucoes.length, MAX_EXECUCOES_GUARDADAS)
-  return c.json(registro)
+  runs.unshift({...record, projectId: request.projectId, workflowId: request.workflow.id})
+  runs.length = Math.min(runs.length, MAX_STORED_RUNS)
+  return c.json(record)
 })
 
-app.post('/execucoes/:id/cancelar', c => {
-  const controle = emAndamento.get(c.req.param('id'))
-  if (!controle) return c.json({erro: 'Execução não está rodando.'}, 404)
-  controle.abort()
+app.post('/runs/:id/cancel', c => {
+  const control = inProgress.get(c.req.param('id'))
+  if (!control) return c.json({error: 'The run is not running.'}, 404)
+  control.abort()
   return c.json({ok: true})
 })
 
-/** últimas execuções (de um projeto, com ?projeto=), sem os componentes */
-app.get('/execucoes', c => {
-  const projeto = c.req.query('projeto')
-  return c.json(execucoes.filter(e => !projeto || e.projetoId === projeto).map(({componentes: _, ...resumo}) => resumo))
+/** latest runs (of a project, with ?project=), without the components */
+app.get('/runs', c => {
+  const project = c.req.query('project')
+  return c.json(runs.filter(r => !project || r.projectId === project).map(({components: _, ...summary}) => summary))
 })
 
-app.get('/execucoes/:id', c => {
-  const registro = execucoes.find(e => e.run.id === c.req.param('id'))
-  return registro ? c.json(registro) : c.json({erro: 'Execução não encontrada.'}, 404)
+app.get('/runs/:id', c => {
+  const record = runs.find(r => r.run.id === c.req.param('id'))
+  return record ? c.json(record) : c.json({error: 'Run not found.'}, 404)
 })
 
-console.log(`Runner dos workflows em http://localhost:${PORTA}/api`)
+console.log(`Workflow runner at http://localhost:${PORT}/api`)
 
-export default {port: PORTA, fetch: app.fetch}
+export default {port: PORT, fetch: app.fetch}
