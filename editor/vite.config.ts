@@ -3,8 +3,8 @@ import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import {fileURLToPath, URL} from 'node:url'
 
-// Aplicação dos workflows na raiz (projetos → fluxos, execuções, segredos, arquivos); em dev roda com `npm run start`.
-// O runner (runner, Bun) roda à parte; em dev o /api é repassado para ele.
+// The workflows app at the root (projects → flows, runs, secrets, files); in dev it runs with `npm run start`.
+// The runner (Bun) runs separately; in dev /api is proxied to it.
 export default defineConfig({
   base: '/',
   plugins: [react(), tailwindcss()],

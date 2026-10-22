@@ -1,0 +1,274 @@
+import {useCallback, useEffect, useRef, useState, type FormEvent} from 'react'
+import {Link, useParams, useSearchParams} from 'react-router'
+import {Download, KeyRound, RefreshCw, Trash2, Upload} from 'lucide-react'
+import type {RunRecord} from '@dataflow/core'
+import {StatusIcon, ms, STATUS_LABEL} from '@/run/run-panel'
+import {getProject} from '@/mock/projects'
+import {Button} from '@/ui/button'
+import {fieldInput} from '@/ui/expression-field'
+import {cn} from '@/lib/utils'
+import {FlowsTab} from './flows-tab'
+import {Header, shortDate} from './header'
+
+type Tab = 'flows' | 'runs' | 'secrets' | 'files'
+
+const TABS: [Tab, string][] = [['flows', 'Flows'], ['runs', 'Runs'], ['secrets', 'Secrets'], ['files', 'Files']]
+
+const API = '/api'
+
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  let response: Response
+  try {
+    response = await fetch(`${API}${path}`, init)
+  } catch {
+    throw new Error('The runner did not respond. Is it running? (npm run start at the repository root)')
+  }
+  const body = await response.json().catch(() => ({}))
+  if (!response.ok) throw new Error(body.error ?? `The runner returned ${response.status}.`)
+  return body as T
+}
+
+/** Project: Flows, Runs, Secrets and Files tabs (the tab lives in the URL, ?tab=). */
+export function ProjectPage() {
+  const {projectId = ''} = useParams()
+  const [search, setSearch] = useSearchParams()
+  const tab = (TABS.find(([value]) => value === search.get('tab'))?.[0] ?? 'flows') as Tab
+  const project = getProject(projectId)
+
+  if (!project) {
+    return (
+      <div className="flex h-dvh flex-col items-center justify-center gap-3 text-sm text-muted-foreground">
+        Project not found.
+        <Link to="/" className="text-primary hover:underline">Back to the projects</Link>
+      </div>
+    )
+  }
+
+  return (
+    <div className="min-h-dvh bg-background">
+      <Header breadcrumb={[{label: project.name}]}/>
+      <main className="mx-auto flex max-w-6xl flex-col gap-6 px-6 py-8">
+        <div>
+          <h1 className="text-2xl font-semibold">{project.name}</h1>
+          {project.description && <p className="mt-1 text-sm text-muted-foreground">{project.description}</p>}
+        </div>
+        <div role="tablist" className="flex gap-1 border-b border-border">
+          {TABS.map(([value, label]) => (
+            <button key={value} type="button" role="tab" aria-selected={tab === value} onClick={() => setSearch(value === 'flows' ? {} : {tab: value})}
+                    className={cn('-mb-px border-b-2 px-4 py-2 text-sm transition-colors',
+                      tab === value ? 'border-primary font-medium text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground')}>
+              {label}
+            </button>
+          ))}
+        </div>
+        <div role="tabpanel">
+          {tab === 'flows' && <FlowsTab projectId={projectId}/>}
+          {tab === 'runs' && <RunsTab projectId={projectId}/>}
+          {tab === 'secrets' && <SecretsTab projectId={projectId}/>}
+          {tab === 'files' && <FilesTab projectId={projectId}/>}
+        </div>
+      </main>
+    </div>
+  )
+}
+
+function ErrorMessage({message}: {message: string | null}) {
+  return message ? <p className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">{message}</p> : null
+}
+
+function Empty({children}: {children: string}) {
+  return <p className="rounded-lg border border-dashed border-border p-8 text-center text-sm text-muted-foreground">{children}</p>
+}
+
+// ---------- Runs: the runner's latest ones (in memory until there is a database) ----------
+
+type RunSummary = Omit<RunRecord, 'components'> & {workflowId?: string}
+
+function RunsTab({projectId}: {projectId: string}) {
+  const [list, setList] = useState<RunSummary[] | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const load = useCallback(() => {
+    setError(null)
+    request<RunSummary[]>(`/runs?project=${encodeURIComponent(projectId)}`).then(setList).catch(e => setError(e.message))
+  }, [projectId])
+  useEffect(load, [load])
+
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-sm text-muted-foreground">The runner's latest 50, kept in memory (they go away when it restarts).</p>
+        <Button variant="outline" size="sm" onClick={load}><RefreshCw className="size-4" aria-hidden="true"/> Refresh</Button>
+      </div>
+      <ErrorMessage message={error}/>
+      {list && list.length === 0 && <Empty>No runs of this project since the runner started.</Empty>}
+      {list && list.length > 0 && (
+        <div className="overflow-hidden rounded-lg border border-border">
+          <div className="grid grid-cols-[20px_minmax(0,1fr)_160px_110px_90px_90px] gap-3 border-b border-border bg-muted/50 px-4 py-2 text-sm text-muted-foreground">
+            <span/><span>Flow</span><span>Start</span><span>Status</span><span className="text-right">Duration</span><span className="text-right">Id</span>
+          </div>
+          <ul>
+            {list.map(e => (
+              <li key={e.run.id} className="border-b border-border last:border-b-0">
+                <Link to={`/projects/${projectId}/runs/${e.run.id}`}
+                      className="grid grid-cols-[20px_minmax(0,1fr)_160px_110px_90px_90px] items-center gap-3 px-4 py-2.5 text-sm hover:bg-accent">
+                  <StatusIcon status={e.status}/>
+                  <span className="truncate font-medium">{e.run.workflow}{e.run.parentId && <span className="ml-2 text-muted-foreground">(called)</span>}</span>
+                  <span className="text-muted-foreground">{shortDate(e.run.startedAt)}</span>
+                  <span className={cn(e.status === 'failed' && 'text-destructive')}>{STATUS_LABEL[e.status]}</span>
+                  <span className="text-right font-mono">{ms(e.durationMs)}</span>
+                  <span className="text-right font-mono text-muted-foreground">{e.run.id.slice(0, 8)}</span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ---------- Secrets: only the names; the value goes to the runner and does not come back ----------
+
+type Secret = {name: string; source: 'project' | 'shared'}
+
+function SecretsTab({projectId}: {projectId: string}) {
+  const [list, setList] = useState<Secret[] | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [name, setName] = useState('')
+  const [value, setValue] = useState('')
+  const base = `/projects/${encodeURIComponent(projectId)}/secrets`
+  const load = useCallback(() => {
+    request<Secret[]>(base).then(setList).catch(e => setError(e.message))
+  }, [base])
+  useEffect(load, [load])
+
+  async function save(e: FormEvent) {
+    e.preventDefault()
+    setError(null)
+    try {
+      await request(`${base}/${encodeURIComponent(name.trim())}`, {method: 'PUT', headers: {'content-type': 'application/json'}, body: JSON.stringify({value})})
+      setName('')
+      setValue('')
+      load()
+    } catch (e) {
+      setError((e as Error).message)
+    }
+  }
+
+  async function remove(s: Secret) {
+    if (!window.confirm(`Delete the secret ${s.name}?`)) return
+    try {
+      await request(`${base}/${encodeURIComponent(s.name)}`, {method: 'DELETE'})
+      load()
+    } catch (e) {
+      setError((e as Error).message)
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+      <form onSubmit={save} className="flex flex-col gap-3 rounded-lg border border-border p-4 sm:flex-row sm:items-end">
+        <label className="flex flex-1 flex-col gap-1">
+          <span className="text-sm text-muted-foreground">Name</span>
+          <input value={name} onChange={e => setName(e.target.value)} placeholder="MY_SQL_DATABASE" spellCheck={false} className={cn(fieldInput, 'font-mono')}/>
+        </label>
+        <label className="flex flex-[2] flex-col gap-1">
+          <span className="text-sm text-muted-foreground">Value</span>
+          <input type="password" value={value} onChange={e => setValue(e.target.value)} autoComplete="new-password" className={cn(fieldInput, 'font-mono')}/>
+        </label>
+        <Button type="submit" size="sm" disabled={!name.trim() || !value}>Save</Button>
+      </form>
+      <ErrorMessage message={error}/>
+      {list && list.length === 0 && <Empty>No secrets. Components use them as $SECRETS.NAME.</Empty>}
+      {list && list.length > 0 && (
+        <ul className="overflow-hidden rounded-lg border border-border">
+          {list.map(s => (
+            <li key={s.name} className="flex items-center gap-3 border-b border-border px-4 py-2.5 text-sm last:border-b-0">
+              <KeyRound className="size-4 text-muted-foreground" aria-hidden="true"/>
+              <span className="font-mono">{s.name}</span>
+              <span className="font-mono text-muted-foreground">••••••••</span>
+              <span className={cn('rounded-full px-2 py-0.5 text-sm', s.source === 'project' ? 'bg-primary/15 text-primary' : 'bg-muted text-muted-foreground')}
+                    title={s.source === 'shared' ? 'Applies to every project (top level of secrets.local.json)' : undefined}>
+                {s.source === 'project' ? 'this project' : 'shared'}
+              </span>
+              {s.source === 'project' && (
+                <Button variant="ghost" size="icon-sm" className="ml-auto" onClick={() => remove(s)} aria-label={`Delete ${s.name}`}><Trash2 className="size-4"/></Button>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+}
+
+// ---------- Files: stored in the runner, per project ----------
+
+type StoredFile = {name: string; size: number; updatedAt: string}
+
+const fileSize = (bytes: number) => (bytes < 1024 ? `${bytes} B` : bytes < 1024 ** 2 ? `${(bytes / 1024).toFixed(1)} KB` : `${(bytes / 1024 ** 2).toFixed(1)} MB`)
+
+function FilesTab({projectId}: {projectId: string}) {
+  const [list, setList] = useState<StoredFile[] | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [uploading, setUploading] = useState(false)
+  const input = useRef<HTMLInputElement>(null)
+  const base = `/projects/${encodeURIComponent(projectId)}/files`
+  const load = useCallback(() => {
+    request<StoredFile[]>(base).then(setList).catch(e => setError(e.message))
+  }, [base])
+  useEffect(load, [load])
+
+  async function upload(files: FileList | null) {
+    if (!files?.length) return
+    setError(null)
+    setUploading(true)
+    try {
+      for (const file of files) {
+        const body = new FormData()
+        body.append('file', file)
+        await request(base, {method: 'POST', body})
+      }
+      load()
+    } catch (e) {
+      setError((e as Error).message)
+    } finally {
+      setUploading(false)
+      if (input.current) input.current.value = ''
+    }
+  }
+
+  async function remove(a: StoredFile) {
+    if (!window.confirm(`Delete ${a.name}?`)) return
+    await request(`${base}/${encodeURIComponent(a.name)}`, {method: 'DELETE'}).catch(e => setError(e.message))
+    load()
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="flex justify-end">
+        <input ref={input} type="file" multiple className="hidden" onChange={e => upload(e.target.files)}/>
+        <Button size="sm" onClick={() => input.current?.click()} disabled={uploading}>
+          <Upload className="size-4" aria-hidden="true"/> {uploading ? 'Uploading…' : 'Upload files'}
+        </Button>
+      </div>
+      <ErrorMessage message={error}/>
+      {list && list.length === 0 && <Empty>No files. The CSVs the flows read live here.</Empty>}
+      {list && list.length > 0 && (
+        <ul className="overflow-hidden rounded-lg border border-border">
+          {list.map(a => (
+            <li key={a.name} className="flex items-center gap-3 border-b border-border px-4 py-2.5 text-sm last:border-b-0">
+              <span className="min-w-0 flex-1 truncate font-medium">{a.name}</span>
+              <span className="font-mono text-muted-foreground">{fileSize(a.size)}</span>
+              <span className="text-muted-foreground">{shortDate(a.updatedAt)}</span>
+              <a href={`${API}${base}/${encodeURIComponent(a.name)}`} className="rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground" aria-label={`Download ${a.name}`} title="Download">
+                <Download className="size-4"/>
+              </a>
+              <Button variant="ghost" size="icon-sm" onClick={() => remove(a)} aria-label={`Delete ${a.name}`} title="Delete"><Trash2 className="size-4"/></Button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+}

@@ -1,77 +1,79 @@
 # dataflow
 
-Fluxos de dados visuais, **envelope a envelope**. Você monta o fluxo ligando componentes numa prancheta (ler de um banco, filtrar, cruzar, transformar com código, chamar outro fluxo) e o runner executa em pipeline: cada envelope passa de componente em componente até chegar ao End, com controle de vazão, tratamento de erro por envelope e métricas por componente.
+Visual data flows, **envelope by envelope**. You build the flow by connecting components on a canvas (read from a database, filter, join, transform with code, call another flow) and the runner executes it as a pipeline: each envelope goes from component to component until it reaches the End, with backpressure, per-envelope error handling and per-component metrics.
 
-Inspirado no SnapLogic e no Pentaho Kettle, tudo em JavaScript: editor em React, motor em TypeScript e runner em Bun.
+Inspired by SnapLogic and Pentaho Kettle, all in JavaScript: the editor in React, the engine in TypeScript and the runner in Bun.
 
-> Estado: protótipo funcional. Projetos e fluxos ficam no navegador (localStorage); execuções, segredos e arquivos ficam no runner, na sua máquina. Veja [o que ainda não foi feito](docs/arquitetura.md#11-ainda-não-feito).
+> Status: working prototype. Projects and flows live in the browser (localStorage); runs, secrets and files live in the runner, on your machine. See [what is not done yet](docs/architecture.md#12-not-done-yet).
 
-## Componentes
+## Components
 
-| Seção | Componente | O que faz |
+| Section | Component | What it does |
 |---|---|---|
-| Data Sources | **Data Grid** | Tabela digitada (ou colada do Excel) que solta um envelope por linha |
-| | **SQL Server Query** | Consulta somente leitura, em streaming, com parâmetros `@nome` |
-| Scripting | **TypeScript** | `async function process($input)` por envelope, num sandbox |
-| Transformation | **Mapper** | Grava campos no envelope (texto ou expression) |
-| | **Filter** | Separa em `true` e `false` por uma condição |
-| | **Router** | Manda cada envelope para o primeiro caso verdadeiro |
-| | **Lookup** | Acha o par numa outra entrada pela chave |
-| | **Union** / **Copy** | Junta caminhos / manda o mesmo envelope para vários |
-| | **Aggregate** | Junta envelopes em lotes |
-| Flow | **Workflow Invoker** | Chama outro fluxo, passando os parâmetros do Start dele |
+| Data Sources | **Data Grid** | A typed table (or pasted from Excel) that emits one envelope per row |
+| | **SQL Server Query** | Read-only, streamed query, with `@name` parameters |
+| Scripting | **TypeScript** | `async function process($input)` per envelope, in a sandbox |
+| Transformation | **Mapper** | Writes fields into the envelope (text or expression) |
+| | **Filter** | Splits into `true` and `false` by a condition |
+| | **Router** | Sends each envelope to the first true case |
+| | **Lookup** | Finds the match in another input by key |
+| | **Union** / **Copy** | Joins paths / sends the same envelope to several |
+| | **Aggregate** | Groups envelopes into batches |
+| Flow | **Workflow Invoker** | Calls another flow, passing the parameters of its Start |
 
-Cada componente tem a explicação completa na aba **Notes** da janela dele, dentro do editor.
+Each component has its full explanation in the **Notes** tab of its window, inside the editor.
 
-## Rodando
+## Running
 
-Precisa de [Node.js](https://nodejs.org) 20+ e [Bun](https://bun.sh) 1.2+.
+Requires [Node.js](https://nodejs.org) 20.19+ (or 22.12+, for Vite 8) and [Bun](https://bun.sh) 1.2+.
 
 ```bash
-npm run instalar   # dependências das três partes (uma vez)
-npm run start      # runner (porta 5190) + editor (porta 5180)
+npm run setup   # dependencies of the three parts (once)
+npm run start   # runner (port 5190) + editor (port 5180)
 ```
 
-Abra http://localhost:5180. O projeto **Exemplos** tem um fluxo de exemplo para cada componente; abra um e clique em **Executar**.
+Open http://localhost:5180. The **Examples** project has an example flow for each component; open one and click **Run**.
 
-Outros comandos: `npm test` (testes do core e do runner), `npm run typecheck`, `npm run build` (build do editor em `editor/dist`).
+Other commands: `npm test` (core and runner tests), `npm run typecheck`, `npm run build` (editor build in `editor/dist`).
 
-### Segredos e arquivos
+The runner reads `RUNNER_PORT` (default 5190), `RUNNER_TIMEOUT_MS` (maximum time of a run, default 5 min) and `RUNNER_SCRIPT_TIMEOUT_MS` (maximum time of each TypeScript call, default 30 s). The editor's dev server proxies `/api` to `RUNNER_URL` (default http://localhost:5190).
 
-Cada projeto tem as abas **Segredos** e **Arquivos**. Os segredos ficam em `runner/secrets.local.json` e os arquivos em `runner/arquivos.local/`, os dois fora do git. A tela grava o segredo pelo runner e nunca lê o valor de volta. Nos componentes, use `$SECRETS.NOME`.
+### Secrets and files
 
-Segredo compartilhado por todos os projetos pode ir direto no topo do arquivo:
+Each project has the **Secrets** and **Files** tabs. Secrets live in `runner/secrets.local.json` and files in `runner/files.local/`, both outside git. The screen saves the secret through the runner and never reads the value back. In the components, use `$SECRETS.NAME`.
+
+A secret shared by every project can go directly at the top of the file:
 
 ```json
 {
-  "MEU_BANCO_SQL": "Server=localhost;Database=erp;User Id=leitura;Password=...;Encrypt=true;TrustServerCertificate=true",
-  "projetos": {
-    "exemplos": {"TOKEN_DA_API": "..."}
+  "MY_SQL_DATABASE": "Server=localhost;Database=erp;User Id=reader;Password=...;Encrypt=true;TrustServerCertificate=true",
+  "projects": {
+    "examples": {"API_TOKEN": "..."}
   }
 }
 ```
 
-### Segurança
+### Security
 
-O runner executa código escrito no editor (expressions e o componente TypeScript) num `node:vm`, que separa o escopo mas **não é uma barreira de segurança**, e ainda não tem autenticação. Rode-o só na sua máquina ou numa rede de confiança.
+The runner executes code written in the editor (expressions and the TypeScript component) in a `node:vm`, which separates the scope but **is not a security boundary**, and it has no authentication yet. Run it only on your machine or on a trusted network.
 
-## Estrutura
+## Structure
 
-| Pasta | O que é |
+| Folder | What it is |
 |---|---|
-| `core/` | Motor: contrato, envelope, componentes (lógica) e execução. Sem React nem Node. |
-| `runner/` | Runner em Bun + Hono: API de execuções, segredos e arquivos; sandbox de expressions e scripts; driver do SQL Server. |
-| `editor/` | Aplicação React: projetos, pastas, editor visual, janelas dos componentes e resultado das execuções. |
-| `docs/` | [Arquitetura](docs/arquitetura.md) |
+| `core/` | Engine: contract, envelope, components (logic) and execution. No React, no Node. |
+| `runner/` | Runner in Bun + Hono: runs, secrets and files API; expressions and scripts sandbox; SQL Server driver. |
+| `editor/` | React app: projects, folders, visual editor, component windows and run results. |
+| `docs/` | [Architecture](docs/architecture.md) |
 
-## Criando um componente
+## Creating a component
 
-1. A lógica em `core/src/componentes/<nome>.ts` (`validar` e `executar`), registrada em `core/src/componentes/index.ts`.
-2. A parte visual em `editor/src/componentes/<nome>.tsx` (card, janela e Notes), na `PALETA` de `editor/src/componentes/catalogo.ts`.
-3. Um teste em `core/src/motor.test.ts` e um fluxo de exemplo em `editor/src/mock/fluxos.ts`.
+1. The logic in `core/src/components/<name>.ts` (`validate` and `execute`), registered in `core/src/components/index.ts`.
+2. The visual part in `editor/src/components/<name>.tsx` (card, window and Notes), in the `PALETTE` of `editor/src/components/catalog.ts`.
+3. A test in `core/src/engine.test.ts` and an example flow in `editor/src/mock/flows.ts`.
 
-Os detalhes do contrato estão na [arquitetura](docs/arquitetura.md#7-contrato-do-componente-core).
+The contract details are in the [architecture](docs/architecture.md#7-component-contract-core).
 
-## Licença
+## License
 
 [MIT](LICENSE)

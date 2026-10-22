@@ -2,12 +2,12 @@
   "name": "dataflow",
   "private": true,
   "version": "0.1.0",
-  "description": "Fluxos de dados visuais, envelope a envelope: editor (React), core (motor em TS) e runner (Bun)",
+  "description": "Visual data flows, envelope by envelope: editor (React), core (TS engine) and runner (Bun)",
   "scripts": {
     "start": "concurrently -k -n runner,editor -c magenta,cyan \"npm:start:runner\" \"npm:start:editor\"",
     "start:runner": "bun --watch runner/src/index.ts",
     "start:editor": "npm --prefix editor run start",
-    "instalar": "npm --prefix editor install && bun install --cwd=runner && bun install --cwd=core && npm install",
+    "setup": "npm --prefix editor install && bun install --cwd=runner && bun install --cwd=core && npm install",
     "test": "bun test --cwd=core && bun test --cwd=runner",
     "typecheck": "bun run --cwd=core typecheck && bun run --cwd=runner typecheck && npm --prefix editor run typecheck",
     "build": "npm --prefix editor run build"

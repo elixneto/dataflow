@@ -1,155 +1,155 @@
 import {Graph, layout} from '@dagrejs/dagre'
 import type {Edge} from '@xyflow/react'
-import type {NoDoFluxo} from '@/mock/fluxos'
-import {PORTA_DE_ERRO} from './no-componente'
+import type {FlowNode} from '@/mock/flows'
+import {ERROR_PORT} from './component-node'
 
-const LARGURA_PADRAO = 320
-const ALTURA_PADRAO = 120
+const DEFAULT_WIDTH = 320
+const DEFAULT_HEIGHT = 120
 
-/** Posição da porta no card, de cima para baixo: as numeradas pela ordem e a de erro (embaixo do card) por último. */
-function ordemDaPorta(handle?: string | null): number {
+/** Position of the port on the card, top to bottom: the numbered ones in order and the error one (below the card) last. */
+function portOrder(handle?: string | null): number {
   if (!handle) return 0
-  if (handle === PORTA_DE_ERRO) return 1000
+  if (handle === ERROR_PORT) return 1000
   return Number(handle.match(/(\d+)$/)?.[1] ?? 0)
 }
 
-type NoDoDagre = {rank?: number; order?: number; edgeObj?: {v: string; w: string}; borderType?: string; x: number; y: number; width: number; height: number}
+type DagreNode = {rank?: number; order?: number; edgeObj?: {v: string; w: string}; borderType?: string; x: number; y: number; width: number; height: number}
 
 
-type Caixa = {x: number; y: number; w: number; h: number}
+type Box = {x: number; y: number; w: number; h: number}
 
-function caixaDo(n: NoDoFluxo): Caixa {
+function boxOf(n: FlowNode): Box {
   return {x: n.position.x, y: n.position.y, w: n.measured?.width ?? n.width ?? 0, h: n.measured?.height ?? n.height ?? 0}
 }
 
-const dentro = (a: Caixa, b: Caixa) => a.x >= b.x && a.y >= b.y && a.x + a.w <= b.x + b.w && a.y + a.h <= b.y + b.h
+const inside = (a: Box, b: Box) => a.x >= b.x && a.y >= b.y && a.x + a.w <= b.x + b.w && a.y + a.h <= b.y + b.h
 
 /**
- * Organiza os componentes da esquerda para a direita com o Dagre (Start à esquerda, End à direita, cada
- * ramo numa faixa). O que está inteiro dentro de um grupo continua junto: o grupo vira um "cluster" do Dagre e é
- * redimensionado em volta dos seus componentes. Comentários acompanham o grupo em que estão; os soltos ficam onde estão.
+ * Arranges the components from left to right with Dagre (Start on the left, End on the right, each
+ * branch in a lane). Whatever is entirely inside a group stays together: the group becomes a Dagre "cluster" and is
+ * resized around its components. Comments follow the group they are in; loose ones stay where they are.
  */
-export function organizarHorizontal(nos: NoDoFluxo[], ligacoes: Edge[]): NoDoFluxo[] {
-  const grupos = nos.filter(n => n.type === 'grupo')
-  const componentes = nos.filter(n => n.type === 'componente')
+export function arrangeHorizontally(nodes: FlowNode[], edges: Edge[]): FlowNode[] {
+  const groups = nodes.filter(n => n.type === 'group')
+  const components = nodes.filter(n => n.type === 'component')
 
-  // grupo de cada nó = o menor grupo que o contém inteiro (grupo dentro de grupo também vale)
-  const area = (c: Caixa) => c.w * c.h
-  const grupoDe = new Map<string, string>()
-  for (const n of [...componentes, ...grupos, ...nos.filter(n => n.type === 'comentario')]) {
-    const pai = grupos
-      .filter(g => g.id !== n.id && dentro(caixaDo(n), caixaDo(g)) && area(caixaDo(g)) > area(caixaDo(n)))
-      .sort((a, b) => area(caixaDo(a)) - area(caixaDo(b)))[0]
-    if (pai) grupoDe.set(n.id, pai.id)
+  // group of each node = the smallest group that contains it entirely (a group inside a group also counts)
+  const area = (c: Box) => c.w * c.h
+  const groupOf = new Map<string, string>()
+  for (const n of [...components, ...groups, ...nodes.filter(n => n.type === 'comment')]) {
+    const parent = groups
+      .filter(g => g.id !== n.id && inside(boxOf(n), boxOf(g)) && area(boxOf(g)) > area(boxOf(n)))
+      .sort((a, b) => area(boxOf(a)) - area(boxOf(b)))[0]
+    if (parent) groupOf.set(n.id, parent.id)
   }
-  // só entra no Dagre o grupo que tem componente dentro (direto ou num grupo de dentro)
-  const comComponente = new Set<string>()
-  for (const c of componentes) {
-    for (let g = grupoDe.get(c.id); g && !comComponente.has(g); g = grupoDe.get(g)) comComponente.add(g)
+  // only a group with a component inside (directly or in an inner group) goes into Dagre
+  const withComponent = new Set<string>()
+  for (const c of components) {
+    for (let g = groupOf.get(c.id); g && !withComponent.has(g); g = groupOf.get(g)) withComponent.add(g)
   }
 
-  const grafo = new Graph({compound: comComponente.size > 0})
-  // Com grupos: a borda do cluster fica a (edgesep + nodesep) / 2 dos componentes (espaço para o título) e dois
-  // grupos vizinhos ficam a edgesep um do outro (margem de segurança).
-  grafo.setGraph(comComponente.size
+  const graph = new Graph({compound: withComponent.size > 0})
+  // With groups: the cluster border sits (edgesep + nodesep) / 2 away from the components (room for the title) and two
+  // neighboring groups sit edgesep apart (safety margin).
+  graph.setGraph(withComponent.size
     ? {rankdir: 'LR', nodesep: 80, edgesep: 40, ranksep: 160, marginx: 20, marginy: 20}
     : {rankdir: 'LR', nodesep: 60, ranksep: 120, marginx: 20, marginy: 20})
-  grafo.setDefaultEdgeLabel(() => ({}))
+  graph.setDefaultEdgeLabel(() => ({}))
 
-  for (const n of componentes) {
-    grafo.setNode(n.id, {width: n.measured?.width ?? LARGURA_PADRAO, height: n.measured?.height ?? ALTURA_PADRAO})
+  for (const n of components) {
+    graph.setNode(n.id, {width: n.measured?.width ?? DEFAULT_WIDTH, height: n.measured?.height ?? DEFAULT_HEIGHT})
   }
-  for (const id of comComponente) grafo.setNode(id, {})
-  for (const id of [...componentes.map(c => c.id), ...comComponente]) {
-    const pai = grupoDe.get(id)
-    if (pai && comComponente.has(pai)) grafo.setParent(id, pai)
+  for (const id of withComponent) graph.setNode(id, {})
+  for (const id of [...components.map(c => c.id), ...withComponent]) {
+    const parent = groupOf.get(id)
+    if (parent && withComponent.has(parent)) graph.setParent(id, parent)
   }
-  // porta de saída de cada ligação (origem→destino), para a ordem vertical
-  const portaDaLigacao = new Map<string, number>()
-  for (const e of ligacoes) {
-    if (!componentes.some(c => c.id === e.source) || !componentes.some(c => c.id === e.target)) continue
-    grafo.setEdge(e.source, e.target)
-    const chave = `${e.source}\u0000${e.target}`
-    portaDaLigacao.set(chave, Math.min(portaDaLigacao.get(chave) ?? Infinity, ordemDaPorta(e.sourceHandle)))
+  // output port of each edge (source→target), for the vertical order
+  const edgePort = new Map<string, number>()
+  for (const e of edges) {
+    if (!components.some(c => c.id === e.source) || !components.some(c => c.id === e.target)) continue
+    graph.setEdge(e.source, e.target)
+    const key = `${e.source}\u0000${e.target}`
+    edgePort.set(key, Math.min(edgePort.get(key) ?? Infinity, portOrder(e.sourceHandle)))
   }
 
-  layout(grafo, {
-    // O Dagre minimiza cruzamentos sem enxergar as portas, e no empate pode pôr acima o que sai da porta de baixo.
-    // Depois da ordem dele, cada coluna é reordenada (da esquerda para a direita) pela posição de quem a alimenta,
-    // desempatando pela porta de saída: o que sai da porta de erro fica abaixo do que sai da principal.
-    // Só trocam de lugar nós do mesmo grupo (as bordas dos grupos ficam onde o Dagre pôs).
-    customOrder: (g, ordemPadrao) => {
-      ordemPadrao(g)
-      const no = (v: string) => g.node(v) as unknown as NoDoDagre
-      const colunas = new Map<number, string[]>()
+  layout(graph, {
+    // Dagre minimizes crossings without seeing the ports, and on a tie it may put above what leaves the bottom port.
+    // After its order, each column is reordered (left to right) by the position of whatever feeds it,
+    // breaking ties by the output port: what leaves the error port stays below what leaves the main one.
+    // Only nodes of the same group swap places (the group borders stay where Dagre put them).
+    customOrder: (g, defaultOrder) => {
+      defaultOrder(g)
+      const node = (v: string) => g.node(v) as unknown as DagreNode
+      const columns = new Map<number, string[]>()
       for (const v of g.nodes()) {
-        const rank = no(v).rank
-        if (typeof rank === 'number') colunas.set(rank, [...(colunas.get(rank) ?? []), v])
+        const rank = node(v).rank
+        if (typeof rank === 'number') columns.set(rank, [...(columns.get(rank) ?? []), v])
       }
-      const porta = (u: string, v: string) => {
-        // nó fictício do Dagre (ligação que pula colunas): a porta é a da ligação original
-        const obj = no(u).edgeObj ?? no(v).edgeObj ?? {v: u, w: v}
-        return portaDaLigacao.get(`${obj.v}\u0000${obj.w}`) ?? 0
+      const port = (u: string, v: string) => {
+        // Dagre dummy node (an edge that skips columns): the port is the original edge's
+        const obj = node(u).edgeObj ?? node(v).edgeObj ?? {v: u, w: v}
+        return edgePort.get(`${obj.v}\u0000${obj.w}`) ?? 0
       }
-      const movel = (v: string) => !no(v).borderType && (g.children(v) ?? []).length === 0
-      for (const rank of [...colunas.keys()].sort((a, b) => a - b).slice(1)) {
-        const chave = new Map<string, number>()
-        const porPai = new Map<string, string[]>()
-        for (const v of colunas.get(rank)!) {
-          if (!movel(v)) continue
-          const antes = ((g.predecessors(v) ?? []) as string[]).filter(u => typeof no(u).order === 'number')
-          chave.set(v, antes.length === 0 ? no(v).order!
-            : antes.reduce((s, u) => s + no(u).order! + porta(u, v) / 10000, 0) / antes.length)
-          const pai = (g.isCompound() && g.parent(v)) || ''
-          porPai.set(pai, [...(porPai.get(pai) ?? []), v])
+      const movable = (v: string) => !node(v).borderType && (g.children(v) ?? []).length === 0
+      for (const rank of [...columns.keys()].sort((a, b) => a - b).slice(1)) {
+        const key = new Map<string, number>()
+        const byParent = new Map<string, string[]>()
+        for (const v of columns.get(rank)!) {
+          if (!movable(v)) continue
+          const before = ((g.predecessors(v) ?? []) as string[]).filter(u => typeof node(u).order === 'number')
+          key.set(v, before.length === 0 ? node(v).order!
+            : before.reduce((s, u) => s + node(u).order! + port(u, v) / 10000, 0) / before.length)
+          const parent = (g.isCompound() && g.parent(v)) || ''
+          byParent.set(parent, [...(byParent.get(parent) ?? []), v])
         }
-        for (const irmaos of porPai.values()) {
-          const lugares = irmaos.map(v => no(v).order!).sort((a, b) => a - b)
-          irmaos
-            .sort((a, b) => chave.get(a)! - chave.get(b)! || no(a).order! - no(b).order!)
-            .forEach((v, i) => (no(v).order = lugares[i]))
+        for (const siblings of byParent.values()) {
+          const places = siblings.map(v => node(v).order!).sort((a, b) => a - b)
+          siblings
+            .sort((a, b) => key.get(a)! - key.get(b)! || node(a).order! - node(b).order!)
+            .forEach((v, i) => (node(v).order = places[i]))
         }
       }
     },
   })
 
-  // grupos: a caixa do cluster (o Dagre devolve o centro e o tamanho, já com a folga em volta dos componentes)
-  const novaCaixa = new Map<string, Caixa>()
-  for (const id of comComponente) {
-    const p = grafo.node(id) as unknown as NoDoDagre
-    novaCaixa.set(id, {
+  // groups: the cluster's box (Dagre returns the center and the size, already with the padding around the components)
+  const newBox = new Map<string, Box>()
+  for (const id of withComponent) {
+    const p = graph.node(id) as unknown as DagreNode
+    newBox.set(id, {
       x: p.x - p.width / 2, y: p.y - p.height / 2, w: p.width, h: p.height,
     })
   }
-  // comentário (ou grupo sem componente) dentro de um grupo vai junto: mesma posição relativa, na proporção do
-  // tamanho novo do grupo e sem sair dele
-  const caixaFinal = (id: string): Caixa | undefined => {
-    const n = nos.find(o => o.id === id)
+  // a comment (or a group without components) inside a group goes along: same relative position, in proportion to the
+  // group's new size and without leaving it
+  const finalBox = (id: string): Box | undefined => {
+    const n = nodes.find(o => o.id === id)
     if (!n) return undefined
-    const nova = novaCaixa.get(id)
-    if (nova) return nova
-    const pai = grupoDe.get(id)
-    const antiga = pai ? nos.find(o => o.id === pai) : undefined
-    const final = pai ? caixaFinal(pai) : undefined
-    const c = caixaDo(n)
-    if (!antiga || !final) return c
-    const a = caixaDo(antiga)
+    const fresh = newBox.get(id)
+    if (fresh) return fresh
+    const parent = groupOf.get(id)
+    const old = parent ? nodes.find(o => o.id === parent) : undefined
+    const final = parent ? finalBox(parent) : undefined
+    const c = boxOf(n)
+    if (!old || !final) return c
+    const a = boxOf(old)
     const x = Math.min(Math.max((c.x - a.x) * (final.w / (a.w || 1)), 0), Math.max(final.w - c.w, 0))
     const y = Math.min(Math.max((c.y - a.y) * (final.h / (a.h || 1)), 0), Math.max(final.h - c.h, 0))
     return {x: final.x + x, y: final.y + y, w: c.w, h: c.h}
   }
 
-  return nos.map(n => {
-    if (n.type === 'componente') {
-      const p = grafo.node(n.id) as unknown as NoDoDagre | undefined
+  return nodes.map(n => {
+    if (n.type === 'component') {
+      const p = graph.node(n.id) as unknown as DagreNode | undefined
       if (!p) return n
-      // o Dagre devolve o centro; o React Flow posiciona pelo canto superior esquerdo
+      // Dagre returns the center; React Flow positions by the top-left corner
       return {...n, position: {x: p.x - p.width / 2, y: p.y - p.height / 2}}
     }
-    const caixa = novaCaixa.get(n.id)
-    if (caixa) return {...n, position: {x: caixa.x, y: caixa.y}, width: caixa.w, height: caixa.h}
-    if (!grupoDe.has(n.id)) return n
-    const final = caixaFinal(n.id)!
+    const box = newBox.get(n.id)
+    if (box) return {...n, position: {x: box.x, y: box.y}, width: box.w, height: box.h}
+    if (!groupOf.has(n.id)) return n
+    const final = finalBox(n.id)!
     return {...n, position: {x: final.x, y: final.y}}
   })
 }

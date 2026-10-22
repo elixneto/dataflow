@@ -1,33 +1,37 @@
-# dataflow — fluxos de dados visuais, envelope a envelope (tudo em JavaScript)
+# dataflow — visual data flows, envelope by envelope (all in JavaScript)
 
-Visão geral, conceitos e como rodar: [README.md](README.md). Arquitetura do motor: [docs/arquitetura.md](docs/arquitetura.md).
+Overview, concepts and how to run: [README.md](README.md). Engine architecture: [docs/architecture.md](docs/architecture.md).
 
-| Pasta | O que é | Detalhes |
+| Folder | What it is | Details |
 |---|---|---|
-| `editor/` | Aplicação (Vite + React + React Flow) na raiz: projetos → fluxos (editor), execuções, segredos, arquivos | ver [editor/CLAUDE.md](editor/CLAUDE.md) |
-| `core/` | Motor em TypeScript sem React nem Node: contrato, envelope, componentes (lógica), execução envelope a envelope | usado pelo editor (alias `@dataflow/core`) e pelo runner |
-| `runner/` | Runner em Bun + Hono (porta 5190): execuções, segredos e arquivos por projeto, expressions e scripts no `node:vm` | roda à parte; o editor fala com ele por `/api` |
+| `editor/` | App (Vite + React + React Flow) at the root: projects → flows (editor), runs, secrets, files | see [editor/CLAUDE.md](editor/CLAUDE.md) |
+| `core/` | TypeScript engine without React or Node: contract, envelope, components (logic), envelope-by-envelope execution | used by the editor (alias `@dataflow/core`) and by the runner |
+| `runner/` | Runner in Bun + Hono (port 5190): runs, secrets and files per project, expressions and scripts in `node:vm` | runs separately; the editor talks to it through `/api` |
 
-## Comandos (na raiz)
+## Commands (at the root)
 
-- `npm run instalar` — instala as dependências das três partes (uma vez).
-- `npm run start` — sobe **runner e editor juntos** (concurrently, um terminal); abre em http://localhost:5180/ (lista de projetos).
-- `npm test` — testes do core e do runner (`bun test`). `npm run typecheck` — as três partes. `npm run build` — build do editor.
-- Cada parte tem um `.npmrc` apontando para o npm público, para instalar igual mesmo com outro registry configurado na máquina.
+- `npm run setup` — installs the dependencies of the three parts (once).
+- `npm run start` — starts **runner and editor together** (concurrently, one terminal); opens at http://localhost:5180/ (project list).
+- `npm test` — core and runner tests (`bun test`). `npm run typecheck` — the three parts. `npm run build` — editor build.
+- Each part has an `.npmrc` pointing to the public npm registry, so it installs the same even with another registry configured on the machine.
 
-## Componente novo
+## New component
 
-1. Lógica em `core/src/componentes/<nome>.ts` (`validar` e `executar`) e registro em `core/src/componentes/index.ts`.
-   - Se o componente acumula envelopes, informe com `ctx.guardando(qtd, envelope)` (vira a Memória das Métricas). Espera interna que não é entrada (promessa própria, fila interna) vai por `ctx.esperar` / `ctx.esperarCada`, para não contar como tempo ativo.
-2. Parte visual em `editor/src/componentes/<nome>.tsx` (`Card`, `Painel`, `Documentacao`) e entrada na `PALETA` (`editor/src/componentes/catalogo.ts`).
-3. O runner não precisa mudar (salvo componente que fala com fora, como o SQL Server Query: o driver fica no runner e o core recebe a função). O `npm run start` roda o Bun a partir da raiz, então o `--watch` recarrega o runner também quando o `core` muda.
+1. Logic in `core/src/components/<name>.ts` (`validate` and `execute`) and registration in `core/src/components/index.ts`.
+   - If the component accumulates envelopes, report it with `ctx.holding(count, envelope)` (it becomes the Memory in the Metrics). An internal wait that is not an input (its own promise, an internal queue) goes through `ctx.wait` / `ctx.waitEach`, so it does not count as active time.
+2. Visual part in `editor/src/components/<name>.tsx` (`Card`, `Panel`, `Docs`) and an entry in the `PALETTE` (`editor/src/components/catalog.ts`).
+3. The runner does not need to change (except for a component that talks to the outside, like the SQL Server Query: the driver lives in the runner and the core receives the function). `npm run start` runs Bun from the root, so `--watch` also reloads the runner when `core` changes.
 
-## Segredos (`$SECRETS`) e arquivos
+## Secrets (`$SECRETS`) and files
 
-Por enquanto ficam no runner, fora do git: `runner/secrets.local.json` (texto no topo = compartilhado por todos os projetos; os de um projeto em `"projetos": {"<id>": {"NOME": "valor"}}`, lidos a cada execução) e `runner/arquivos.local/<projetoId>/`. A aba Segredos do projeto grava no arquivo pelo runner e nunca lê os valores de volta. Ficam em `$SECRETS` nas expressions, no TypeScript e na conexão do SQL Server Query.
+For now they live in the runner, outside git: `runner/secrets.local.json` (text at the top level = shared by every project; a project's own in `"projects": {"<id>": {"NAME": "value"}}`, read on each run) and `runner/files.local/<projectId>/`. The project's Secrets tab writes to the file through the runner and never reads the values back. They are available as `$SECRETS` in expressions, in the TypeScript component and in the SQL Server Query connection.
 
-## Convenções
+## Conventions
 
-- Domínio em português (tipos, props, textos da tela). Nomes dos componentes (Mapper, Filter...) e tudo que circula no envelope (`DATA`, `errors`, `input`) em inglês.
-- Nada de texto explicativo dentro das janelas e dos cards: só rótulos curtos. Explicação vai na aba Notes (`Documentacao` do componente).
-- Menor texto da tela: `text-sm`.
+- Everything in English: code, identifiers, file names, UI text, comments and docs.
+- No explanatory text inside the windows and cards: only short labels. Explanations go in the Notes tab (the component's `Docs`).
+- Smallest text on screen: `text-sm`.
+
+## Commits
+
+- Commit messages must NEVER contain `Co-Authored-By:` or `Claude-Session:` lines.

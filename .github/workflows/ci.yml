@@ -16,7 +16,7 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
-      - run: npm run instalar
+      - run: npm run setup
       - run: npm run typecheck
       - run: npm test
       - run: npm run build

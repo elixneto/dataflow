@@ -1,26 +1,27 @@
-# dataflow/editor — aplicação dos fluxos (React)
+# dataflow/editor — the flows app (React)
 
-Projetos, editor visual dos fluxos, execuções, segredos e arquivos.
+Projects, the visual flow editor, runs, secrets and files.
 
-## Stack e comandos
+## Stack and commands
 
-- Vite + React 19 + TypeScript + Tailwind 4 + React Flow (`@xyflow/react`) + lucide-react.
+- Vite + React 19 + TypeScript + Tailwind 4 + React Flow (`@xyflow/react`) + Monaco + lucide-react.
 - `npm run start` → http://localhost:5180/ · `npm run build` → `dist/` · `npm run typecheck`.
-- `base: '/'`: a aplicação fica na raiz. Em produção, o `dist/` pode ser servido por qualquer servidor estático, com `/api` repassado para o runner.
-- `.npmrc` aponta para o npm público.
-- Validar/Executar chamam o runner (`../runner`, Bun, porta 5190): em dev o Vite repassa `/api` para ele. Para subir os dois juntos: `npm run start` na raiz do repositório.
-- A lógica dos componentes (validar/executar) fica em `../core` (alias `@dataflow/core`); aqui só a parte visual.
+- `base: '/'`: the app lives at the root. In production, `dist/` can be served by any static server, with `/api` proxied to the runner.
+- `.npmrc` points to the public npm registry.
+- Run calls the runner (`../runner`, Bun, port 5190): in dev Vite proxies `/api` to it (`RUNNER_URL` changes the target). To start both together: `npm run start` at the repository root.
+- The components' logic (validate/execute) lives in `../core` (alias `@dataflow/core`); here only the visual part.
 
-## Estrutura
+## Structure
 
-| Pasta | O que é |
+| Folder | What it is |
 |---|---|
-| `src/componentes/` | `tipos.ts` (contrato visual `ComponenteDef`: portas, `Card`, `Painel`, `validar`), `catalogo.ts` (paleta, cores, `POR_TIPO`, Início/Fim) e a parte visual de cada componente. |
-| `src/execucao/` | Conversão editor → runner, chamada ao runner e o painel com o resultado da execução (por componente: tempo, contagens, logs, amostras). |
-| `src/editor/` | Prancheta (React Flow), nó genérico, comentário, paleta, barra, histórico (Ctrl+Z), validação da montagem e as **janelas** de configuração: clique só seleciona; duplo clique abre a janela do componente (uma por componente, várias abertas, arrastáveis, Esc fecha). O Início abre os parâmetros do workflow. |
-| `src/mock/` | Projetos (`projetos.ts`, chave `dataflow-projetos-v1`) e fluxos (`fluxos.ts`, chave `dataflow-fluxos-v2`; cada fluxo tem `projetoId` e `pasta`, caminho dentro do projeto; o projeto guarda as pastas vazias) no localStorage, com os exemplos. Vira chamada à API quando o backend existir. Execuções, segredos e arquivos já vêm do runner. |
-| `src/paginas/` | Rotas: `/` projetos, `/projetos/:id` (abas Fluxos, Execuções, Segredos, Arquivos; `?aba=`), `/projetos/:id/fluxos/:fluxoId` editor, `/projetos/:id/execucoes/:execucaoId` detalhe. `/editor/:id` antigo redireciona. |
+| `src/components/` | `types.ts` (the visual contract `ComponentDef`: ports, `Card`, `Panel`, `Docs`, `validate`), `catalog.ts` (palette, colors, `BY_TYPE`, Start/End) and the visual part of each component. |
+| `src/run/` | Editor → runner conversion, the calls to the runner and the panel with the run result (per component: time, counts, logs, samples). |
+| `src/editor/` | Canvas (React Flow), generic node, comment, group, palette, toolbar, history (Ctrl+Z), assembly validation and the configuration **windows**: a click only selects; a double click opens the component's window (one per component, several open, draggable, Esc closes). The Start opens the workflow parameters. |
+| `src/mock/` | Projects (`projects.ts`, key `dataflow-projects-v1`) and flows (`flows.ts`, key `dataflow-flows-v1`; each flow has `projectId` and `folder`, a path inside the project; the project stores the empty folders) in localStorage, with the examples. They become API calls when the backend exists. Runs, secrets and files already come from the runner. |
+| `src/pages/` | Routes: `/` projects, `/projects/:id` (Flows, Runs, Secrets, Files tabs; `?tab=`), `/projects/:id/flows/:flowId` editor, `/projects/:id/runs/:runId` detail. The old `/editor/:id` redirects. |
+| `src/ui/` | Shared pieces: button, expression field, code editor (Monaco), resizable columns, theme. |
 
-## Convenções
+## Conventions
 
-As mesmas do [CLAUDE.md da raiz](../CLAUDE.md).
+The same as the [root CLAUDE.md](../CLAUDE.md).

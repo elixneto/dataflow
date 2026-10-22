@@ -19,601 +19,601 @@ import {
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import {CircleAlert, Play, X} from 'lucide-react'
-import {CATEGORIAS, COR_DA_CATEGORIA, DRAG_MIME, ehDoFluxo, FIM, INICIO, POR_TIPO} from '@/componentes/catalogo'
+import {CATEGORIES, CATEGORY_COLOR, DRAG_MIME, isFlowNode, END, START, BY_TYPE} from '@/components/catalog'
 import {cn} from '@/lib/utils'
-import type {Fluxo, NoDoFluxo} from '@/mock/fluxos'
-import {obterProjeto, PROJETO_DE_EXEMPLOS} from '@/mock/projetos'
-import {portasCompativeis, type ModoDeExecucao, type ParametroDoWorkflow, type RegistroDaExecucao} from '@dataflow/core'
-import {PainelDaExecucao} from '@/execucao/painel-da-execucao'
-import {cancelarNoRunner, executarNoRunner, paraExecutar} from '@/execucao/runner'
-import {Barra, type ResultadoDaValidacao} from './barra'
-import {HistoricoContext} from './historico'
-import {NoComentarioMemo, TAMANHO_DO_COMENTARIO, type NoComentario} from './no-comentario'
-import {CORES_DO_GRUPO, NoGrupoMemo, TAMANHO_DO_GRUPO, Z_DO_GRUPO, type NoGrupo} from './no-grupo'
-import {NoComponenteMemo, PORTA_DE_ERRO, qtdSaidas, rotuloDaSaida, tipoDaPorta, type NoComponente} from './no-componente'
-import {Paleta} from './paleta'
-import {organizarHorizontal} from './layout'
-import {Janela, type PosicaoDaJanela, type TamanhoDaJanela} from './janela'
-import {PainelDoWorkflow} from './painel-do-workflow'
-import {ParametrosContext} from './parametros-context'
-import {AvisosContext, ResultadoContext} from './resultado-context'
-import {PainelPropriedades} from './painel-propriedades'
+import type {Flow, FlowNode} from '@/mock/flows'
+import {getProject, EXAMPLES_PROJECT} from '@/mock/projects'
+import {compatiblePorts, type RunMode, type WorkflowParameter, type RunRecord} from '@dataflow/core'
+import {RunPanel} from '@/run/run-panel'
+import {cancelOnRunner, runOnRunner, toExecutable} from '@/run/runner'
+import {Toolbar, type ValidationResult} from './toolbar'
+import {HistoryContext} from './history'
+import {CommentNodeMemo, COMMENT_SIZE, type CommentNode} from './comment-node'
+import {GROUP_COLORS, GroupNodeMemo, GROUP_SIZE, GROUP_Z, type GroupNode} from './group-node'
+import {ComponentNodeMemo, ERROR_PORT, outputCount, outputLabel, portType, type ComponentNode} from './component-node'
+import {Palette} from './palette'
+import {arrangeHorizontally} from './layout'
+import {FloatingWindow, type WindowPosition, type WindowSize} from './window'
+import {WorkflowPanel} from './workflow-panel'
+import {ParametersContext} from './parameters-context'
+import {WarningsContext, ResultContext} from './result-context'
+import {PropertiesPanel} from './properties-panel'
 import {ResizeObserverGuard} from './resize-observer-guard'
-import {ehComponente, recebeLinhas, validarFluxo, type Pendencia} from './validacao'
+import {isComponent, receivesRows, validateFlow, type Issue} from './validation'
 
-type Retrato = {nodes: NoDoFluxo[]; edges: Edge[]}
+type Snapshot = {nodes: FlowNode[]; edges: Edge[]}
 
-const nodeTypes = {componente: NoComponenteMemo, comentario: NoComentarioMemo, grupo: NoGrupoMemo}
+const nodeTypes = {component: ComponentNodeMemo, comment: CommentNodeMemo, group: GroupNodeMemo}
 
-const LIMITE_DO_HISTORICO = 100
-const JANELA_DE_EDICAO_MS = 1000
-const DESLOCAMENTO_AO_COLAR = 40
-const TEMPO_DE_VALIDACAO_MS = 900
+const HISTORY_LIMIT = 100
+const EDIT_WINDOW_MS = 1000
+const PASTE_OFFSET = 40
+const VALIDATION_DELAY_MS = 900
 
-let contador = 0
-function novoId(tipo: string) {
-  contador += 1
-  return `${tipo}-${Date.now().toString(36)}${contador}`
+let counter = 0
+function newId(type: string) {
+  counter += 1
+  return `${type}-${Date.now().toString(36)}${counter}`
 }
 
-function ehCampoEditavel(alvo: EventTarget | null) {
-  if (!(alvo instanceof HTMLElement)) return false
-  return alvo.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(alvo.tagName)
+function isEditableField(target: EventTarget | null) {
+  if (!(target instanceof HTMLElement)) return false
+  return target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)
 }
 
-function ehDoFluxoNo(no: NoDoFluxo) {
-  return ehComponente(no) && ehDoFluxo(no.data.tipo)
+function isFixedNode(node: FlowNode) {
+  return isComponent(node) && isFlowNode(node.data.type)
 }
 
 type Props = {
-  fluxo: Fluxo
-  onSalvar: (fluxo: Fluxo) => Fluxo
+  flow: Flow
+  onSave: (flow: Flow) => Flow
 }
 
-function Editor({fluxo, onSalvar}: Props) {
+function Editor({flow, onSave}: Props) {
   const wrapperRef = useRef<HTMLElement>(null)
-  const {screenToFlowPosition, getNodes, getEdges, fitView} = useReactFlow<NoDoFluxo, Edge>()
-  const [nodes, setNodes, onNodesChange] = useNodesState<NoDoFluxo>(fluxo.nodes)
-  const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>(fluxo.edges)
-  const [nome, setNome] = useState(fluxo.nome)
-  const [base, setBase] = useState(fluxo)
-  const [alterado, setAlterado] = useState(false)
-  const [validacao, setValidacao] = useState<ResultadoDaValidacao>(null)
-  const [pendencias, setPendencias] = useState<Pendencia[]>([])
-  const [verPendencias, setVerPendencias] = useState(false)
-  const [validando, setValidando] = useState(false)
-  const [parametros, setParametros] = useState<ParametroDoWorkflow[]>(fluxo.parametros ?? [])
-  const [execucao, setExecucao] = useState<RegistroDaExecucao | null>(null)
-  const [rodando, setRodando] = useState<ModoDeExecucao | null>(null)
-  const idDaExecucao = useRef<string | null>(null)
-  // o bump de saída de cada componente pinta conforme o resultado (some ao fechar o resultado)
-  const statusDaUltimaExecucao = useMemo(
-    () => Object.fromEntries((execucao?.componentes ?? []).map(c => [c.noId, c])),
-    [execucao],
+  const {screenToFlowPosition, getNodes, getEdges, fitView} = useReactFlow<FlowNode, Edge>()
+  const [nodes, setNodes, onNodesChange] = useNodesState<FlowNode>(flow.nodes)
+  const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>(flow.edges)
+  const [name, setName] = useState(flow.name)
+  const [base, setBase] = useState(flow)
+  const [changed, setChanged] = useState(false)
+  const [validation, setValidation] = useState<ValidationResult>(null)
+  const [issues, setIssues] = useState<Issue[]>([])
+  const [showIssues, setShowIssues] = useState(false)
+  const [validating, setValidating] = useState(false)
+  const [parameters, setParameters] = useState<WorkflowParameter[]>(flow.parameters ?? [])
+  const [run, setRun] = useState<RunRecord | null>(null)
+  const [running, setRunning] = useState<RunMode | null>(null)
+  const runId = useRef<string | null>(null)
+  // each component's output bump is painted by the result (it goes away when the result is closed)
+  const lastRunStatus = useMemo(
+    () => Object.fromEntries((run?.components ?? []).map(c => [c.nodeId, c])),
+    [run],
   )
-  const avisos = useMemo(() => {
-    const porNo: Record<string, string[]> = {}
-    const juntar = (id: string, msg: string) => (porNo[id] ??= []).push(msg)
-    for (const p of pendencias) juntar(p.noId, p.mensagem)
-    for (const c of execucao?.componentes ?? []) {
-      if (c.status !== 'falhou' && c.status !== 'com-erros') continue
-      const erros = c.logs.filter(l => l.nivel === 'erro').map(l => l.mensagem)
-      for (const m of erros.length ? erros.slice(0, 5) : ['Deu erro na execução.']) juntar(c.noId, m)
+  const warnings = useMemo(() => {
+    const byNode: Record<string, string[]> = {}
+    const add = (id: string, msg: string) => (byNode[id] ??= []).push(msg)
+    for (const p of issues) add(p.nodeId, p.message)
+    for (const c of run?.components ?? []) {
+      if (c.status !== 'failed' && c.status !== 'with-errors') continue
+      const errors = c.logs.filter(l => l.level === 'error').map(l => l.message)
+      for (const m of errors.length ? errors.slice(0, 5) : ['The run failed.']) add(c.nodeId, m)
     }
-    return porNo
-  }, [pendencias, execucao])
+    return byNode
+  }, [issues, run])
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => () => {
     if (timer.current) clearTimeout(timer.current)
   }, [])
 
-  // o fitView do <ReactFlow> roda antes dos cards (altos) serem medidos; enquadra de novo quando já têm tamanho
-  const nosMedidos = useNodesInitialized()
-  const enquadrado = useRef(false)
+  // the <ReactFlow> fitView runs before the (tall) cards are measured; frame again once they have a size
+  const nodesMeasured = useNodesInitialized()
+  const framed = useRef(false)
   useEffect(() => {
-    if (!nosMedidos || enquadrado.current) return
-    enquadrado.current = true
+    if (!nodesMeasured || framed.current) return
+    framed.current = true
     requestAnimationFrame(() => fitView({padding: 0.12, maxZoom: 1}))
-  }, [nosMedidos, fitView])
+  }, [nodesMeasured, fitView])
 
-  // avisa antes de sair com alteração não salva
+  // warns before leaving with unsaved changes
   useEffect(() => {
-    if (!alterado) return
-    const aviso = (e: BeforeUnloadEvent) => e.preventDefault()
-    window.addEventListener('beforeunload', aviso)
-    return () => window.removeEventListener('beforeunload', aviso)
-  }, [alterado])
+    if (!changed) return
+    const warn = (e: BeforeUnloadEvent) => e.preventDefault()
+    window.addEventListener('beforeunload', warn)
+    return () => window.removeEventListener('beforeunload', warn)
+  }, [changed])
 
-  const invalidos = useMemo(() => new Set(pendencias.map(p => p.noId)), [pendencias])
+  const invalid = useMemo(() => new Set(issues.map(p => p.nodeId)), [issues])
 
-  // O destaque vermelho é só visual, mas o updateNodeData do card devolve o nó já com o className para o estado.
-  // Por isso o className é sempre recalculado aqui (põe ou tira), em vez de só acrescentar nos inválidos.
-  const nosNaTela = useMemo(
+  // The red highlight is only visual, but the card's updateNodeData returns the node with the className into the state.
+  // That is why the className is always recomputed here (set or unset), instead of only being added to the invalid ones.
+  const shownNodes = useMemo(
     () => nodes.map(n => {
-      const classe = invalidos.has(n.id) ? 'is-invalid' : undefined
-      return n.className === classe ? n : {...n, className: classe}
+      const cls = invalid.has(n.id) ? 'is-invalid' : undefined
+      return n.className === cls ? n : {...n, className: cls}
     }),
-    [nodes, invalidos],
+    [nodes, invalid],
   )
-  const ligacoesNaTela = useMemo(
+  const shownEdges = useMemo(
     () => edges.map(e => {
-      const deErro = e.sourceHandle === PORTA_DE_ERRO
-      if (!deErro && !validando) return e
-      return {...e, ...(validando && {animated: true}), ...(deErro && {className: 'is-error-edge'})}
+      const fromError = e.sourceHandle === ERROR_PORT
+      if (!fromError && !validating) return e
+      return {...e, ...(validating && {animated: true}), ...(fromError && {className: 'is-error-edge'})}
     }),
-    [edges, validando],
+    [edges, validating],
   )
 
-  // ---------- histórico (Ctrl+Z / Ctrl+Shift+Z) ----------
+  // ---------- history (Ctrl+Z / Ctrl+Shift+Z) ----------
 
-  const passado = useRef<Retrato[]>([])
-  const futuro = useRef<Retrato[]>([])
-  const ultimaEdicao = useRef<{chave: string; em: number} | null>(null)
-  const [tamanhoDoHistorico, setTamanhoDoHistorico] = useState({passado: 0, futuro: 0})
+  const past = useRef<Snapshot[]>([])
+  const future = useRef<Snapshot[]>([])
+  const lastEdit = useRef<{key: string; at: number} | null>(null)
+  const [historySize, setHistorySize] = useState({past: 0, future: 0})
 
-  const sincronizar = useCallback(() => setTamanhoDoHistorico({passado: passado.current.length, futuro: futuro.current.length}), [])
+  const sync = useCallback(() => setHistorySize({past: past.current.length, future: future.current.length}), [])
 
-  const invalidarValidacao = useCallback(() => {
-    setValidacao(null)
-    setPendencias([])
+  const clearValidation = useCallback(() => {
+    setValidation(null)
+    setIssues([])
   }, [])
 
-  const registrar = useCallback(() => {
-    passado.current = [...passado.current.slice(-(LIMITE_DO_HISTORICO - 1)), {nodes: getNodes(), edges: getEdges()}]
-    futuro.current = []
-    ultimaEdicao.current = null
-    setAlterado(true)
-    invalidarValidacao()
-    sincronizar()
-  }, [getNodes, getEdges, sincronizar, invalidarValidacao])
+  const record = useCallback(() => {
+    past.current = [...past.current.slice(-(HISTORY_LIMIT - 1)), {nodes: getNodes(), edges: getEdges()}]
+    future.current = []
+    lastEdit.current = null
+    setChanged(true)
+    clearValidation()
+    sync()
+  }, [getNodes, getEdges, sync, clearValidation])
 
-  const registrarEdicao = useCallback((chave: string) => {
-    const agora = Date.now()
-    const anterior = ultimaEdicao.current
-    setAlterado(true)
-    if (anterior && anterior.chave === chave && agora - anterior.em < JANELA_DE_EDICAO_MS) {
-      ultimaEdicao.current = {chave, em: agora}
+  const recordEdit = useCallback((key: string) => {
+    const now = Date.now()
+    const previous = lastEdit.current
+    setChanged(true)
+    if (previous && previous.key === key && now - previous.at < EDIT_WINDOW_MS) {
+      lastEdit.current = {key, at: now}
       return
     }
-    registrar()
-    ultimaEdicao.current = {chave, em: agora}
-  }, [registrar])
+    record()
+    lastEdit.current = {key, at: now}
+  }, [record])
 
-  const desfazer = useCallback(() => {
-    const anterior = passado.current.at(-1)
-    if (!anterior) return
-    passado.current = passado.current.slice(0, -1)
-    futuro.current = [...futuro.current, {nodes: getNodes(), edges: getEdges()}]
-    ultimaEdicao.current = null
-    setNodes(anterior.nodes)
-    setEdges(anterior.edges)
-    setAlterado(true)
-    invalidarValidacao()
-    sincronizar()
-  }, [getNodes, getEdges, setNodes, setEdges, sincronizar, invalidarValidacao])
+  const undo = useCallback(() => {
+    const previous = past.current.at(-1)
+    if (!previous) return
+    past.current = past.current.slice(0, -1)
+    future.current = [...future.current, {nodes: getNodes(), edges: getEdges()}]
+    lastEdit.current = null
+    setNodes(previous.nodes)
+    setEdges(previous.edges)
+    setChanged(true)
+    clearValidation()
+    sync()
+  }, [getNodes, getEdges, setNodes, setEdges, sync, clearValidation])
 
-  const refazer = useCallback(() => {
-    const proximo = futuro.current.at(-1)
-    if (!proximo) return
-    futuro.current = futuro.current.slice(0, -1)
-    passado.current = [...passado.current, {nodes: getNodes(), edges: getEdges()}]
-    ultimaEdicao.current = null
-    setNodes(proximo.nodes)
-    setEdges(proximo.edges)
-    setAlterado(true)
-    invalidarValidacao()
-    sincronizar()
-  }, [getNodes, getEdges, setNodes, setEdges, sincronizar, invalidarValidacao])
+  const redo = useCallback(() => {
+    const next = future.current.at(-1)
+    if (!next) return
+    future.current = future.current.slice(0, -1)
+    past.current = [...past.current, {nodes: getNodes(), edges: getEdges()}]
+    lastEdit.current = null
+    setNodes(next.nodes)
+    setEdges(next.edges)
+    setChanged(true)
+    clearValidation()
+    sync()
+  }, [getNodes, getEdges, setNodes, setEdges, sync, clearValidation])
 
-  // ---------- copiar / colar ----------
+  // ---------- copy / paste ----------
 
-  const area = useRef<{nodes: NoDoFluxo[]; edges: Edge[]; colagens: number} | null>(null)
+  const clipboard = useRef<{nodes: FlowNode[]; edges: Edge[]; pastes: number} | null>(null)
 
-  const copiar = useCallback(() => {
-    const selecionados = getNodes().filter(n => n.selected && !ehDoFluxoNo(n))
-    if (selecionados.length === 0) return false
-    const ids = new Set(selecionados.map(n => n.id))
-    area.current = {
-      nodes: structuredClone(selecionados),
+  const copy = useCallback(() => {
+    const chosen = getNodes().filter(n => n.selected && !isFixedNode(n))
+    if (chosen.length === 0) return false
+    const ids = new Set(chosen.map(n => n.id))
+    clipboard.current = {
+      nodes: structuredClone(chosen),
       edges: structuredClone(getEdges().filter(e => ids.has(e.source) && ids.has(e.target))),
-      colagens: 0,
+      pastes: 0,
     }
     return true
   }, [getNodes, getEdges])
 
-  const colar = useCallback(() => {
-    const copiado = area.current
-    if (!copiado || copiado.nodes.length === 0) return
-    copiado.colagens += 1
-    const deslocamento = DESLOCAMENTO_AO_COLAR * copiado.colagens
+  const paste = useCallback(() => {
+    const copied = clipboard.current
+    if (!copied || copied.nodes.length === 0) return
+    copied.pastes += 1
+    const offset = PASTE_OFFSET * copied.pastes
     const ids = new Map<string, string>()
-    const novos = copiado.nodes.map(n => {
-      const id = novoId(ehComponente(n) ? n.data.tipo : n.type ?? 'no')
+    const added = copied.nodes.map(n => {
+      const id = newId(isComponent(n) ? n.data.type : n.type ?? 'node')
       ids.set(n.id, id)
-      return {...structuredClone(n), id, selected: true, dragging: false, position: {x: n.position.x + deslocamento, y: n.position.y + deslocamento}} as NoDoFluxo
+      return {...structuredClone(n), id, selected: true, dragging: false, position: {x: n.position.x + offset, y: n.position.y + offset}} as FlowNode
     })
-    const novasLigacoes = copiado.edges.map(e => ({
-      ...structuredClone(e), id: novoId('edge'), source: ids.get(e.source)!, target: ids.get(e.target)!, selected: false,
+    const addedEdges = copied.edges.map(e => ({
+      ...structuredClone(e), id: newId('edge'), source: ids.get(e.source)!, target: ids.get(e.target)!, selected: false,
     }))
-    registrar()
-    setNodes(atual => [...atual.map(n => ({...n, selected: false})), ...novos])
-    setEdges(atual => [...atual.map(e => ({...e, selected: false})), ...novasLigacoes])
-  }, [registrar, setNodes, setEdges])
+    record()
+    setNodes(current => [...current.map(n => ({...n, selected: false})), ...added])
+    setEdges(current => [...current.map(e => ({...e, selected: false})), ...addedEdges])
+  }, [record, setNodes, setEdges])
 
-  // ---------- salvar ----------
+  // ---------- save ----------
 
-  const salvar = useCallback(() => {
-    const salvo = onSalvar({...base, nome, parametros, nodes: getNodes().map(n => ({...n, selected: false, className: undefined})), edges: getEdges()})
-    setBase(salvo)
-    setAlterado(false)
-  }, [base, nome, parametros, getNodes, getEdges, onSalvar])
+  const save = useCallback(() => {
+    const saved = onSave({...base, name, parameters, nodes: getNodes().map(n => ({...n, selected: false, className: undefined})), edges: getEdges()})
+    setBase(saved)
+    setChanged(false)
+  }, [base, name, parameters, getNodes, getEdges, onSave])
 
   useEffect(() => {
-    function aoTeclar(event: KeyboardEvent) {
+    function onKey(event: KeyboardEvent) {
       if (!(event.metaKey || event.ctrlKey)) return
-      const tecla = event.key.toLowerCase()
-      if (tecla === 's') {
+      const keyName = event.key.toLowerCase()
+      if (keyName === 's') {
         event.preventDefault()
-        salvar()
+        save()
         return
       }
-      if (ehCampoEditavel(event.target)) return
-      if (tecla === 'c') {
-        if (copiar()) event.preventDefault()
-      } else if (tecla === 'x') {
-        if (!copiar()) return
+      if (isEditableField(event.target)) return
+      if (keyName === 'c') {
+        if (copy()) event.preventDefault()
+      } else if (keyName === 'x') {
+        if (!copy()) return
         event.preventDefault()
-        const ids = new Set(getNodes().filter(n => n.selected && !ehDoFluxoNo(n)).map(n => n.id))
-        registrar()
-        setNodes(atual => atual.filter(n => !ids.has(n.id)))
-        setEdges(atual => atual.filter(e => !ids.has(e.source) && !ids.has(e.target)))
-        if (area.current) area.current.colagens = -1
-      } else if (tecla === 'v') {
-        if (!area.current) return
+        const ids = new Set(getNodes().filter(n => n.selected && !isFixedNode(n)).map(n => n.id))
+        record()
+        setNodes(current => current.filter(n => !ids.has(n.id)))
+        setEdges(current => current.filter(e => !ids.has(e.source) && !ids.has(e.target)))
+        if (clipboard.current) clipboard.current.pastes = -1
+      } else if (keyName === 'v') {
+        if (!clipboard.current) return
         event.preventDefault()
-        colar()
-      } else if (tecla === 'z' && !event.shiftKey) {
+        paste()
+      } else if (keyName === 'z' && !event.shiftKey) {
         event.preventDefault()
-        desfazer()
-      } else if ((tecla === 'z' && event.shiftKey) || tecla === 'y') {
+        undo()
+      } else if ((keyName === 'z' && event.shiftKey) || keyName === 'y') {
         event.preventDefault()
-        refazer()
+        redo()
       }
     }
-    window.addEventListener('keydown', aoTeclar)
-    return () => window.removeEventListener('keydown', aoTeclar)
-  }, [desfazer, refazer, copiar, colar, salvar, getNodes, registrar, setNodes, setEdges])
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [undo, redo, copy, paste, save, getNodes, record, setNodes, setEdges])
 
-  const historico = useMemo(() => ({registrar, registrarEdicao}), [registrar, registrarEdicao])
+  const history = useMemo(() => ({record, recordEdit}), [record, recordEdit])
 
-  // ---------- janelas de configuração (duplo clique; uma por componente, várias abertas) ----------
+  // ---------- configuration windows (double click; one per component, several open) ----------
 
-  const [janelas, setJanelas] = useState<{id: string; posicao: PosicaoDaJanela; tamanho?: TamanhoDaJanela}[]>([])
+  const [windows, setWindows] = useState<{id: string; position: WindowPosition; size?: WindowSize}[]>([])
 
-  // posição e tamanho de cada janela ficam lembrados neste navegador (por fluxo e componente), fora do fluxo e do Ctrl+Z
-  const chaveDaJanela = useCallback((noId: string) => `dataflow-fluxos-janela:${fluxo.id}:${noId}`, [fluxo.id])
-  const lerJanela = useCallback((noId: string): {posicao?: PosicaoDaJanela; tamanho?: TamanhoDaJanela} => {
+  // each window's position and size are remembered in this browser (per flow and component), outside the flow and Ctrl+Z
+  const windowKey = useCallback((nodeId: string) => `dataflow-flows-window:${flow.id}:${nodeId}`, [flow.id])
+  const readWindow = useCallback((nodeId: string): {position?: WindowPosition; size?: WindowSize} => {
     try {
-      return JSON.parse(localStorage.getItem(chaveDaJanela(noId)) ?? '{}')
+      return JSON.parse(localStorage.getItem(windowKey(nodeId)) ?? '{}')
     } catch {
       return {}
     }
-  }, [chaveDaJanela])
-  const lembrarJanela = useCallback((noId: string, mudanca: {posicao?: PosicaoDaJanela; tamanho?: TamanhoDaJanela}) => {
+  }, [windowKey])
+  const rememberWindow = useCallback((nodeId: string, update: {position?: WindowPosition; size?: WindowSize}) => {
     try {
-      localStorage.setItem(chaveDaJanela(noId), JSON.stringify({...lerJanela(noId), ...mudanca}))
+      localStorage.setItem(windowKey(nodeId), JSON.stringify({...readWindow(nodeId), ...update}))
     } catch {
-      // sem storage: abre no lugar padrão da próxima vez
+      // no storage: opens in the default place next time
     }
-  }, [chaveDaJanela, lerJanela])
+  }, [windowKey, readWindow])
 
-  const abrirJanela = useCallback((id: string) => {
-    const lembrada = lerJanela(id)
-    setJanelas(atual => {
-      const aberta = atual.find(j => j.id === id)
-      if (aberta) return [...atual.filter(j => j.id !== id), aberta] // já aberta: só vem para a frente
-      const n = atual.length % 8
-      const no = getNodes().find(x => x.id === id)
-      const padrao = no && ehComponente(no) ? POR_TIPO[no.data.tipo]?.tamanhoDaJanela : undefined
-      return [...atual, {id, posicao: lembrada.posicao ?? {x: 24 + n * 28, y: 56 + n * 28}, tamanho: lembrada.tamanho ?? padrao}]
+  const openWindow = useCallback((id: string) => {
+    const remembered = readWindow(id)
+    setWindows(current => {
+      const open = current.find(j => j.id === id)
+      if (open) return [...current.filter(j => j.id !== id), open] // already open: only comes to the front
+      const n = current.length % 8
+      const node = getNodes().find(x => x.id === id)
+      const fallback = node && isComponent(node) ? BY_TYPE[node.data.type]?.windowSize : undefined
+      return [...current, {id, position: remembered.position ?? {x: 24 + n * 28, y: 56 + n * 28}, size: remembered.size ?? fallback}]
     })
-  }, [lerJanela, getNodes])
-  const fecharJanela = useCallback((id: string) => setJanelas(atual => atual.filter(j => j.id !== id)), [])
-  const focarJanela = useCallback((id: string) => setJanelas(atual =>
-    atual.at(-1)?.id === id ? atual : [...atual.filter(j => j.id !== id), atual.find(j => j.id === id)!]), [])
-  const moverJanela = useCallback((id: string, posicao: PosicaoDaJanela) => {
-    setJanelas(atual => atual.map(j => (j.id === id ? {...j, posicao} : j)))
-    lembrarJanela(id, {posicao})
-  }, [lembrarJanela])
+  }, [readWindow, getNodes])
+  const closeWindow = useCallback((id: string) => setWindows(current => current.filter(j => j.id !== id)), [])
+  const focusWindow = useCallback((id: string) => setWindows(current =>
+    current.at(-1)?.id === id ? current : [...current.filter(j => j.id !== id), current.find(j => j.id === id)!]), [])
+  const moveWindow = useCallback((id: string, position: WindowPosition) => {
+    setWindows(current => current.map(j => (j.id === id ? {...j, position} : j)))
+    rememberWindow(id, {position})
+  }, [rememberWindow])
 
-  // componente apagado (Delete, Ctrl+X, desfazer...) fecha a janela dele
+  // a deleted component (Delete, Ctrl+X, undo...) closes its window
   useEffect(() => {
-    setJanelas(atual => {
-      const restantes = atual.filter(j => nodes.some(n => n.id === j.id))
-      return restantes.length === atual.length ? atual : restantes
+    setWindows(current => {
+      const remaining = current.filter(j => nodes.some(n => n.id === j.id))
+      return remaining.length === current.length ? current : remaining
     })
   }, [nodes])
 
-  // ---------- ligações ----------
+  // ---------- edges ----------
 
-  const aoLigar = useCallback((ligacao: Connection) => {
-    registrar()
-    setEdges(atual => addEdge(ligacao, atual))
-  }, [setEdges, registrar])
+  const onConnect = useCallback((connection: Connection) => {
+    record()
+    setEdges(current => addEdge(connection, current))
+  }, [setEdges, record])
 
-  /** Cada porta aceita uma ligação só, e só de um tipo compatível (envelope com envelope, qualquer com tudo...). */
-  const ligacaoValida: IsValidConnection = useCallback(ligacao => {
-    if (ligacao.source === ligacao.target) return false
-    const origem = nodes.find(n => n.id === ligacao.source)
-    const destino = nodes.find(n => n.id === ligacao.target)
-    if (!origem || !destino || !ehComponente(origem) || !ehComponente(destino)) return false
-    const tipoDeSaida = tipoDaPorta(origem.data, ligacao.sourceHandle)
-    const tipoDeEntrada = tipoDaPorta(destino.data, ligacao.targetHandle)
-    if (!tipoDeSaida || !tipoDeEntrada || !portasCompativeis(tipoDeSaida, tipoDeEntrada)) return false
-    // o End aceita várias ligações na mesma entrada (o motor junta, como o Union)
-    const entradaOcupada = destino.data.tipo !== FIM && edges.some(e => e.target === ligacao.target && e.targetHandle === ligacao.targetHandle)
-    const saidaOcupada = edges.some(e => e.source === ligacao.source && e.sourceHandle === ligacao.sourceHandle)
-    return !entradaOcupada && !saidaOcupada
+  /** Each port accepts a single edge, and only of a compatible type (envelope with envelope, any with everything...). */
+  const isValidConnection: IsValidConnection = useCallback(connection => {
+    if (connection.source === connection.target) return false
+    const source = nodes.find(n => n.id === connection.source)
+    const targetNode = nodes.find(n => n.id === connection.target)
+    if (!source || !targetNode || !isComponent(source) || !isComponent(targetNode)) return false
+    const outputType = portType(source.data, connection.sourceHandle)
+    const inputType = portType(targetNode.data, connection.targetHandle)
+    if (!outputType || !inputType || !compatiblePorts(outputType, inputType)) return false
+    // the End accepts several edges on the same input (the engine merges them, like the Union)
+    const inputTaken = targetNode.data.type !== END && edges.some(e => e.target === connection.target && e.targetHandle === connection.targetHandle)
+    const outputTaken = edges.some(e => e.source === connection.source && e.sourceHandle === connection.sourceHandle)
+    return !inputTaken && !outputTaken
   }, [edges, nodes])
 
-  // ---------- arrastar da paleta ----------
+  // ---------- drag from the palette ----------
 
-  function aoArrastarSobre(event: DragEvent<HTMLElement>) {
+  function onDragOver(event: DragEvent<HTMLElement>) {
     event.preventDefault()
     event.dataTransfer.dropEffect = 'move'
   }
 
-  function novoNo(tipo: string, position: {x: number; y: number}): NoComponente | null {
-    const def = POR_TIPO[tipo]
+  function newNode(type: string, position: {x: number; y: number}): ComponentNode | null {
+    const def = BY_TYPE[type]
     if (!def) return null
     return {
-      id: novoId(tipo), type: 'componente', position, selected: true,
-      data: {tipo, rotulo: def.rotulo, config: structuredClone(def.configPadrao ?? {}), chaveDeSaida: def.chaveDeSaidaPadrao ? chaveLivre(def.chaveDeSaidaPadrao) : undefined},
+      id: newId(type), type: 'component', position, selected: true,
+      data: {type, label: def.label, config: structuredClone(def.defaultConfig ?? {}), outputKey: def.defaultOutputKey ? freeKey(def.defaultOutputKey) : undefined},
     }
   }
 
-  function aoSoltar(event: DragEvent<HTMLElement>) {
+  function onDrop(event: DragEvent<HTMLElement>) {
     event.preventDefault()
-    const no = novoNo(event.dataTransfer.getData(DRAG_MIME), screenToFlowPosition({x: event.clientX - 128, y: event.clientY - 30}))
-    if (!no) return
-    registrar()
-    setNodes(atual => [...atual.map(n => ({...n, selected: false})), no])
+    const node = newNode(event.dataTransfer.getData(DRAG_MIME), screenToFlowPosition({x: event.clientX - 128, y: event.clientY - 30}))
+    if (!node) return
+    record()
+    setNodes(current => [...current.map(n => ({...n, selected: false})), node])
   }
 
   /**
-   * Duplo clique na paleta: põe o componente na prancheta. Com um componente selecionado, o novo vai à direita dele
-   * e a primeira saída livre do selecionado liga na entrada do novo, se os tipos forem compatíveis.
+   * Double click on the palette: puts the component on the canvas. With a component selected, the new one goes to its right
+   * and the selected one's first free output connects to the new one's input, if the types are compatible.
    */
-  function adicionarDaPaleta(tipo: string) {
-    const atuais = getNodes()
-    const selecionados = atuais.filter(n => n.selected)
-    const anterior = selecionados.length === 1 && ehComponente(selecionados[0]) ? selecionados[0] : null
-    const caixa = wrapperRef.current?.getBoundingClientRect()
-    const centro = caixa ? screenToFlowPosition({x: caixa.left + caixa.width / 2 - 128, y: caixa.top + caixa.height / 2 - 60}) : {x: 0, y: 0}
-    const posicao = anterior
-      ? {x: anterior.position.x + (anterior.measured?.width ?? 288) + 80, y: anterior.position.y}
-      : centro
-    const no = novoNo(tipo, posicao)
-    if (!no) return
+  function addFromPalette(type: string) {
+    const currentNodes = getNodes()
+    const chosen = currentNodes.filter(n => n.selected)
+    const previous = chosen.length === 1 && isComponent(chosen[0]) ? chosen[0] : null
+    const box = wrapperRef.current?.getBoundingClientRect()
+    const center = box ? screenToFlowPosition({x: box.left + box.width / 2 - 128, y: box.top + box.height / 2 - 60}) : {x: 0, y: 0}
+    const position = previous
+      ? {x: previous.position.x + (previous.measured?.width ?? 288) + 80, y: previous.position.y}
+      : center
+    const node = newNode(type, position)
+    if (!node) return
 
-    // liga só se a saída do selecionado ainda está livre e o tipo combina com a 1ª entrada do novo
-    const tipoDaEntradaNova = tipoDaPorta(no.data, 'in-0')
-    const ligacoesAtuais = getEdges()
-    const saidaLivre = anterior && tipoDaEntradaNova
-      ? Array.from({length: qtdSaidas(anterior.data)}, (_, i) => `out-${i}`).find(porta => {
-          const tipoDaSaida = tipoDaPorta(anterior.data, porta)
-          return tipoDaSaida && portasCompativeis(tipoDaSaida, tipoDaEntradaNova)
-            && !ligacoesAtuais.some(e => e.source === anterior.id && e.sourceHandle === porta)
+    // connects only if the selected one's output is still free and the type matches the new one's 1st input
+    const newInputType = portType(node.data, 'in-0')
+    const currentEdges = getEdges()
+    const freeOutput = previous && newInputType
+      ? Array.from({length: outputCount(previous.data)}, (_, i) => `out-${i}`).find(port => {
+          const outType = portType(previous.data, port)
+          return outType && compatiblePorts(outType, newInputType)
+            && !currentEdges.some(e => e.source === previous.id && e.sourceHandle === port)
         })
       : undefined
 
-    registrar()
-    setNodes(lista => [...lista.map(n => ({...n, selected: false})), no])
-    if (anterior && saidaLivre) {
-      setEdges(lista => addEdge({source: anterior.id, sourceHandle: saidaLivre, target: no.id, targetHandle: 'in-0'}, lista))
+    record()
+    setNodes(list => [...list.map(n => ({...n, selected: false})), node])
+    if (previous && freeOutput) {
+      setEdges(list => addEdge({source: previous.id, sourceHandle: freeOutput, target: node.id, targetHandle: 'in-0'}, list))
     }
   }
 
-  /** Primeiro nome livre para a chave no DATA: mapper, mapper2, mapper3... */
-  function chaveLivre(base: string) {
-    const usadas = new Set(getNodes().filter(ehComponente).map(n => n.data.chaveDeSaida))
-    let nome = base
-    for (let i = 2; usadas.has(nome); i++) nome = `${base}${i}`
-    return nome
+  /** First free name for the key in DATA: mapper, mapper2, mapper3... */
+  function freeKey(base: string) {
+    const used = new Set(getNodes().filter(isComponent).map(n => n.data.outputKey))
+    let name = base
+    for (let i = 2; used.has(name); i++) name = `${base}${i}`
+    return name
   }
 
-  function adicionarComentario() {
-    const caixa = wrapperRef.current?.getBoundingClientRect()
-    const centro = caixa ? screenToFlowPosition({x: caixa.left + caixa.width / 2, y: caixa.top + caixa.height / 2}) : {x: 0, y: 0}
-    registrar()
-    const comentario: NoComentario = {
-      id: novoId('comentario'), type: 'comentario', selected: true, ...TAMANHO_DO_COMENTARIO,
-      position: {x: centro.x - TAMANHO_DO_COMENTARIO.width / 2, y: centro.y - TAMANHO_DO_COMENTARIO.height / 2},
-      data: {titulo: '', texto: '', recolhido: false},
+  function addComment() {
+    const box = wrapperRef.current?.getBoundingClientRect()
+    const center = box ? screenToFlowPosition({x: box.left + box.width / 2, y: box.top + box.height / 2}) : {x: 0, y: 0}
+    record()
+    const comment: CommentNode = {
+      id: newId('comment'), type: 'comment', selected: true, ...COMMENT_SIZE,
+      position: {x: center.x - COMMENT_SIZE.width / 2, y: center.y - COMMENT_SIZE.height / 2},
+      data: {title: '', text: '', collapsed: false},
     }
-    setNodes(atual => [comentario, ...atual.map(n => ({...n, selected: false}))])
+    setNodes(current => [comment, ...current.map(n => ({...n, selected: false}))])
   }
 
-  function adicionarGrupo() {
-    const caixa = wrapperRef.current?.getBoundingClientRect()
-    const centro = caixa ? screenToFlowPosition({x: caixa.left + caixa.width / 2, y: caixa.top + caixa.height / 2}) : {x: 0, y: 0}
-    registrar()
-    const usadas = getNodes().filter(n => n.type === 'grupo').length
-    const grupo: NoGrupo = {
-      id: novoId('grupo'), type: 'grupo', selected: true, zIndex: Z_DO_GRUPO, ...TAMANHO_DO_GRUPO,
-      position: {x: centro.x - TAMANHO_DO_GRUPO.width / 2, y: centro.y - TAMANHO_DO_GRUPO.height / 2},
-      data: {titulo: '', cor: CORES_DO_GRUPO[usadas % CORES_DO_GRUPO.length]},
+  function addGroup() {
+    const box = wrapperRef.current?.getBoundingClientRect()
+    const center = box ? screenToFlowPosition({x: box.left + box.width / 2, y: box.top + box.height / 2}) : {x: 0, y: 0}
+    record()
+    const used = getNodes().filter(n => n.type === 'group').length
+    const group: GroupNode = {
+      id: newId('group'), type: 'group', selected: true, zIndex: GROUP_Z, ...GROUP_SIZE,
+      position: {x: center.x - GROUP_SIZE.width / 2, y: center.y - GROUP_SIZE.height / 2},
+      data: {title: '', color: GROUP_COLORS[used % GROUP_COLORS.length]},
     }
-    setNodes(atual => [grupo, ...atual.map(n => ({...n, selected: false}))])
+    setNodes(current => [group, ...current.map(n => ({...n, selected: false}))])
   }
 
-  /** Arrastar um grupo leva junto o que está inteiro dentro dele (posições do início do arraste). */
-  const arrasteDoGrupo = useRef<{id: string; inicio: XYPosition; dentro: Map<string, XYPosition>} | null>(null)
+  /** Dragging a group takes along whatever is entirely inside it (positions from the start of the drag). */
+  const groupDrag = useRef<{id: string; start: XYPosition; inside: Map<string, XYPosition>} | null>(null)
 
-  function comecarArraste(_: unknown, no: NoDoFluxo) {
-    registrar()
-    arrasteDoGrupo.current = null
-    if (no.type !== 'grupo') return
-    const largura = no.measured?.width ?? no.width ?? 0
-    const altura = no.measured?.height ?? no.height ?? 0
-    const dentro = new Map<string, XYPosition>()
+  function onDragStart(_: unknown, node: FlowNode) {
+    record()
+    groupDrag.current = null
+    if (node.type !== 'group') return
+    const width = node.measured?.width ?? node.width ?? 0
+    const height = node.measured?.height ?? node.height ?? 0
+    const inside = new Map<string, XYPosition>()
     for (const n of getNodes()) {
-      if (n.id === no.id || n.selected) continue
+      if (n.id === node.id || n.selected) continue
       const w = n.measured?.width ?? 0
       const h = n.measured?.height ?? 0
-      if (n.position.x >= no.position.x && n.position.y >= no.position.y
-        && n.position.x + w <= no.position.x + largura && n.position.y + h <= no.position.y + altura) dentro.set(n.id, n.position)
+      if (n.position.x >= node.position.x && n.position.y >= node.position.y
+        && n.position.x + w <= node.position.x + width && n.position.y + h <= node.position.y + height) inside.set(n.id, n.position)
     }
-    arrasteDoGrupo.current = {id: no.id, inicio: no.position, dentro}
+    groupDrag.current = {id: node.id, start: node.position, inside}
   }
 
-  function arrastar(_: unknown, no: NoDoFluxo) {
-    const arraste = arrasteDoGrupo.current
-    if (!arraste || arraste.id !== no.id || arraste.dentro.size === 0) return
-    const dx = no.position.x - arraste.inicio.x
-    const dy = no.position.y - arraste.inicio.y
-    setNodes(atual => atual.map(n => {
-      const p = arraste.dentro.get(n.id)
+  function onDrag(_: unknown, node: FlowNode) {
+    const drag = groupDrag.current
+    if (!drag || drag.id !== node.id || drag.inside.size === 0) return
+    const dx = node.position.x - drag.start.x
+    const dy = node.position.y - drag.start.y
+    setNodes(current => current.map(n => {
+      const p = drag.inside.get(n.id)
       return p ? {...n, position: {x: p.x + dx, y: p.y + dy}} : n
     }))
   }
 
-  // ---------- painel ----------
+  // ---------- panel ----------
 
-  /** Nome da porta para as métricas: o rótulo da saída (SP, false...) ou o id dela (out-1, in-0, erro). */
-  const nomeDaPorta = useCallback((noId: string, porta: string) => {
-    const [lado, n] = porta.split('-')
-    const no = nodes.find(x => x.id === noId)
-    if (lado === 'out' && no && ehComponente(no)) return rotuloDaSaida(no.data, Number(n)) ?? porta
-    return porta
+  /** Port name for the metrics: the output's label (CA, false...) or its id (out-1, in-0, error). */
+  const portName = useCallback((nodeId: string, port: string) => {
+    const [side, n] = port.split('-')
+    const node = nodes.find(x => x.id === nodeId)
+    if (side === 'out' && node && isComponent(node)) return outputLabel(node.data, Number(n)) ?? port
+    return port
   }, [nodes])
 
-  const mudarRotulo = useCallback((id: string, rotulo: string) => {
-    registrarEdicao(`${id}:rotulo`)
-    setNodes(atual => atual.map(n => (n.id === id && ehComponente(n) ? {...n, data: {...n.data, rotulo}} : n)))
-  }, [setNodes, registrarEdicao])
+  const changeLabel = useCallback((id: string, label: string) => {
+    recordEdit(`${id}:label`)
+    setNodes(current => current.map(n => (n.id === id && isComponent(n) ? {...n, data: {...n.data, label}} : n)))
+  }, [setNodes, recordEdit])
 
-  const mudarDados = useCallback((id: string, mudanca: Partial<Pick<NoComponente['data'], 'chaveDeSaida' | 'override' | 'notas'>>) => {
-    registrarEdicao(`${id}:${Object.keys(mudanca).join(',')}`)
-    setNodes(atual => atual.map(n => (n.id === id && ehComponente(n) ? {...n, data: {...n.data, ...mudanca}} : n)))
-  }, [setNodes, registrarEdicao])
+  const changeData = useCallback((id: string, update: Partial<Pick<ComponentNode['data'], 'outputKey' | 'override' | 'notes'>>) => {
+    recordEdit(`${id}:${Object.keys(update).join(',')}`)
+    setNodes(current => current.map(n => (n.id === id && isComponent(n) ? {...n, data: {...n.data, ...update}} : n)))
+  }, [setNodes, recordEdit])
 
-  const mudarConfig = useCallback((id: string, chave: string, valor: unknown) => {
-    registrarEdicao(`${id}:${chave}`)
-    setNodes(atual => atual.map(n => (n.id === id && ehComponente(n) ? {...n, data: {...n.data, config: {...n.data.config, [chave]: valor}}} : n)))
-  }, [setNodes, registrarEdicao])
+  const changeConfig = useCallback((id: string, key: string, value: unknown) => {
+    recordEdit(`${id}:${key}`)
+    setNodes(current => current.map(n => (n.id === id && isComponent(n) ? {...n, data: {...n.data, config: {...n.data.config, [key]: value}}} : n)))
+  }, [setNodes, recordEdit])
 
-  const excluir = useCallback((id: string) => {
-    registrar()
-    setNodes(atual => atual.filter(n => n.id !== id))
-    setEdges(atual => atual.filter(e => e.source !== id && e.target !== id))
-  }, [setNodes, setEdges, registrar])
+  const remove = useCallback((id: string) => {
+    record()
+    setNodes(current => current.filter(n => n.id !== id))
+    setEdges(current => current.filter(e => e.source !== id && e.target !== id))
+  }, [setNodes, setEdges, record])
 
-  function irPara(noId: string) {
-    setNodes(atual => atual.map(n => ({...n, selected: n.id === noId})))
-    fitView({nodes: [{id: noId}], duration: 400, maxZoom: 1.1, padding: 0.6})
+  function goTo(nodeId: string) {
+    setNodes(current => current.map(n => ({...n, selected: n.id === nodeId})))
+    fitView({nodes: [{id: nodeId}], duration: 400, maxZoom: 1.1, padding: 0.6})
   }
 
-  // ---------- validar / limpar ----------
+  // ---------- validate / clear ----------
 
-  /** Confere a montagem; se estiver ok, roda no runner (validation = simula, execution = de verdade). */
-  function rodar(modo: ModoDeExecucao) {
-    if (validando || rodando) return
-    invalidarValidacao()
-    setValidando(true)
+  /** Checks the assembly; if it is ok, runs it on the runner (validation = simulates, execution = for real). */
+  function execute(mode: RunMode) {
+    if (validating || running) return
+    clearValidation()
+    setValidating(true)
     timer.current = setTimeout(async () => {
-      const encontradas = validarFluxo(getNodes(), getEdges())
-      setPendencias(encontradas)
-      setValidando(false)
-      if (encontradas.length > 0) {
-        setValidacao({ok: false, mensagens: encontradas.map(p => p.mensagem)})
-        setVerPendencias(true)
+      const found = validateFlow(getNodes(), getEdges())
+      setIssues(found)
+      setValidating(false)
+      if (found.length > 0) {
+        setValidation({ok: false, messages: found.map(p => p.message)})
+        setShowIssues(true)
         return
       }
-      setRodando(modo)
+      setRunning(mode)
       try {
-        idDaExecucao.current = crypto.randomUUID()
-        const registro = await executarNoRunner(paraExecutar(nome, parametros, getNodes(), getEdges(), fluxo.id, fluxo.projetoId), modo, idDaExecucao.current, undefined, fluxo.projetoId)
-        setExecucao(registro)
-        setPendencias(registro.componentes.filter(c => c.status === 'falhou').map(c => ({noId: c.noId, mensagem: `"${c.rotulo}" falhou.`})))
-        setValidacao(registro.status === 'falhou'
-          ? {ok: false, mensagens: [registro.erro ?? 'A execução falhou.']}
-          : {ok: true, mensagens: [registro.status === 'concluida' ? 'Execução concluída.' : registro.status === 'com-avisos' ? 'Execução concluída com avisos.' : 'Execução concluída com erros.']})
+        runId.current = crypto.randomUUID()
+        const result = await runOnRunner(toExecutable(name, parameters, getNodes(), getEdges(), flow.id, flow.projectId), mode, runId.current, undefined, flow.projectId)
+        setRun(result)
+        setIssues(result.components.filter(c => c.status === 'failed').map(c => ({nodeId: c.nodeId, message: `"${c.label}" failed.`})))
+        setValidation(result.status === 'failed'
+          ? {ok: false, messages: [result.error ?? 'The run failed.']}
+          : {ok: true, messages: [result.status === 'completed' ? 'Run completed.' : result.status === 'with-warnings' ? 'Run completed with warnings.' : 'Run completed with errors.']})
       } catch (e) {
-        setValidacao({ok: false, mensagens: [e instanceof Error ? e.message : String(e)]})
+        setValidation({ok: false, messages: [e instanceof Error ? e.message : String(e)]})
       } finally {
-        setRodando(null)
+        setRunning(null)
       }
-    }, TEMPO_DE_VALIDACAO_MS)
+    }, VALIDATION_DELAY_MS)
   }
 
-  /** Organiza o fluxo da esquerda para a direita (Dagre) e enquadra; volta com Ctrl+Z. */
-  function organizar() {
-    registrar()
-    setNodes(atual => organizarHorizontal(atual, getEdges()))
+  /** Arranges the flow from left to right (Dagre) and frames it; undone with Ctrl+Z. */
+  function arrange() {
+    record()
+    setNodes(current => arrangeHorizontally(current, getEdges()))
     requestAnimationFrame(() => fitView({padding: 0.15, maxZoom: 1, duration: 300}))
   }
 
-  function limpar() {
-    registrar()
-    setNodes(atual => atual.filter(ehDoFluxoNo))
+  function clear() {
+    record()
+    setNodes(current => current.filter(isFixedNode))
     setEdges([])
   }
 
   return (
-    <HistoricoContext.Provider value={historico}>
-    <ParametrosContext.Provider value={parametros}>
-    <ResultadoContext.Provider value={statusDaUltimaExecucao}>
-    <AvisosContext.Provider value={avisos}>
+    <HistoryContext.Provider value={history}>
+    <ParametersContext.Provider value={parameters}>
+    <ResultContext.Provider value={lastRunStatus}>
+    <WarningsContext.Provider value={warnings}>
       <div className="flex h-dvh flex-col">
-        <Barra
-          projeto={{id: fluxo.projetoId ?? PROJETO_DE_EXEMPLOS, nome: obterProjeto(fluxo.projetoId ?? PROJETO_DE_EXEMPLOS)?.nome ?? 'Projeto'}}
-          pasta={fluxo.pasta}
-          nome={nome}
-          onNome={v => {
-            setNome(v)
-            setAlterado(true)
+        <Toolbar
+          project={{id: flow.projectId ?? EXAMPLES_PROJECT, name: getProject(flow.projectId ?? EXAMPLES_PROJECT)?.name ?? 'Project'}}
+          folder={flow.folder}
+          name={name}
+          onName={v => {
+            setName(v)
+            setChanged(true)
           }}
-          validacao={validacao}
-          onExecutar={() => rodar('execution')}
-          onParar={() => idDaExecucao.current && cancelarNoRunner(idDaExecucao.current)}
-          validando={validando || rodando !== null}
-          rodando={rodando}
-          onLimpar={limpar}
-          onOrganizar={organizar}
-          onComentario={adicionarComentario}
-          onGrupo={adicionarGrupo}
-          onDesfazer={desfazer}
-          onRefazer={refazer}
-          podeDesfazer={tamanhoDoHistorico.passado > 0}
-          podeRefazer={tamanhoDoHistorico.futuro > 0}
-          alterado={alterado}
-          onSalvar={salvar}
-          onVerPendencias={() => setVerPendencias(v => !v)}
+          validation={validation}
+          onRun={() => execute('execution')}
+          onStop={() => runId.current && cancelOnRunner(runId.current)}
+          validating={validating || running !== null}
+          running={running}
+          onClear={clear}
+          onArrange={arrange}
+          onComment={addComment}
+          onGroup={addGroup}
+          onUndo={undo}
+          onRedo={redo}
+          canUndo={historySize.past > 0}
+          canRedo={historySize.future > 0}
+          changed={changed}
+          onSave={save}
+          onShowIssues={() => setShowIssues(v => !v)}
         />
         <div className="flex min-h-0 flex-1">
-          <Paleta onAdicionar={adicionarDaPaleta}/>
-          <main ref={wrapperRef} className="relative min-w-0 flex-1" onDragOver={aoArrastarSobre} onDrop={aoSoltar}>
-            <h1 className="sr-only">Prancheta do fluxo</h1>
+          <Palette onAdd={addFromPalette}/>
+          <main ref={wrapperRef} className="relative min-w-0 flex-1" onDragOver={onDragOver} onDrop={onDrop}>
+            <h1 className="sr-only">Flow canvas</h1>
             <ReactFlow
-              nodes={nosNaTela}
-              edges={ligacoesNaTela}
+              nodes={shownNodes}
+              edges={shownEdges}
               nodeTypes={nodeTypes}
               onNodesChange={onNodesChange}
               onEdgesChange={onEdgesChange}
-              onConnect={aoLigar}
-              isValidConnection={ligacaoValida}
+              onConnect={onConnect}
+              isValidConnection={isValidConnection}
               onNodeDoubleClick={(_, n) => {
-                if (n.type === 'componente' && (ehComponente(n) && (!ehDoFluxoNo(n) || n.data.tipo === INICIO))) abrirJanela(n.id)
+                if (n.type === 'component' && (isComponent(n) && (!isFixedNode(n) || n.data.type === START))) openWindow(n.id)
               }}
               zoomOnDoubleClick={false}
               elevateNodesOnSelect={false}
-              onNodeDragStart={comecarArraste}
-              onNodeDrag={arrastar}
-              onSelectionDragStart={registrar}
+              onNodeDragStart={onDragStart}
+              onNodeDrag={onDrag}
+              onSelectionDragStart={record}
               onBeforeDelete={async () => {
-                registrar()
+                record()
                 return true
               }}
               defaultEdgeOptions={{type: 'default'}}
@@ -631,111 +631,111 @@ function Editor({fluxo, onSalvar}: Props) {
               deleteKeyCode={['Backspace', 'Delete']}
               proOptions={{hideAttribution: true}}
             >
-              <Background id="menor" variant={BackgroundVariant.Lines} gap={20} color="var(--grid)" lineWidth={0.5}/>
-              <Background id="maior" variant={BackgroundVariant.Lines} gap={100} color="var(--grid)" lineWidth={1}/>
+              <Background id="minor" variant={BackgroundVariant.Lines} gap={20} color="var(--grid)" lineWidth={0.5}/>
+              <Background id="major" variant={BackgroundVariant.Lines} gap={100} color="var(--grid)" lineWidth={1}/>
               <Controls position="bottom-left" showInteractive={false}/>
               <MiniMap
                 position="bottom-right"
                 pannable
                 zoomable
                 nodeColor={n => {
-                  const no = n as NoDoFluxo
-                  if (no.type === 'grupo') return `color-mix(in oklch, ${no.data.cor} 20%, transparent)`
-                  if (!ehComponente(no)) return 'color-mix(in oklch, var(--comentario) 45%, transparent)'
-                  const categoria = POR_TIPO[no.data.tipo]?.categoria
-                  return categoria ? COR_DA_CATEGORIA[categoria] : 'var(--muted)'
+                  const node = n as FlowNode
+                  if (node.type === 'group') return `color-mix(in oklch, ${node.data.color} 20%, transparent)`
+                  if (!isComponent(node)) return 'color-mix(in oklch, var(--comment) 45%, transparent)'
+                  const category = BY_TYPE[node.data.type]?.category
+                  return category ? CATEGORY_COLOR[category] : 'var(--muted)'
                 }}
                 nodeBorderRadius={4}
               />
             </ReactFlow>
 
-            {nodes.every(ehDoFluxoNo) && (
+            {nodes.every(isFixedNode) && (
               <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
                 <p className="rounded-md border border-dashed border-border bg-background/80 px-4 py-3 text-sm text-muted-foreground">
-                  Arraste componentes da lateral para começar seu fluxo.
+                  Drag components from the sidebar to start your flow.
                 </p>
               </div>
             )}
 
-            {verPendencias && pendencias.length > 0 && (
+            {showIssues && issues.length > 0 && (
               <section className="absolute bottom-4 left-1/2 z-10 flex max-h-64 w-[min(640px,calc(100%-2rem))] -translate-x-1/2 flex-col overflow-hidden rounded-lg border border-destructive/40 bg-background/95 shadow-xl backdrop-blur-sm"
-                       aria-label="Pendências do fluxo">
+                       aria-label="Flow issues">
                 <header className="flex items-center gap-2 border-b border-border px-3 py-2 text-sm font-medium text-destructive">
                   <CircleAlert className="size-4" aria-hidden="true"/>
-                  {pendencias.length} pendência{pendencias.length === 1 ? '' : 's'} · clique para ir ao componente
-                  <button type="button" onClick={() => setVerPendencias(false)} className="ml-auto rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
-                          aria-label="Fechar pendências">
+                  {issues.length} issue{issues.length === 1 ? '' : 's'} · click to go to the component
+                  <button type="button" onClick={() => setShowIssues(false)} className="ml-auto rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+                          aria-label="Close issues">
                     <X className="size-4" aria-hidden="true"/>
                   </button>
                 </header>
                 <ul className="overflow-y-auto py-1 text-sm">
-                  {pendencias.map((p, i) => (
+                  {issues.map((p, i) => (
                     <li key={i}>
-                      <button type="button" onClick={() => irPara(p.noId)} className="w-full px-3 py-1.5 text-left hover:bg-accent">{p.mensagem}</button>
+                      <button type="button" onClick={() => goTo(p.nodeId)} className="w-full px-3 py-1.5 text-left hover:bg-accent">{p.message}</button>
                     </li>
                   ))}
                 </ul>
               </section>
             )}
-            <div data-janelas className="pointer-events-none absolute inset-0 z-30 overflow-hidden">
-              {janelas.map((j, i) => {
-                const no = nodes.find(n => n.id === j.id)
-                if (!no || !ehComponente(no)) return null
-                const ativa = i === janelas.length - 1
-                const comum = {
-                  posicao: j.posicao, tamanhoInicial: j.tamanho, z: i + 1, ativa,
-                  onMover: (p: PosicaoDaJanela) => moverJanela(j.id, p),
-                  onRedimensionar: (t: TamanhoDaJanela) => lembrarJanela(j.id, {tamanho: t}),
-                  onFocar: () => focarJanela(j.id),
-                  onFechar: () => fecharJanela(j.id),
+            <div data-windows className="pointer-events-none absolute inset-0 z-30 overflow-hidden">
+              {windows.map((j, i) => {
+                const node = nodes.find(n => n.id === j.id)
+                if (!node || !isComponent(node)) return null
+                const active = i === windows.length - 1
+                const common = {
+                  position: j.position, initialSize: j.size, z: i + 1, active,
+                  onMove: (p: WindowPosition) => moveWindow(j.id, p),
+                  onResize: (t: WindowSize) => rememberWindow(j.id, {size: t}),
+                  onFocus: () => focusWindow(j.id),
+                  onClose: () => closeWindow(j.id),
                 }
-                if (no.data.tipo === INICIO) {
+                if (node.data.type === START) {
                   return (
-                    <Janela key={j.id} {...comum} rotulo="Parâmetros do workflow" titulo="Start" subtitulo="Parâmetros do workflow"
-                            icone={<span className="flex size-9 shrink-0 items-center justify-center rounded-md bg-flow/15 text-flow"><Play className="size-5" aria-hidden="true"/></span>}>
-                      <PainelDoWorkflow parametros={parametros} onChange={p => {
-                        setParametros(p)
-                        setAlterado(true)
+                    <FloatingWindow key={j.id} {...common} label="Workflow parameters" title="Start" subtitle="Workflow parameters"
+                            icon={<span className="flex size-9 shrink-0 items-center justify-center rounded-md bg-flow/15 text-flow"><Play className="size-5" aria-hidden="true"/></span>}>
+                      <WorkflowPanel parameters={parameters} onChange={p => {
+                        setParameters(p)
+                        setChanged(true)
                       }}
-                        recebeEntrada={no.data.config.recebeEntrada === true}
-                        onRecebeEntrada={sim => mudarConfig(no.id, 'recebeEntrada', sim)}
-                        entradaDeTeste={String(no.data.config.entradaDeTeste ?? '')}
-                        onEntradaDeTeste={json => mudarConfig(no.id, 'entradaDeTeste', json)}/>
-                    </Janela>
+                        acceptsInput={node.data.config.acceptsInput === true}
+                        onAcceptsInput={yes => changeConfig(node.id, 'acceptsInput', yes)}
+                        testInput={String(node.data.config.testInput ?? '')}
+                        onTestInput={json => changeConfig(node.id, 'testInput', json)}/>
+                    </FloatingWindow>
                   )
                 }
-                const def = POR_TIPO[no.data.tipo]
+                const def = BY_TYPE[node.data.type]
                 if (!def) return null
-                const cat = CATEGORIAS[def.categoria]
-                const Icone = def.icone
+                const cat = CATEGORIES[def.category]
+                const Icon = def.icon
                 return (
-                  <Janela key={j.id} {...comum} onExcluir={() => excluir(no.id)} rotulo={`Configuração de ${no.data.rotulo}`} titulo={no.data.rotulo} subtitulo={def.rotulo}
-                          icone={<span className={cn('flex size-9 shrink-0 items-center justify-center rounded-md', cat.corFundo, cat.corTexto)}><Icone className="size-5" aria-hidden="true"/></span>}>
-                    <PainelPropriedades
-                      no={no as NoComponente}
-                      recebeLinhas={recebeLinhas(no as NoComponente, nodes, edges)}
-                      onRotulo={mudarRotulo}
-                      onDados={mudarDados}
-                      onConfig={mudarConfig}
+                  <FloatingWindow key={j.id} {...common} onDelete={() => remove(node.id)} label={`Configuration of ${node.data.label}`} title={node.data.label} subtitle={def.label}
+                          icon={<span className={cn('flex size-9 shrink-0 items-center justify-center rounded-md', cat.bgColor, cat.textColor)}><Icon className="size-5" aria-hidden="true"/></span>}>
+                    <PropertiesPanel
+                      node={node as ComponentNode}
+                      receivesRows={receivesRows(node as ComponentNode, nodes, edges)}
+                      onLabel={changeLabel}
+                      onData={changeData}
+                      onConfig={changeConfig}
                     />
-                  </Janela>
+                  </FloatingWindow>
                 )
               })}
             </div>
-            {execucao && (
-              <PainelDaExecucao key={execucao.run.id} registro={execucao} onFechar={() => setExecucao(null)} onIrPara={irPara} nomeDaPorta={nomeDaPorta}/>
+            {run && (
+              <RunPanel key={run.run.id} record={run} onClose={() => setRun(null)} onGoTo={goTo} portName={portName}/>
             )}
           </main>
         </div>
       </div>
-    </AvisosContext.Provider>
-    </ResultadoContext.Provider>
-    </ParametrosContext.Provider>
-    </HistoricoContext.Provider>
+    </WarningsContext.Provider>
+    </ResultContext.Provider>
+    </ParametersContext.Provider>
+    </HistoryContext.Provider>
   )
 }
 
-export function EditorDeFluxo(props: Props) {
+export function FlowEditor(props: Props) {
   return (
     <ReactFlowProvider>
       <ResizeObserverGuard/>
