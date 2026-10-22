@@ -1,0 +1,11 @@
+node_modules
+dist
+*.tsbuildinfo
+.idea
+.vscode
+
+# segredos locais do runner ($SECRETS)
+runner/secrets.local.json
+
+# arquivos dos projetos enviados ao runner
+runner/arquivos.local/
