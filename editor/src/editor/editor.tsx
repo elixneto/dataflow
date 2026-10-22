@@ -18,10 +18,11 @@ import {
   type XYPosition,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
+import {stringify as stringifyYaml} from 'yaml';
 import {CircleAlert, Play, X} from 'lucide-react';
 import {CATEGORIES, CATEGORY_COLOR, DRAG_MIME, isFlowNode, END, START, BY_TYPE} from '#components/catalog';
 import {cn} from '#lib/utils';
-import {cleanFlow, type Flow, type FlowNode} from '#mock/flows';
+import {cleanFlow, toDefinition, type Flow, type FlowNode} from '#mock/flows';
 import {getProject, EXAMPLES_PROJECT} from '#mock/projects';
 import {type AvailableVariable, type RunMode, type WorkflowParameter, type RunRecord} from '@dataflow/core';
 import {RunPanel} from '#run/run-panel';
@@ -84,7 +85,8 @@ type Props = {
 function Editor({flow, onSave}: Props) {
   const wrapperRef = useRef<HTMLElement>(null);
   const {screenToFlowPosition, getNodes, getEdges, fitView} = useReactFlow<FlowNode, Edge>();
-  const [nodes, setNodes, onNodesChange] = useNodesState<FlowNode>(flow.nodes);
+  // Start and End can't be deleted (not stored in the flow: set here)
+  const [nodes, setNodes, onNodesChange] = useNodesState<FlowNode>(flow.nodes.map(n => (isFixedNode(n) ? {...n, deletable: false} : n)));
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>(flow.edges);
   const [name, setName] = useState(flow.name);
   const [base, setBase] = useState(flow);
@@ -310,15 +312,20 @@ function Editor({flow, onSave}: Props) {
     setChanged(false);
   }, [currentFlow, onSave]);
 
-  /** Downloads the flow's definition as JSON (unsaved changes included). Secrets are not in it: they live in the runner. */
+  /**
+   * Downloads the flow's definition as YAML (unsaved changes included): multi-line code (TypeScript, SQL, conditions)
+   * goes as a literal block, readable in a diff. Secrets are not in it: they live in the runner.
+   */
   function download() {
-    const flow = currentFlow();
-    const slug = flow.name.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'flow';
-    const url = URL.createObjectURL(new Blob([`${JSON.stringify(flow, null, 2)}
-`], {type: 'application/json'}));
+    // version and updatedAt stay in the app (they would change the file on every save, without changing the flow)
+    const {id, name: flowName, description, status, projectId, folder, parameters: flowParameters, nodes: flowNodes, edges: flowEdges} = toDefinition(currentFlow());
+    const definition = {id, name: flowName, description, status, projectId, folder, parameters: flowParameters, nodes: flowNodes, edges: flowEdges};
+    const slug = flowName.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'flow';
+    const text = stringifyYaml(definition, {blockQuote: 'literal', lineWidth: 0, indent: 2});
+    const url = URL.createObjectURL(new Blob([text], {type: 'application/yaml'}));
     const link = document.createElement('a');
     link.href = url;
-    link.download = `${slug}.json`;
+    link.download = `${slug}.yaml`;
     link.click();
     URL.revokeObjectURL(url);
   }

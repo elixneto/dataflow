@@ -42,8 +42,8 @@ export function emptyFlow(projectId: string, folder = ''): Flow {
     updatedAt: new Date().toISOString(),
     parameters: [],
     nodes: [
-      {...component(START, START, 'Start', 0, 100), deletable: false},
-      {...component(END, END, 'End', 900, 100), deletable: false},
+      component(START, START, 'Start', 0, 100),
+      component(END, END, 'End', 900, 100),
     ],
     edges: [],
   };
@@ -78,7 +78,7 @@ function exampleFlow(): Flow {
     description: '10 items; 2 without a price fail in Mapper 1, are diverted, handled in Mapper 2 and joined in the Union before the End.',
     parameters: [],
     nodes: [
-      {...component(START, START, 'Start', 0, 200, {acceptsInput: true, testInput: JSON.stringify(EXAMPLE_ITEMS, null, 2)}), deletable: false},
+      component(START, START, 'Start', 0, 200, {acceptsInput: true, testInput: JSON.stringify(EXAMPLE_ITEMS, null, 2)}),
       component('mapper1', 'mapper', 'Mapper 1', 320, 120, {
         onError: 'divert',
         fields: [{target: 'formattedPrice', value: '"$ " + $price.toFixed(2)', expression: true}],
@@ -87,7 +87,7 @@ function exampleFlow(): Flow {
         fields: [{target: 'id', value: '$id', expression: true}, {target: 'status', value: 'ERROR', expression: false}],
       })),
       component('union', 'union', 'Union', 1000, 160, {inputCount: 2}),
-      {...component(END, END, 'End', 1340, 200), deletable: false},
+      component(END, END, 'End', 1340, 200),
     ],
     edges: [
       connect(START, 'mapper1'),
@@ -111,12 +111,12 @@ function filterExampleFlow(): Flow {
     description: '10 items; the Filter separates those priced above 50 (true) from the others (false), each side gets its range and the Union joins everything.',
     parameters: [],
     nodes: [
-      {...component(START, START, 'Start', 0, 200, {acceptsInput: true, testInput: JSON.stringify(items, null, 2)}), deletable: false},
+      component(START, START, 'Start', 0, 200, {acceptsInput: true, testInput: JSON.stringify(items, null, 2)}),
       component('filter', 'filter', 'Filter', 320, 160, {condition: '$price > 50'}),
       range('expensive', 'Expensive', 700, 40, 'EXPENSIVE'),
       range('cheap', 'Cheap', 700, 300, 'CHEAP'),
       component('union', 'union', 'Union', 1080, 160, {inputCount: 2}),
-      {...component(END, END, 'End', 1420, 200), deletable: false},
+      component(END, END, 'End', 1420, 200),
     ],
     edges: [
       connect(START, 'filter'),
@@ -142,7 +142,7 @@ function routerExampleFlow(): Flow {
     description: '10 companies; the Router separates CA, the rest of the West Coast and everything else (else), each output writes the region and the Union joins everything.',
     parameters: [],
     nodes: [
-      {...component(START, START, 'Start', 0, 220, {acceptsInput: true, testInput: JSON.stringify(companies, null, 2)}), deletable: false},
+      component(START, START, 'Start', 0, 220, {acceptsInput: true, testInput: JSON.stringify(companies, null, 2)}),
       component('router', 'router', 'Router by state', 320, 180, {cases: [
         {label: 'CA', condition: '$state === "CA"'},
         {label: 'West', condition: '["OR", "WA"].includes($state)'},
@@ -151,7 +151,7 @@ function routerExampleFlow(): Flow {
       region('west', 'West', 720, 220, 'WEST'),
       region('others', 'Others', 720, 420, 'OTHERS'),
       component('union', 'union', 'Union', 1100, 200, {inputCount: 3}),
-      {...component(END, END, 'End', 1440, 240), deletable: false},
+      component(END, END, 'End', 1440, 240),
     ],
     edges: [
       connect(START, 'router'),
@@ -186,7 +186,7 @@ function lookupExampleFlow(): Flow {
     description: '8 tickets and 3 companies; the Lookup finds the company of each ticket by code and the Mapper takes the id and the name (99 does not exist and gets the default).',
     parameters: [],
     nodes: [
-      {...component(START, START, 'Start', 0, 200, {acceptsInput: true, testInput: JSON.stringify([...tickets, ...companies], null, 2)}), deletable: false},
+      component(START, START, 'Start', 0, 200, {acceptsInput: true, testInput: JSON.stringify([...tickets, ...companies], null, 2)}),
       component('split', 'router', 'Company or ticket?', 320, 160, {cases: [{label: 'company', condition: '$kind === "company"'}]}),
       withKey(component('lookup', 'lookup', 'Company of the ticket', 720, 160, {
         keys: [{main: '$companyCode', lookup: '$code'}],
@@ -196,7 +196,7 @@ function lookupExampleFlow(): Flow {
         {target: 'companyId', value: '$company?.id ?? null', expression: true},
         {target: 'companyName', value: '$company?.name ?? "(no company)"', expression: true},
       ]}),
-      {...component(END, END, 'End', 1480, 200), deletable: false},
+      component(END, END, 'End', 1480, 200),
     ],
     edges: [
       connect(START, 'split'),
@@ -239,10 +239,10 @@ function typescriptExampleFlow(): Flow {
     description: '7 orders; the Aggregate groups them in batches of 3 and the TypeScript process function computes the total of each order in the batch.',
     parameters: [{name: 'source', type: 'text', default: 'ERP'}],
     nodes: [
-      {...component(START, START, 'Start', 0, 200, {acceptsInput: true, testInput: JSON.stringify(orders, null, 2)}), deletable: false},
+      component(START, START, 'Start', 0, 200, {acceptsInput: true, testInput: JSON.stringify(orders, null, 2)}),
       component('agg', 'aggregate', 'Batches of 3', 320, 190, {size: 3, field: 'items'}),
       withOverride(component('ts', 'typescript', 'Computes the total', 720, 180, {code: EXAMPLE_CODE})),
-      {...component(END, END, 'End', 1120, 200), deletable: false},
+      component(END, END, 'End', 1120, 200),
     ],
     edges: [connect(START, 'agg'), connect('agg', 'ts'), connect('ts', END)],
   };
@@ -260,7 +260,7 @@ function dataGridExampleFlow(): Flow {
     description: 'The Copy calls two Data Grids (5 tickets and the company mapping); the Lookup writes the company name into each ticket.',
     parameters: [],
     nodes: [
-      {...component(START, START, 'Start', 0, 200), deletable: false},
+      component(START, START, 'Start', 0, 200),
       component('copy', 'copy', 'Copy', 260, 190, {outputCount: 2}),
       component('tickets', 'datagrid', 'Tickets', 560, 60, {
         columns: [{name: 'id', type: 'number'}, {name: 'date', type: 'text'}, {name: 'companyCode', type: 'number'}],
@@ -278,7 +278,7 @@ function dataGridExampleFlow(): Flow {
         {target: 'companyName', value: '$company?.name ?? "(no company)"', expression: true},
         {target: 'companyActive', value: '$company?.active ?? false', expression: true},
       ]}),
-      {...component(END, END, 'End', 1700, 200), deletable: false},
+      component(END, END, 'End', 1700, 200),
     ],
     edges: [
       connect(START, 'copy'),
@@ -301,7 +301,7 @@ function sqlServerExampleFlow(): Flow {
     description: 'Lists the tables of a SQL Server database (create the MY_SQL_DB secret with the connection string in the Secrets tab).',
     parameters: [{name: 'limit', type: 'number', default: '20'}],
     nodes: [
-      {...component(START, START, 'Start', 0, 200), deletable: false},
+      component(START, START, 'Start', 0, 200),
       withOverride(component('tables', 'sqlserver', 'Database tables', 300, 170, {
         connection: 'MY_SQL_DB',
         sql: `SELECT TOP (@limit) name AS tableName, create_date AS createdAt
@@ -310,7 +310,7 @@ ORDER BY name`,
         parameters: [{name: 'limit', value: '$PARAMETERS.limit', expression: true}],
         timeoutS: 60,
       })),
-      {...component(END, END, 'End', 760, 200), deletable: false},
+      component(END, END, 'End', 760, 200),
     ],
     edges: [connect(START, 'tables'), connect('tables', END)],
   };
@@ -331,12 +331,12 @@ function invokerExampleFlows(): Flow[] {
     description: 'Called by "Example: Workflow Invoker": receives the envelope and multiplies n by the times parameter (times 0 fails).',
     parameters: [{name: 'times', type: 'number', default: '1', required: true}],
     nodes: [
-      {...component(START, START, 'Start', 0, 200, {acceptsInput: true, testInput: '{"n": 5}'}), deletable: false},
+      component(START, START, 'Start', 0, 200, {acceptsInput: true, testInput: '{"n": 5}'}),
       component('total', 'mapper', 'Total', 320, 180, {fields: [{
         target: 'total', expression: true,
         value: '$PARAMETERS.times > 0 ? $n * $PARAMETERS.times : (() => { throw new Error("times must be greater than zero") })()',
       }]}),
-      {...component(END, END, 'End', 760, 200), deletable: false},
+      component(END, END, 'End', 760, 200),
     ],
     edges: [connect(START, 'total'), connect('total', END)],
   };
@@ -345,9 +345,9 @@ function invokerExampleFlows(): Flow[] {
     description: 'Called by the error port of "Example: Workflow Invoker": receives the envelope that failed and marks it as handled.',
     parameters: [],
     nodes: [
-      {...component(START, START, 'Start', 0, 200, {acceptsInput: true}), deletable: false},
+      component(START, START, 'Start', 0, 200, {acceptsInput: true}),
       component('mark', 'mapper', 'Mark as handled', 320, 180, {fields: [{target: 'handled', value: 'true', expression: true}]}),
-      {...component(END, END, 'End', 760, 200), deletable: false},
+      component(END, END, 'End', 760, 200),
     ],
     edges: [connect(START, 'mark'), connect('mark', END)],
   };
@@ -356,14 +356,14 @@ function invokerExampleFlows(): Flow[] {
     description: 'Calls "Multiply" for each number; whatever fails goes through the error port to "Error handling".',
     parameters: [],
     nodes: [
-      {...component(START, START, 'Start', 0, 200), deletable: false},
+      component(START, START, 'Start', 0, 200),
       component('numbers', 'datagrid', 'Numbers', 260, 180, {columns: [{name: 'n', type: 'number'}], rows: [['1'], ['2'], ['3']]}),
       component('multiply', 'workflow', 'Multiply', 620, 170, {
         workflowId: INVOKER_CALLED_EXAMPLE_ID, sendEnvelope: true, onError: 'divert',
         parameters: [{name: 'times', value: '$n - 1', expression: true}],
       }),
       component('handling', 'workflow', 'Error handling', 1000, 380, {workflowId: INVOKER_ERROR_EXAMPLE_ID, sendEnvelope: true, parameters: []}),
-      {...component(END, END, 'End', 1380, 200), deletable: false},
+      component(END, END, 'End', 1380, 200),
     ],
     edges: [
       connect(START, 'numbers'), connect('numbers', 'multiply'), connect('multiply', END),
@@ -402,18 +402,65 @@ export function cleanFlow(flow: Flow): Flow {
   };
 }
 
-const NODE_SCREEN_STATE = ['selected', 'dragging', 'measured', 'resizing', 'positionAbsolute', 'className'];
+// deletable: Start and End can't be deleted, the editor sets it when opening (it is not part of the model)
+const NODE_SCREEN_STATE = ['selected', 'dragging', 'measured', 'resizing', 'positionAbsolute', 'className', 'deletable'];
 const EDGE_SCREEN_STATE = ['selected', 'animated', 'className'];
 
 function without<T extends object>(item: T, keys: string[]): T {
   return Object.fromEntries(Object.entries(item).filter(([key]) => !keys.includes(key))) as T;
 }
 
+/**
+ * A flow as stored and downloaded: the defaults are left out (a node without `type` is a component, no `config` is an
+ * empty one, no description/parameters/edges are empty, no folder is the root). fromDefinition puts them back.
+ */
+export type FlowDefinition = Omit<Flow, 'description' | 'parameters' | 'nodes' | 'edges'> & {
+  description?: string;
+  parameters?: WorkflowParameter[];
+  nodes: Record<string, unknown>[];
+  edges?: Edge[];
+};
+
+const isEmpty = (value: unknown) => value === '' || (Array.isArray(value) && value.length === 0)
+  || (typeof value === 'object' && value !== null && !Array.isArray(value) && Object.keys(value).length === 0);
+
+/** The flow without screen state nor defaults: what is stored and downloaded. */
+export function toDefinition(flow: Flow): FlowDefinition {
+  const {description, folder, parameters, nodes, edges, ...rest} = cleanFlow(flow);
+  return {
+    ...rest,
+    ...(folder ? {folder} : {}),
+    ...(description ? {description} : {}),
+    ...(parameters?.length ? {parameters} : {}),
+    nodes: nodes.map(node => {
+      const {type, data, ...others} = node as FlowNode & {data: Record<string, unknown>};
+      const lean = Object.fromEntries(Object.entries(data).filter(([key, value]) => !(key === 'config' && isEmpty(value))));
+      return {...others, ...(type === 'component' ? {} : {type}), data: lean};
+    }),
+    ...(edges.length ? {edges} : {}),
+  };
+}
+
+/** The other way: puts the defaults back (accepts old flows, which still have them). */
+export function fromDefinition(definition: FlowDefinition): Flow {
+  return {
+    ...definition,
+    description: definition.description ?? '',
+    parameters: definition.parameters ?? [],
+    nodes: definition.nodes.map(node => {
+      const type = (node.type as string | undefined) ?? 'component';
+      const data = (node.data ?? {}) as Record<string, unknown>;
+      return without({...node, type, data: type === 'component' ? {config: {}, ...data} : data}, NODE_SCREEN_STATE) as FlowNode;
+    }),
+    edges: (definition.edges ?? []).map(e => without(e, EDGE_SCREEN_STATE)),
+  };
+}
+
 export function listFlows(): Flow[] {
   let stored: Flow[] = [];
   try {
     const saved = localStorage.getItem(KEY);
-    if (saved) stored = (JSON.parse(saved) as Flow[]).map(cleanFlow);
+    if (saved) stored = (JSON.parse(saved) as FlowDefinition[]).map(fromDefinition);
   } catch {
     // storage unavailable or corrupted: starts empty
   }
@@ -445,7 +492,7 @@ export function projectFlows(projectId: string): Flow[] {
 
 function store(flows: Flow[]) {
   try {
-    localStorage.setItem(KEY, JSON.stringify(flows));
+    localStorage.setItem(KEY, JSON.stringify(flows.map(toDefinition)));
   } catch {
     // no storage: the mock only lasts until reload
   }

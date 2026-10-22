@@ -91,7 +91,7 @@ export function Toolbar(p: Props) {
         <Button variant="ghost" size="sm" onClick={p.onClear}>
           <Eraser className="size-4" aria-hidden="true"/> Clear
         </Button>
-        <Button variant="ghost" size="icon-sm" onClick={p.onDownload} aria-label="Download JSON" title="Download JSON">
+        <Button variant="ghost" size="icon-sm" onClick={p.onDownload} aria-label="Download YAML" title="Download YAML">
           <Download className="size-4" aria-hidden="true"/>
         </Button>
         <Button variant="outline" size="sm" onClick={p.onSave} disabled={!p.changed} title={p.changed ? 'Save (Ctrl+S)' : 'Nothing to save'}>
