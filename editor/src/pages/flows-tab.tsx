@@ -206,17 +206,19 @@ export function FlowsTab({projectId}: {projectId: string}) {
                 ))}
                 {entitiesOf(f).length === 0 && <span className="text-sm text-muted-foreground">No target yet</span>}
               </div>
-              <div className="mt-auto flex items-center gap-3 border-t border-border pt-3 text-sm text-muted-foreground">
-                <span className="font-mono">v{f.version}</span>
-                <span>{componentsOf(f)} components</span>
-                <span>{shortDate(f.updatedAt)}</span>
-                <div className="ml-auto flex items-center gap-1">
+              <div className="mt-auto flex flex-col gap-2 border-t border-border pt-3 text-sm text-muted-foreground">
+                <div className="flex min-w-0 items-center gap-3 whitespace-nowrap">
+                  <span className="font-mono">v{f.version}</span>
+                  <span>{componentsOf(f)} components</span>
+                  <span className="ml-auto truncate">{shortDate(f.updatedAt)}</span>
+                </div>
+                <div className="flex min-w-0 items-center gap-1">
                   <select value={f.folder ?? ''} aria-label={`Move ${f.name} to the folder`} title="Move to the folder"
                           onChange={e => {
                             moveFlow(f.id, e.target.value)
                             reload()
                           }}
-                          className="h-8 max-w-32 rounded-md border border-transparent bg-transparent px-1 text-sm text-muted-foreground hover:border-border">
+                          className="mr-auto h-8 min-w-0 max-w-full truncate rounded-md border border-transparent bg-transparent px-1 text-sm text-muted-foreground hover:border-border">
                     <option value="">Flows (root)</option>
                     {folders.map(p => <option key={p} value={p}>{p}</option>)}
                   </select>
