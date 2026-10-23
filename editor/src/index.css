@@ -314,6 +314,19 @@
   stroke: var(--destructive);
 }
 
+/* Flow dependency graph (Flows tab): one card per flow, in the app's colors */
+.react-flow__node.dependency-node {
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--card);
+  color: var(--card-foreground);
+  cursor: pointer;
+}
+.react-flow__node.dependency-node:hover { border-color: var(--primary); }
+.react-flow__node.dependency-node.is-focus { border: 2px solid var(--primary); }
+.react-flow__node.dependency-node .react-flow__handle { opacity: 0; }
+
 .react-flow__edge.is-splice-target .react-flow__edge-path {
   stroke: var(--primary);
   stroke-width: 3;

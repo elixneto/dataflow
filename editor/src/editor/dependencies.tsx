@@ -47,6 +47,9 @@ function DependenciesPanel({flow}: {flow: Flow}) {
   return (
     <div role="dialog" aria-label="Dependencies"
          className="absolute top-full right-0 z-50 mt-1 flex w-80 flex-col gap-3 rounded-md border border-border bg-popover p-3 text-sm text-popover-foreground shadow-md">
+      <Link to={`/projects/${flow.projectId}?focus=${encodeURIComponent(flow.id)}`} className="flex items-center gap-1.5 self-end text-primary hover:underline">
+        <GitFork className="size-4" aria-hidden="true"/> Graph
+      </Link>
       <Section title="Uses" calls={uses} other={c => c.to} byId={byId} showNode/>
       <Section title="Used by" calls={usedBy} other={c => c.from} byId={byId}/>
     </div>

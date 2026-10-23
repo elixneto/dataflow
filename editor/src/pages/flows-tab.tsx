@@ -1,6 +1,6 @@
 import {useState, type DragEvent, type FormEvent, type ReactNode} from 'react';
 import {Link, useNavigate, useSearchParams} from 'react-router';
-import {ChevronDown, ChevronRight, Copy, Folder, FolderInput, FolderOpen, FolderPlus, LayoutGrid, ListTree, Pencil, Plus, Trash2, Workflow, X} from 'lucide-react';
+import {ChevronDown, ChevronRight, Copy, Folder, FolderInput, FolderOpen, FolderPlus, GitFork, LayoutGrid, ListTree, Pencil, Plus, Trash2, Workflow, X} from 'lucide-react';
 import {CATEGORIES, isFlowNode, BY_TYPE} from '#components/catalog';
 import {isComponent} from '#editor/validation';
 import {isInside, duplicateFlow, deleteFlow, projectFlows, moveFlow, renameFlowsFolder, type Flow} from '#mock/flows';
@@ -9,6 +9,7 @@ import {Button} from '#ui/button';
 import {fieldInput} from '#ui/expression-field';
 import {cn} from '#lib/utils';
 import {shortDate} from '#pages/header';
+import {DependencyGraph} from '#pages/dependency-graph';
 
 function entitiesOf(flow: Flow) {
   const names = flow.nodes
@@ -36,12 +37,13 @@ function foldersOf(projectId: string, flows: Flow[]) {
   return [...paths].sort((a, b) => a.localeCompare(b));
 }
 
-type View = 'cards' | 'tree';
+type View = 'cards' | 'tree' | 'graph';
 const VIEW_KEY = 'dataflow-flows-view';
 
 function readView(): View {
   try {
-    return localStorage.getItem(VIEW_KEY) === 'tree' ? 'tree' : 'cards';
+    const stored = localStorage.getItem(VIEW_KEY);
+    return stored === 'tree' || stored === 'graph' ? stored : 'cards';
   } catch {
     return 'cards';
   }
@@ -54,13 +56,16 @@ export function FlowsTab({projectId}: {projectId: string}) {
   const navigate = useNavigate();
   const [search, setSearch] = useSearchParams();
   const current = search.get('folder') ?? '';
+  // flow highlighted in the graph (?focus=), with its chain of calls
+  const focus = search.get('focus') ?? undefined;
   const [flows, setFlows] = useState(() => projectFlows(projectId));
   const [version, setVersion] = useState(0);
   const reload = () => {
     setFlows(projectFlows(projectId));
     setVersion(v => v + 1);
   };
-  const [view, setView] = useState(readView);
+  // a link with ?focus= (e.g. from the editor's Dependencies) opens the graph
+  const [view, setView] = useState<View>(() => (search.get('focus') ? 'graph' : readView()));
   const changeView = (v: View) => {
     setView(v);
     try {
@@ -73,6 +78,11 @@ export function FlowsTab({projectId}: {projectId: string}) {
   const [folderName, setFolderName] = useState('');
   const pathOf = (id: string) => `/projects/${projectId}/flows/${id}`;
   const open = (folder: string) => setSearch(folder ? {folder} : {});
+  /** Opens the graph highlighting the flow (the focus lives in the URL, next to the folder). */
+  const showGraph = (flowId?: string) => {
+    changeView('graph');
+    setSearch({...(current ? {folder: current} : {}), ...(flowId ? {focus: flowId} : {})});
+  };
 
   void version; // the stored folders come from the project (mock): reload reads them again
   const folders = foldersOf(projectId, flows);
@@ -151,8 +161,8 @@ export function FlowsTab({projectId}: {projectId: string}) {
         </nav>
         <div className="ml-auto flex gap-2">
           <div role="radiogroup" aria-label="View" className="flex rounded-md border border-border p-0.5">
-            {([['cards', LayoutGrid, 'Cards'], ['tree', ListTree, 'Tree']] as const).map(([value, Icon, label]) => (
-              <button key={value} type="button" role="radio" aria-checked={view === value} onClick={() => changeView(value)}
+            {([['cards', LayoutGrid, 'Cards'], ['tree', ListTree, 'Tree'], ['graph', GitFork, 'Graph']] as const).map(([value, Icon, label]) => (
+              <button key={value} type="button" role="radio" aria-checked={view === value} onClick={() => (value === 'graph' ? showGraph() : changeView(value))}
                       className={cn('flex h-7 items-center gap-1.5 rounded px-2 text-sm', view === value ? 'bg-accent font-medium' : 'text-muted-foreground hover:text-foreground')}>
                 <Icon className="size-4" aria-hidden="true"/> {label}
               </button>
@@ -173,6 +183,8 @@ export function FlowsTab({projectId}: {projectId: string}) {
           <Button type="button" variant="ghost" size="icon-sm" onClick={() => setCreatingFolder(false)} aria-label="Cancel"><X className="size-4"/></Button>
         </form>
       )}
+
+      {view === 'graph' && <DependencyGraph projectId={projectId} focus={focus} onOpen={f => navigate(pathOf(f.id))}/>}
 
       {view === 'tree' && (
         <Tree folders={folders} flows={flows} current={current} pathOf={pathOf} onOpen={folder => {
@@ -242,6 +254,7 @@ export function FlowsTab({projectId}: {projectId: string}) {
                     {folders.map(p => <option key={p} value={p}>{p}</option>)}
                   </select>
                   <Button variant="ghost" size="icon-sm" onClick={() => navigate(pathOf(f.id))} aria-label="Edit" title="Edit"><Pencil className="size-4"/></Button>
+                  <Button variant="ghost" size="icon-sm" onClick={() => showGraph(f.id)} aria-label={`Dependencies of ${f.name}`} title="Dependencies"><GitFork className="size-4"/></Button>
                   <Button variant="ghost" size="icon-sm" onClick={() => {
                     duplicateFlow(f.id);
                     reload();
