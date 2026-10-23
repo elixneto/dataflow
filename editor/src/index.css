@@ -326,6 +326,10 @@
 .react-flow__node.dependency-node:hover { border-color: var(--primary); }
 .react-flow__node.dependency-node.is-focus { border: 2px solid var(--primary); }
 .react-flow__node.dependency-node .react-flow__handle { opacity: 0; }
+.dependency-graph .react-flow__edge-textbg { fill: var(--background); }
+.dependency-graph .react-flow__edge-text { fill: var(--muted-foreground); font-size: 12px; }
+.react-flow__edge.dependency-on-error .react-flow__edge-path { stroke-dasharray: 6 4; }
+.react-flow__edge.dependency-on-error .react-flow__edge-text { fill: var(--destructive); }
 
 .react-flow__edge.is-splice-target .react-flow__edge-path {
   stroke: var(--primary);

@@ -79,6 +79,7 @@ function Section({title, calls, other, byId, showNode}: {
               <span className="truncate text-muted-foreground">
                 {[target?.folder || (target ? 'Flows (root)' : other(call)), showNode ? `via ${call.nodeLabel}` : undefined].filter(Boolean).join(' · ')}
               </span>
+              {call.onErrorOfLabel && <span className="truncate text-destructive">on error of {call.onErrorOfLabel}</span>}
             </li>
           );
         })}

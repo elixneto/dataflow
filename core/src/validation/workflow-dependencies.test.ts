@@ -21,3 +21,21 @@ test('dependencies: what a workflow uses and who uses it, directly', () => {
   // a call to a workflow that no longer exists still shows up (the editor marks it)
   expect(workflowDependencies(flows, 'd').uses.map(c => c.to)).toEqual(['a', 'gone']);
 });
+
+test('dependencies: an invoker on the error port of another one handles its errors', () => {
+  const parent: ExecutableWorkflow = {
+    id: 'parent', project: 'P', workflow: 'Parent', parameters: [],
+    nodes: [
+      {id: 'start', type: 'start', label: 'Start', config: {}},
+      {id: 'multiply', type: 'workflow', label: 'Multiply', config: {workflowId: 'mult'}},
+      {id: 'handling', type: 'workflow', label: 'Error handling', config: {workflowId: 'errors'}},
+    ],
+    edges: [
+      {source: 'start', sourcePort: 'out-0', target: 'multiply', targetPort: 'in-0'},
+      {source: 'multiply', sourcePort: 'error', target: 'handling', targetPort: 'in-0'},
+    ],
+  };
+  const [multiply, handling] = workflowCalls([parent]);
+  expect(multiply.onErrorOf).toBeUndefined();
+  expect(handling).toEqual({from: 'parent', to: 'errors', nodeId: 'handling', nodeLabel: 'Error handling', onErrorOf: 'mult', onErrorOfLabel: 'Multiply'});
+});

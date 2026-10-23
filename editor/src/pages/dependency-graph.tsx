@@ -44,7 +44,7 @@ export function DependencyGraph({projectId, focus, onOpen}: {projectId: string; 
     const near = focus ? chainOf(focus, mine) : undefined;
 
     const graph = new Graph();
-    graph.setGraph({rankdir: 'LR', nodesep: 40, ranksep: 120, marginx: 20, marginy: 20});
+    graph.setGraph({rankdir: 'LR', nodesep: 60, ranksep: 260, marginx: 20, marginy: 20});
     graph.setDefaultEdgeLabel(() => ({}));
     for (const id of ids) graph.setNode(id, {width: NODE_WIDTH, height: NODE_HEIGHT});
     for (const c of mine) graph.setEdge(c.from, c.to);
@@ -72,10 +72,12 @@ export function DependencyGraph({projectId, focus, onOpen}: {projectId: string; 
         className: cn('dependency-node', id === focus && 'is-focus', near && !near.has(id) && 'opacity-30'),
       };
     });
+    // a call that only happens on another call's error (Invoker on the error port of another one): dashed and red
     const flowEdges: Edge[] = mine.map(c => ({
-      id: `${c.from}:${c.nodeId}`, source: c.from, target: c.to, label: c.nodeLabel,
-      markerEnd: {type: MarkerType.ArrowClosed},
-      className: cn(near && !(near.has(c.from) && near.has(c.to)) && 'opacity-30'),
+      id: `${c.from}:${c.nodeId}`, source: c.from, target: c.to,
+      label: c.onErrorOfLabel ? `${c.nodeLabel} · on error of ${c.onErrorOfLabel}` : c.nodeLabel,
+      markerEnd: {type: MarkerType.ArrowClosed, ...(c.onErrorOf ? {color: 'var(--destructive)'} : {})},
+      className: cn(c.onErrorOf && 'is-error-edge dependency-on-error', near && !(near.has(c.from) && near.has(c.to)) && 'opacity-30'),
     }));
     return {nodes: flowNodes, edges: flowEdges};
   }, [projectId, focus]);
@@ -84,7 +86,7 @@ export function DependencyGraph({projectId, focus, onOpen}: {projectId: string; 
     return <p className="rounded-lg border border-dashed border-border p-8 text-center text-sm text-muted-foreground">No dependencies</p>;
   }
   return (
-    <div className="h-[65vh] overflow-hidden rounded-lg border border-border">
+    <div className="dependency-graph h-[65vh] overflow-hidden rounded-lg border border-border">
       <ReactFlow nodes={nodes} edges={edges} fitView fitViewOptions={{padding: 0.2, maxZoom: 1}} nodesDraggable={false} nodesConnectable={false}
                  edgesFocusable={false} proOptions={{hideAttribution: true}}
                  onNodeClick={(_, node) => {
