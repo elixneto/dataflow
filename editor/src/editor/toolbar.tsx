@@ -1,4 +1,4 @@
-import {useState} from 'react';
+import {useState, type ReactNode} from 'react';
 import {Link} from 'react-router';
 import {CheckCircle2, CircleAlert, Download, Eraser, Group, Loader2, MessageSquarePlus, Network, Play, Redo2, Save, Square, Undo2, Workflow} from 'lucide-react';
 import type {RunMode} from '@dataflow/core';
@@ -31,6 +31,8 @@ type Props = {
   changed: boolean;
   onSave: () => void;
   onDownload: () => void;
+  /** the Dependencies button (it needs the flow as it is in the editor) */
+  dependencies: ReactNode;
   onShowIssues: () => void;
 };
 
@@ -87,6 +89,7 @@ export function Toolbar(p: Props) {
         <Button variant="outline" size="sm" onClick={p.onGroup} title="Colored rectangle behind the components">
           <Group className="size-4" aria-hidden="true"/> Group
         </Button>
+        {p.dependencies}
         <ArrangeButton onArrange={p.onArrange}/>
         <Button variant="ghost" size="sm" onClick={p.onClear}>
           <Eraser className="size-4" aria-hidden="true"/> Clear

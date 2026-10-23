@@ -3,6 +3,7 @@ export * from '#envelope/envelope-data';
 export * from '#envelope/expression-variables';
 export * from '#envelope/available-variables';
 export * from '#validation/expression-check';
+export * from '#validation/workflow-dependencies';
 export * from '#validation/workflow-cycle';
 export * from '#validation/key-name';
 export * from '#errors/normalize-error';

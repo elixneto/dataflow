@@ -44,6 +44,7 @@ import {isComponent, receivesRows, validateFlow, type Issue} from '#editor/valid
 import {loadKnownVariables, saveKnownVariables, updateKnownVariables} from '#editor/known-variables';
 import {VariablesContext, type Variables} from '#editor/variables-context';
 import {edgeUnder, splice, type Box} from '#editor/edge-splice';
+import {DependenciesButton} from '#editor/dependencies';
 
 type Snapshot = {nodes: FlowNode[]; edges: Edge[]};
 
@@ -695,6 +696,7 @@ function Editor({flow, onSave}: Props) {
           changed={changed}
           onSave={save}
           onDownload={download}
+          dependencies={<DependenciesButton current={currentFlow}/>}
           onShowIssues={() => setShowIssues(v => !v)}
         />
         <div className="flex min-h-0 flex-1">
