@@ -1,4 +1,4 @@
-import {useState, type ReactNode} from 'react';
+import {useEffect, useRef, useState, type ReactNode} from 'react';
 import {Link} from 'react-router';
 import {CheckCircle2, CircleAlert, Download, Eraser, Group, Loader2, MessageSquarePlus, Network, Play, Redo2, Save, Square, Undo2, Workflow} from 'lucide-react';
 import type {RunMode} from '@dataflow/core';
@@ -101,9 +101,7 @@ export function Toolbar(p: Props) {
           <Save className="size-4" aria-hidden="true"/> {p.changed ? 'Save' : 'Saved'}
         </Button>
         {p.running ? (
-          <Button size="sm" variant="destructive" onClick={p.onStop} title="Stop the run">
-            <Square className="size-3.5 fill-current" aria-hidden="true"/> Stop
-          </Button>
+          <StopButton onStop={p.onStop}/>
         ) : (
           <Button size="sm" onClick={p.onRun} disabled={p.validating}>
             {p.validating ? <Loader2 className="size-4 animate-spin" aria-hidden="true"/> : <Play className="size-4" aria-hidden="true"/>}
@@ -112,6 +110,46 @@ export function Toolbar(p: Props) {
         )}
       </div>
     </header>
+  );
+}
+
+/** Stop: asks for confirmation in a popover before cancelling the run. */
+function StopButton({onStop}: {onStop: () => void}) {
+  const [open, setOpen] = useState(false);
+  const box = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: MouseEvent | KeyboardEvent) => {
+      if (e instanceof KeyboardEvent ? e.key === 'Escape' : !box.current?.contains(e.target as Node)) setOpen(false);
+    };
+    window.addEventListener('mousedown', close);
+    window.addEventListener('keydown', close);
+    return () => {
+      window.removeEventListener('mousedown', close);
+      window.removeEventListener('keydown', close);
+    };
+  }, [open]);
+
+  return (
+    <div ref={box} className="relative">
+      <Button size="sm" variant="destructive" onClick={() => setOpen(o => !o)} aria-expanded={open} title="Stop the run">
+        <Square className="size-3.5 fill-current" aria-hidden="true"/> Stop
+      </Button>
+      {open && (
+        <div role="alertdialog" aria-label="Stop the run"
+             className="absolute top-full right-0 z-50 mt-1 flex w-56 flex-col gap-3 rounded-md border border-border bg-popover p-3 text-sm text-popover-foreground shadow-md">
+          <p className="font-medium">Stop the run?</p>
+          <div className="flex justify-end gap-2">
+            <Button variant="ghost" size="sm" onClick={() => setOpen(false)}>Keep running</Button>
+            <Button variant="destructive" size="sm" autoFocus onClick={() => {
+              setOpen(false);
+              onStop();
+            }}>Stop</Button>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 
