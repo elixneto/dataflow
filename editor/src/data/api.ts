@@ -1,3 +1,5 @@
+import {LOST, reportConnection} from '#data/connection';
+
 /*
  * Saving to the runner's database. The editor works on what it loaded when it opened (data/workspace.ts): each change
  * updates that copy right away and the write goes to the runner in the background, one after the other, in order.
@@ -32,6 +34,7 @@ export async function request<T>(path: string, init?: RequestInit): Promise<T> {
   try {
     response = await fetch(`${API}${path}`, init);
   } catch {
+    reportConnection(LOST);
     throw new Error('The runner did not respond. Is it running? (npm run start at the repository root)');
   }
   const body = await response.json().catch(() => ({}));

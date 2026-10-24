@@ -2,6 +2,7 @@ import type {ReactNode} from 'react';
 import {Link} from 'react-router';
 import {Workflow} from 'lucide-react';
 import {ThemeButton} from '#ui/theme';
+import {ConnectionStatus} from '#ui/connection-status';
 
 /** Header of the pages outside the editor: brand, breadcrumb (Projects / ...) and actions on the right. */
 export function Header({breadcrumb = [], children}: {breadcrumb?: {label: string; to?: string}[]; children?: ReactNode}) {
@@ -17,10 +18,8 @@ export function Header({breadcrumb = [], children}: {breadcrumb?: {label: string
           {t.to ? <Link to={t.to} className="truncate text-muted-foreground hover:text-foreground">{t.label}</Link> : <span className="truncate font-medium">{t.label}</span>}
         </span>
       ))}
-      <span className="ml-2 rounded-full border border-dashed border-border px-2 py-0.5 text-xs text-muted-foreground" title="Projects and flows stored only in this browser">
-        mock data
-      </span>
       <div className="ml-auto flex items-center gap-2">
+        <ConnectionStatus/>
         <ThemeButton/>
         {children}
       </div>

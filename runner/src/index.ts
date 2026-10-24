@@ -45,7 +45,8 @@ const app = new Hono().basePath('/api');
 
 app.use(logger());
 
-app.get('/health', c => c.json({ok: true}));
+/** the editor polls it to show when the connection is lost; 503 when the database does not answer */
+app.get('/health', async c => ((await repo.ping()) ? c.json({ok: true}) : c.json({ok: false, error: 'The runner lost the connection to its database.'}, 503)));
 
 app.route('/', projectRoutes);
 app.route('/', storageRoutes(repo));

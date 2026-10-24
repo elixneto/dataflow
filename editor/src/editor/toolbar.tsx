@@ -5,6 +5,7 @@ import type {RunMode} from '@dataflow/core';
 import type {ArrangeDirection} from '#editor/layout';
 import {Button} from '#ui/button';
 import {ThemeButton} from '#ui/theme';
+import {ConnectionStatus} from '#ui/connection-status';
 
 export type ValidationResult = {ok: boolean; messages: string[]} | null;
 
@@ -82,6 +83,7 @@ export function Toolbar(p: Props) {
       )}
 
       <div className="flex items-center gap-2">
+        <ConnectionStatus/>
         <ThemeButton/>
         <Button variant="outline" size="sm" onClick={p.onComment}>
           <MessageSquarePlus className="size-4" aria-hidden="true"/> Comment

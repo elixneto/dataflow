@@ -62,6 +62,11 @@ export function repository(db: Database) {
   }
 
   return {
+    /** whether the database answers (health check) */
+    async ping(): Promise<boolean> {
+      return db.query('SELECT 1').then(() => true, () => false);
+    },
+
     async listProjects(): Promise<Project[]> {
       return (await db.query<ProjectRow>('SELECT * FROM projects ORDER BY name')).map(toProject);
     },

@@ -94,7 +94,7 @@ All under `/api` (the editor's Vite dev server proxies it to the runner on port 
 
 | Route | What it does |
 |---|---|
-| `GET /api/health` | Health check |
+| `GET /api/health` | Health check (503 when the database does not answer); the editor polls it every 5 s |
 | `GET /api/projects` / `GET /api/projects/:id` | Projects |
 | `PUT` / `DELETE /api/projects/:id` | Creates or replaces / deletes a project (its flows go along) |
 | `GET /api/flows?project=` / `GET /api/flows/:id` | Flows (lean definitions), optionally of one project |
