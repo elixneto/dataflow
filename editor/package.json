@@ -11,6 +11,10 @@
       "./src/components/*.ts",
       "./src/components/*.tsx"
     ],
+    "#data/*": [
+      "./src/data/*.ts",
+      "./src/data/*.tsx"
+    ],
     "#editor/*": [
       "./src/editor/*.ts",
       "./src/editor/*.tsx"
@@ -18,10 +22,6 @@
     "#lib/*": [
       "./src/lib/*.ts",
       "./src/lib/*.tsx"
-    ],
-    "#mock/*": [
-      "./src/mock/*.ts",
-      "./src/mock/*.tsx"
     ],
     "#pages/*": [
       "./src/pages/*.ts",

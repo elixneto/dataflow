@@ -1,8 +1,8 @@
 import {useState, type FormEvent} from 'react';
 import {Link, useNavigate} from 'react-router';
 import {FolderKanban, Plus, Trash2, X} from 'lucide-react';
-import {projectFlows} from '#mock/flows';
-import {createProject, deleteProject, listProjects, type Project} from '#mock/projects';
+import {projectFlows} from '#data/flows';
+import {createProject, deleteProject, listProjects, type Project} from '#data/projects';
 import {Button} from '#ui/button';
 import {fieldInput} from '#ui/expression-field';
 import {cn} from '#lib/utils';

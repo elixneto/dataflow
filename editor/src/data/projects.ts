@@ -1,6 +1,8 @@
+import {persist} from '#data/api';
+
 /*
- * Mock projects, stored in the browser's localStorage (like the flows). Each project has flows, runs,
- * secrets and files; the last three already come from the runner. Becomes an API call when the backend exists.
+ * Projects, stored in the runner's database (like the flows). Each project has flows, runs, secrets and files.
+ * Read from the copy loaded when the editor opens (data/workspace.ts); each change is saved in the background.
  */
 
 export type Project = {
@@ -14,29 +16,24 @@ export type Project = {
 
 export const EXAMPLES_PROJECT = 'examples';
 
-const KEY = 'dataflow-projects-v1';
+/** where the projects lived before the database (data/workspace.ts imports them once) */
+export const LEGACY_PROJECTS_KEY = 'dataflow-projects-v1';
 
-const DEFAULT = (): Project[] => [
-  {id: EXAMPLES_PROJECT, name: 'Examples', description: 'An example flow for each component.', updatedAt: new Date().toISOString()},
-];
+let loaded: Project[] = [];
 
-/** Starts with the default ones; after the first save, what is stored applies. */
-export function listProjects(): Project[] {
-  try {
-    const stored = localStorage.getItem(KEY);
-    if (stored) return JSON.parse(stored) as Project[];
-  } catch {
-    // storage unavailable or corrupted: the default ones
-  }
-  return DEFAULT();
+/** the projects that came from the runner (data/workspace.ts) */
+export function setProjects(projects: Project[]) {
+  loaded = projects;
 }
 
-function store(projects: Project[]) {
-  try {
-    localStorage.setItem(KEY, JSON.stringify(projects));
-  } catch {
-    // no storage: the mock only lasts until reload
-  }
+export function listProjects(): Project[] {
+  return loaded;
+}
+
+/** replaces the project in the copy and saves it */
+function put(project: Project) {
+  loaded = loaded.some(p => p.id === project.id) ? loaded.map(p => (p.id === project.id ? project : p)) : [...loaded, project];
+  persist('PUT', `/projects/${encodeURIComponent(project.id)}`, project);
 }
 
 export function getProject(id: string): Project | undefined {
@@ -54,28 +51,29 @@ function idFromName(name: string, existing: string[]) {
 export function createProject(name: string, description: string): Project {
   const projects = listProjects();
   const project: Project = {id: idFromName(name, projects.map(p => p.id)), name, description, updatedAt: new Date().toISOString()};
-  store([...projects, project]);
+  put(project);
   return project;
 }
 
 export function saveProject(project: Project) {
-  store(listProjects().map(p => (p.id === project.id ? {...project, updatedAt: new Date().toISOString()} : p)));
+  put({...project, updatedAt: new Date().toISOString()});
 }
 
+/** Deletes the project (the screen only allows it once the project has no flows). */
 export function deleteProject(id: string) {
-  store(listProjects().filter(p => p.id !== id));
+  loaded = loaded.filter(p => p.id !== id);
+  persist('DELETE', `/projects/${encodeURIComponent(id)}`);
 }
 
 /** Stores an empty folder in the project (a folder that already holds a flow does not need it). */
 export function createFolder(projectId: string, path: string) {
-  store(listProjects().map(p => (p.id === projectId ? {...p, folders: [...new Set([...(p.folders ?? []), path])]} : p)));
+  const project = getProject(projectId);
+  if (project) put({...project, folders: [...new Set([...(project.folders ?? []), path])]});
 }
 
 /** Replaces the path of the stored folders (rename); an empty `to` deletes the folder and the ones inside it. */
 export function replaceFolders(projectId: string, from: string, to: string) {
+  const project = getProject(projectId);
   const inside = (c: string) => c === from || c.startsWith(from + '/');
-  store(listProjects().map(p => (p.id !== projectId ? p : {
-    ...p,
-    folders: (p.folders ?? []).flatMap(c => (!inside(c) ? [c] : to ? [to + c.slice(from.length)] : [])),
-  })));
+  if (project) put({...project, folders: (project.folders ?? []).flatMap(c => (!inside(c) ? [c] : to ? [to + c.slice(from.length)] : []))});
 }

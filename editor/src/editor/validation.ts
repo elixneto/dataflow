@@ -1,7 +1,7 @@
 import type {Edge} from '@xyflow/react';
 import {findCycle, nameIssue} from '@dataflow/core';
 import {isFlowNode, END, START, BY_TYPE} from '#components/catalog';
-import type {FlowNode} from '#mock/flows';
+import type {FlowNode} from '#data/flows';
 import {ERROR_PORT, errorPolicy, inputCount, outputCount, outputLabel, isOptionalOutput, type ComponentNode} from '#editor/component-node';
 
 export type Issue = {nodeId: string; message: string};

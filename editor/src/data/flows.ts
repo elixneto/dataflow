@@ -4,11 +4,12 @@ import {END, START} from '#components/catalog';
 import type {CommentNode} from '#editor/comment-node';
 import type {GroupNode} from '#editor/group-node';
 import type {ComponentNode} from '#editor/component-node';
-import {EXAMPLES_PROJECT} from '#mock/projects';
+import {EXAMPLES_PROJECT} from '#data/projects';
+import {persist} from '#data/api';
 
 /*
- * Mock flows, stored in the browser's localStorage. When the backend exists, this becomes API calls
- * and the flows move to the database.
+ * Flows, stored in the runner's database as lean definitions (toDefinition). Read from the copy loaded when the
+ * editor opens (data/workspace.ts); each change is saved in the background. The examples live here, in the code.
  */
 
 export type FlowNode = ComponentNode | CommentNode | GroupNode;
@@ -30,7 +31,15 @@ export type Flow = {
   edges: Edge[];
 };
 
-const KEY = 'dataflow-flows-v1';
+/** where the flows lived before the database (data/workspace.ts imports them once) */
+export const LEGACY_FLOWS_KEY = 'dataflow-flows-v1';
+
+let loaded: Flow[] = [];
+
+/** the flows that came from the runner (data/workspace.ts) */
+export function setFlows(definitions: FlowDefinition[]) {
+  loaded = definitions.map(fromDefinition);
+}
 
 function component(id: string, type: string, label: string, x: number, y: number, config: Record<string, unknown> = {}): ComponentNode {
   return {id, type: 'component', position: {x, y}, data: {type, label, config}};
@@ -457,13 +466,7 @@ export function fromDefinition(definition: FlowDefinition): Flow {
 }
 
 export function listFlows(): Flow[] {
-  let stored: Flow[] = [];
-  try {
-    const saved = localStorage.getItem(KEY);
-    if (saved) stored = (JSON.parse(saved) as FlowDefinition[]).map(fromDefinition);
-  } catch {
-    // storage unavailable or corrupted: starts empty
-  }
+  const stored = loaded;
   // the examples always go back to the original
   // an example can be moved to another folder (the saved folder applies; the rest goes back to the original)
   const examples = EXAMPLES().map(f => ({
@@ -474,12 +477,14 @@ export function listFlows(): Flow[] {
 
 /** Moves the flow to another folder of the project. */
 export function moveFlow(id: string, folder: string) {
-  store(listFlows().map(f => (f.id === id ? {...f, folder} : f)));
+  const flow = getFlow(id);
+  if (flow) put({...flow, folder});
 }
 
 /** Replaces the beginning of the folder path of the flows (folder renamed or moved). */
 export function renameFlowsFolder(projectId: string, from: string, to: string) {
-  store(listFlows().map(f => (f.projectId === projectId && isInside(f.folder ?? '', from) ? {...f, folder: to + (f.folder ?? '').slice(from.length)} : f)));
+  listFlows().filter(f => f.projectId === projectId && isInside(f.folder ?? '', from))
+    .forEach(f => put({...f, folder: to + (f.folder ?? '').slice(from.length)}));
 }
 
 /** the folder is `base` or sits inside it */
@@ -490,12 +495,10 @@ export function projectFlows(projectId: string): Flow[] {
   return listFlows().filter(f => f.projectId === projectId);
 }
 
-function store(flows: Flow[]) {
-  try {
-    localStorage.setItem(KEY, JSON.stringify(flows.map(toDefinition)));
-  } catch {
-    // no storage: the mock only lasts until reload
-  }
+/** replaces the flow in the copy and saves it (an example is saved too: its folder is kept) */
+function put(flow: Flow) {
+  loaded = loaded.some(f => f.id === flow.id) ? loaded.map(f => (f.id === flow.id ? flow : f)) : [...loaded, flow];
+  persist('PUT', `/flows/${encodeURIComponent(flow.id)}`, toDefinition(flow));
 }
 
 export function getFlow(id: string): Flow | undefined {
@@ -503,15 +506,14 @@ export function getFlow(id: string): Flow | undefined {
 }
 
 export function saveFlow(flow: Flow): Flow {
-  const flows = listFlows();
   const saved: Flow = {...flow, version: flow.version + 1, updatedAt: new Date().toISOString()};
-  const exists = flows.some(f => f.id === flow.id);
-  store(exists ? flows.map(f => f.id === flow.id ? saved : f) : [...flows, saved]);
+  put(saved);
   return saved;
 }
 
 export function deleteFlow(id: string) {
-  store(listFlows().filter(f => f.id !== id));
+  loaded = loaded.filter(f => f.id !== id);
+  persist('DELETE', `/flows/${encodeURIComponent(id)}`);
 }
 
 export function duplicateFlow(id: string): Flow | undefined {

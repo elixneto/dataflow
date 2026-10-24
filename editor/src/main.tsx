@@ -7,11 +7,31 @@ import {ProjectPage} from '#pages/project-page';
 import {RunPage} from '#pages/run-page';
 import {EditorPage, RedirectLegacyFlow} from '#pages/editor-page';
 import {applySavedTheme} from '#ui/theme';
+import {SaveStatus} from '#ui/save-status';
+import {Button} from '#ui/button';
+import {loadWorkspace} from '#data/workspace';
 
 applySavedTheme();
 
-createRoot(document.getElementById('root')!).render(
+const root = createRoot(document.getElementById('root')!);
+
+/** Projects and flows come from the runner: without it there is nothing to show yet. */
+function Unavailable({message}: {message: string}) {
+  return (
+    <div className="flex h-dvh flex-col items-center justify-center gap-3 bg-background text-sm text-muted-foreground">
+      {message}
+      <Button size="sm" onClick={start}>Try again</Button>
+    </div>
+  );
+}
+
+function start() {
+  loadWorkspace().then(render, error => root.render(<Unavailable message={error instanceof Error ? error.message : String(error)}/>));
+}
+
+const render = () => root.render(
   <StrictMode>
+    <SaveStatus/>
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<ProjectList/>}/>
@@ -25,3 +45,5 @@ createRoot(document.getElementById('root')!).render(
     </BrowserRouter>
   </StrictMode>,
 );
+
+start();

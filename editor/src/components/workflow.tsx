@@ -3,7 +3,7 @@ import {Workflow} from 'lucide-react';
 import {workflowInvokerConfig, MAX_WORKFLOW_DEPTH, workflowInvoker, type InvokerParameter} from '@dataflow/core';
 import {ExpressionInput, fieldInput} from '#ui/expression-field';
 import {cn} from '#lib/utils';
-import {listFlows, getFlow, type Flow} from '#mock/flows';
+import {listFlows, getFlow, type Flow} from '#data/flows';
 import type {FieldsProps} from '#types/fields-props.type';
 import type {ComponentDef} from '#types/component-def.type';
 import type {Config} from '#types/config.type';

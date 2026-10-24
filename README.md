@@ -4,7 +4,7 @@ Visual data flows, **envelope by envelope**. You build the flow by connecting co
 
 Inspired by SnapLogic and Pentaho Kettle, all in JavaScript: the editor in React, the engine in TypeScript and the runner in Bun.
 
-> Status: working prototype. Projects and flows live in the browser (localStorage); runs, secrets and files live in the runner, on your machine. See [what is not done yet](docs/architecture.md#12-not-done-yet).
+> Status: working prototype. Projects, flows and runs live in the runner's database (Postgres); secrets and files, in runner folders on your machine. See [what is not done yet](docs/architecture.md#12-not-done-yet).
 
 ## Components
 
@@ -55,13 +55,28 @@ The runner reads these environment variables (Bun also loads a `.env` file at th
 | `RUNNER_PORT` | `5190` | Runner port |
 | `RUNNER_TIMEOUT_MS` | `300000` (5 min) | Maximum time of a run |
 | `RUNNER_SCRIPT_TIMEOUT_MS` | `30000` (30 s) | Maximum time of each TypeScript call |
+| `DATABASE_URL` | (none: PGlite) | Postgres for projects, flows and runs, e.g. `postgres://dataflow:dataflow@localhost:5432/dataflow` |
 
 The editor's dev server proxies `/api` to `RUNNER_URL` (default http://localhost:5190).
+
+### Database
+
+Projects, flows and runs are stored in Postgres. **Nothing to install to develop**: without `DATABASE_URL`, the runner uses [PGlite](https://pglite.dev) (Postgres compiled to WebAssembly) and writes to `runner/data.local/`, outside git. The schema is created and updated on its own when the runner starts (`runner/src/storage/migrations.ts`).
+
+For a real Postgres (shared, or closer to production), start one with `docker compose up -d` (the `docker-compose.yml` at the root) or use your own, and put the address in a `.env` at the root:
+
+```bash
+DATABASE_URL=postgres://dataflow:dataflow@localhost:5432/dataflow
+```
+
+The first time the editor opens, whatever this browser had saved before the database (projects and flows in localStorage) is copied to the runner; what the database already has wins.
 
 ### Troubleshooting
 
 - **`Unsupported engine` / `Node.js 24.0+ is required`**: switch Node with `nvm use` (or install 24) and run `npm run setup` again.
 - **`Bun is not installed`**: install Bun and open a new terminal, so the `PATH` is updated.
+- **The editor shows "The runner did not respond"**: projects and flows come from the runner, so it must be running (`npm run start` starts both). Check its terminal for a database error (a wrong `DATABASE_URL`, Postgres not started).
+- **Start over with an empty local database**: stop the runner and delete `runner/data.local/`.
 - **Port already in use**: something is still running on 5180 or 5190; stop it, or start with another `RUNNER_PORT` (and the same `RUNNER_URL` for the editor).
 
 ### Other commands
@@ -92,7 +107,7 @@ The runner executes code written in the editor (expressions and the TypeScript c
 | Folder | What it is |
 |---|---|
 | `core/` | Engine: contract, envelope, components (logic) and execution. No React, no Node. |
-| `runner/` | Runner in Bun + Hono: runs, secrets and files API; expressions and scripts sandbox; SQL Server driver. |
+| `runner/` | Runner in Bun + Hono: projects, flows and runs API (Postgres, or PGlite without `DATABASE_URL`), secrets and files; expressions and scripts sandbox; SQL Server driver. |
 | `editor/` | React app: projects, folders, visual editor, component windows and run results. |
 | `docs/` | [Architecture](docs/architecture.md) |
 
@@ -100,7 +115,7 @@ The runner executes code written in the editor (expressions and the TypeScript c
 
 1. The logic in `core/src/components/<name>.ts` (`validate` and `execute`), registered in `core/src/components/index.ts`.
 2. The visual part in `editor/src/components/<name>.tsx` (card, window and Notes), in the `PALETTE` of `editor/src/components/catalog.ts`.
-3. A test in `core/src/engine/engine.test.ts` and an example flow in `editor/src/mock/flows.ts`.
+3. A test in `core/src/engine/engine.test.ts` and an example flow in `editor/src/data/flows.ts`.
 
 The contract details are in the [architecture](docs/architecture.md#7-component-contract-core).
 

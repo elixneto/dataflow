@@ -1,6 +1,6 @@
 import {Graph, layout} from '@dagrejs/dagre';
 import type {Edge} from '@xyflow/react';
-import type {FlowNode} from '#mock/flows';
+import type {FlowNode} from '#data/flows';
 import {ERROR_PORT} from '#editor/component-node';
 
 const DEFAULT_WIDTH = 320;

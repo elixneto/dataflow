@@ -1,7 +1,7 @@
 import {useMemo} from 'react';
 import {Link, Navigate, useParams, useSearchParams} from 'react-router';
 import {FlowEditor} from '#editor/editor';
-import {emptyFlow, getFlow, saveFlow} from '#mock/flows';
+import {emptyFlow, getFlow, saveFlow} from '#data/flows';
 
 export function EditorPage() {
   const {projectId = '', flowId} = useParams();

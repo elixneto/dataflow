@@ -5,26 +5,27 @@ import {evaluate} from './expressions';
 import {prepareScript} from './scripts';
 import {querySqlServer} from './databases/sql-server';
 import {projectRoutes, projectSecrets} from './projects';
+import {describeDatabase, openDatabase} from './storage/database';
+import {repository, type StoredRun} from './storage/repository';
+import {storageRoutes} from './storage/routes';
 
 /*
  * Workflow runner (see docs/architecture.md).
- * For now: runs on demand and keeps the latest runs in memory. A database, blob storage, authentication and
- * scheduling come in the next phases.
+ * For now: runs on demand and stores projects, flows and runs in Postgres (storage/database.ts). Blob storage,
+ * authentication and scheduling come in the next phases.
  */
 
 // RUNNER_PORT, not PORT: whatever starts alongside it (concurrently, preview) usually passes PORT to the editor
 const PORT = Number(process.env.RUNNER_PORT ?? 5190);
-const MAX_STORED_RUNS = 50;
+/** how many runs the list returns */
+const LISTED_RUNS = 50;
 /** maximum time of a run (default 5 min); past that, it is interrupted */
 const TIMEOUT_MS = Number(process.env.RUNNER_TIMEOUT_MS ?? 5 * 60_000);
 
 /** runs in progress right now, for the Stop button */
 const inProgress = new Map<string, AbortController>();
 
-/** stored record with the project and flow it came from (to list by project and go back to the flow) */
-type StoredRun = RunRecord & {projectId?: string; workflowId?: string};
-
-const runs: StoredRun[] = [];
+const repo = repository(await openDatabase());
 
 type RunRequest = {
   /** id chosen by the caller (so it can cancel while it runs); without it, the runner generates one */
@@ -47,6 +48,7 @@ app.use(logger());
 app.get('/health', c => c.json({ok: true}));
 
 app.route('/', projectRoutes);
+app.route('/', storageRoutes(repo));
 
 app.post('/runs', async c => {
   const request = await c.req.json<RunRequest>();
@@ -72,8 +74,9 @@ app.post('/runs', async c => {
   } finally {
     inProgress.delete(id);
   }
-  runs.unshift({...record, projectId: request.projectId, workflowId: request.workflow.id});
-  runs.length = Math.min(runs.length, MAX_STORED_RUNS);
+  const stored: StoredRun = {...record, projectId: request.projectId, workflowId: request.workflow.id};
+  // a failure to store does not lose the result: the editor still gets it
+  await repo.saveRun(stored).catch(error => console.error('Could not store the run:', error));
   return c.json(record);
 });
 
@@ -85,16 +88,13 @@ app.post('/runs/:id/cancel', c => {
 });
 
 /** latest runs (of a project, with ?project=), without the components */
-app.get('/runs', c => {
-  const project = c.req.query('project');
-  return c.json(runs.filter(r => !project || r.projectId === project).map(({components: _, ...summary}) => summary));
-});
+app.get('/runs', async c => c.json(await repo.listRuns(c.req.query('project'), LISTED_RUNS)));
 
-app.get('/runs/:id', c => {
-  const record = runs.find(r => r.run.id === c.req.param('id'));
+app.get('/runs/:id', async c => {
+  const record = await repo.getRun(c.req.param('id'));
   return record ? c.json(record) : c.json({error: 'Run not found.'}, 404);
 });
 
-console.log(`Workflow runner at http://localhost:${PORT}/api`);
+console.log(`Workflow runner at http://localhost:${PORT}/api (${describeDatabase()})`);
 
 export default {port: PORT, fetch: app.fetch};

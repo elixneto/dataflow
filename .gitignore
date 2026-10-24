@@ -9,3 +9,6 @@ runner/secrets.local.json
 
 # project files uploaded to the runner
 runner/files.local/
+
+# runner's embedded database (PGlite), when DATABASE_URL is not set
+runner/data.local/

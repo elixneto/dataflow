@@ -2,7 +2,7 @@ import {useEffect, useRef, useState} from 'react';
 import {Link} from 'react-router';
 import {GitFork} from 'lucide-react';
 import {workflowDependencies, type ExecutableWorkflow, type WorkflowCall} from '@dataflow/core';
-import {listFlows, type Flow} from '#mock/flows';
+import {listFlows, type Flow} from '#data/flows';
 import {toExecutable} from '#run/runner';
 import {Button} from '#ui/button';
 

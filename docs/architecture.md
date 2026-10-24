@@ -7,7 +7,7 @@ How the engine works inside. To run and use it, see the [README](../README.md).
 | Piece | Where | What it does |
 |---|---|---|
 | **core** | `core/` | The component contract, the envelope, the logic of each component and the engine that runs a flow envelope by envelope. Plain TypeScript: no React, no Node. |
-| **runner** | `runner/` | A Bun + Hono app. Receives the flow, runs it with the core and provides what the core does not do on its own: evaluating expressions and scripts in a sandbox (`node:vm`), talking to databases (SQL Server), reading the project's secrets and files and storing the runs. |
+| **runner** | `runner/` | A Bun + Hono app. Receives the flow, runs it with the core and provides what the core does not do on its own: evaluating expressions and scripts in a sandbox (`node:vm`), talking to databases (SQL Server), reading the project's secrets and files, and storing projects, flows and runs in Postgres. |
 | **editor** | `editor/` | A React app: projects, folders, the visual editor (React Flow), each component's window and the run results. Uses the core to validate the assembly and calls the runner to run. |
 
 ## 2. Concepts
@@ -78,7 +78,7 @@ The `ctx` gives the component: `fieldValue` (text or expression), `log`, `prepar
 
 Per run: run, parameters, status (`completed`, `with-warnings`, `with-errors`, `failed`), duration and error. Per component: status, start and end, duration, **active time** (the time processing, without the waiting; since it is a single thread, it is practically its CPU), **estimated memory** (peak of envelopes held and bytes from the JSON), envelopes per port, logs, input and output samples (20 per port) and, in the Workflow Invoker, a summary of each called run.
 
-Today the runner keeps the latest 50 in memory. The next step is a database (MongoDB, for example) and each run in its own Bun Worker, which isolates it and allows measuring CPU and RAM per run.
+The runner stores every run in the `runs` table (the full record in `jsonb`, with the project, flow, status and start beside it to list and filter); the list returns the latest 50. The next step is each run in its own Bun Worker, which isolates it and allows measuring CPU and RAM per run.
 
 ## 9. Workflow Invoker
 
@@ -95,6 +95,11 @@ All under `/api` (the editor's Vite dev server proxies it to the runner on port 
 | Route | What it does |
 |---|---|
 | `GET /api/health` | Health check |
+| `GET /api/projects` / `GET /api/projects/:id` | Projects |
+| `PUT` / `DELETE /api/projects/:id` | Creates or replaces / deletes a project (its flows go along) |
+| `GET /api/flows?project=` / `GET /api/flows/:id` | Flows (lean definitions), optionally of one project |
+| `PUT` / `DELETE /api/flows/:id` | Creates or replaces / deletes a flow |
+| `POST /api/import` | `{projects, flows}` from before the database (the browser's localStorage); what already exists wins |
 | `POST /api/runs` | Runs a flow: `{id?, workflow, mode, parameters?, input?, projectId?, workflows?}` → the run record |
 | `POST /api/runs/:id/cancel` | Stops a run in progress (the Stop button) |
 | `GET /api/runs?project=` | The latest runs (without the per-component detail), optionally of one project |
@@ -106,11 +111,11 @@ All under `/api` (the editor's Vite dev server proxies it to the runner on port 
 | `POST /api/projects/:projectId/files` | Uploads a file (multipart, `file` field); the same name is replaced |
 | `GET` / `DELETE /api/projects/:projectId/files/:name` | Downloads / deletes a file |
 
-Environment variables: `RUNNER_PORT` (default 5190), `RUNNER_TIMEOUT_MS` (maximum time of a run, default 5 min) and `RUNNER_SCRIPT_TIMEOUT_MS` (maximum time of each TypeScript `process` call, default 30 s).
+Environment variables: `DATABASE_URL` (Postgres; without it, PGlite in `runner/data.local/`), `RUNNER_PORT` (default 5190), `RUNNER_TIMEOUT_MS` (maximum time of a run, default 5 min) and `RUNNER_SCRIPT_TIMEOUT_MS` (maximum time of each TypeScript `process` call, default 30 s).
 
 ## 12. Not done yet
 
-- A database for projects, flows and runs (today projects and flows live in the browser; runs, secrets and files, in the runner).
+- Secrets and files in the database / blob storage (today they live in runner folders).
 - Triggers: an endpoint per flow and scheduling (cron).
 - Authentication in the runner.
 - Sources and targets beyond SQL Server (CSV, HTTP, other databases).

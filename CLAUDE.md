@@ -6,7 +6,7 @@ Overview, concepts and how to run: [README.md](README.md). Engine architecture: 
 |---|---|---|
 | `editor/` | App (Vite + React + React Flow) at the root: projects → flows (editor), runs, secrets, files | see [editor/CLAUDE.md](editor/CLAUDE.md) |
 | `core/` | TypeScript engine without React or Node: contract (`src/types/`, one type per file, imported as `#types/<name>.type`), `src/envelope/` (building envelopes, expression variables), `src/validation/` (key names, cycles), `src/errors/`, `src/engine/` (envelope-by-envelope execution: entry point `workflowRunner` (`workflow-runner.ts`) → class `WorkflowExecution`), components (logic) | used by the editor (alias `@dataflow/core`) and by the runner |
-| `runner/` | Runner in Bun + Hono (port 5190): runs, secrets and files per project, expressions and scripts in `node:vm` | runs separately; the editor talks to it through `/api` |
+| `runner/` | Runner in Bun + Hono (port 5190): projects, flows and runs in Postgres (`src/storage/`: `DATABASE_URL`, or PGlite in `runner/data.local/` without it), secrets and files per project, expressions and scripts in `node:vm` | runs separately; the editor talks to it through `/api` |
 
 ## Commands (at the root)
 
@@ -23,6 +23,10 @@ Overview, concepts and how to run: [README.md](README.md). Engine architecture: 
    - If the component accumulates envelopes, report it with `ctx.holding(count, envelope)` (it becomes the Memory in the Metrics). An internal wait that is not an input (its own promise, an internal queue) goes through `ctx.wait` / `ctx.waitEach`, so it does not count as active time.
 2. Visual part in `editor/src/components/<name>.tsx` (`Card`, `Panel`, `Docs`) and an entry in the `PALETTE` (`editor/src/components/catalog.ts`).
 3. The runner does not need to change, except for a component that talks to the outside. A new database: add its name to `DatabaseKind` (`core/src/types/database-kind.type.ts`), write the driver in `runner/src/databases/<name>.ts` and register it in `databases` (`runner/src/index.ts`); the component calls `ctx.queryDatabase('<kind>', ...)` and keeps its SQL-flavor rules. `npm run start` runs Bun from the root, so `--watch` also reloads the runner when `core` changes.
+
+## Database
+
+`runner/src/storage/`: `database.ts` opens Postgres (`DATABASE_URL`, through `Bun.sql`) or PGlite (embedded, in `runner/data.local/`; `memory://` in the tests) behind the same `query`; `migrations.ts` holds the schema as numbered steps (never edit a committed step: add a new one at the end); `repository.ts` reads and writes; `routes.ts` is the projects and flows API. The flow is stored as the editor's lean definition in a `jsonb` column. Repository tests run on PGlite; with `TEST_DATABASE_URL` they also run on a real Postgres (and drop its tables first).
 
 ## Secrets (`$SECRETS`) and files
 

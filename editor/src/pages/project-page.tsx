@@ -3,7 +3,8 @@ import {Link, useParams, useSearchParams} from 'react-router';
 import {Download, KeyRound, RefreshCw, Trash2, Upload} from 'lucide-react';
 import type {RunRecord} from '@dataflow/core';
 import {StatusIcon, ms, STATUS_LABEL} from '#run/run-panel';
-import {getProject} from '#mock/projects';
+import {getProject} from '#data/projects';
+import {request} from '#data/api';
 import {Button} from '#ui/button';
 import {fieldInput} from '#ui/expression-field';
 import {cn} from '#lib/utils';
@@ -12,21 +13,9 @@ import {Header, shortDate} from '#pages/header';
 
 type Tab = 'flows' | 'runs' | 'secrets' | 'files';
 
-const TABS: [Tab, string][] = [['flows', 'Flows'], ['runs', 'Runs'], ['secrets', 'Secrets'], ['files', 'Files']];
-
 const API = '/api';
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  let response: Response;
-  try {
-    response = await fetch(`${API}${path}`, init);
-  } catch {
-    throw new Error('The runner did not respond. Is it running? (npm run start at the repository root)');
-  }
-  const body = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(body.error ?? `The runner returned ${response.status}.`);
-  return body as T;
-}
+const TABS: [Tab, string][] = [['flows', 'Flows'], ['runs', 'Runs'], ['secrets', 'Secrets'], ['files', 'Files']];
 
 /** Project: Flows, Runs, Secrets and Files tabs (the tab lives in the URL, ?tab=). */
 export function ProjectPage() {

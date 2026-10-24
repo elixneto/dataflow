@@ -1,8 +1,8 @@
 import type {Edge} from '@xyflow/react';
 import type {RunMode, WorkflowParameter, RunRecord, ExecutableWorkflow} from '@dataflow/core';
 import {isComponent} from '#editor/validation';
-import {getFlow, type FlowNode} from '#mock/flows';
-import {getProject} from '#mock/projects';
+import {getFlow, type FlowNode} from '#data/flows';
+import {getProject} from '#data/projects';
 
 /** What the editor has → what the runner receives (no position, comments or anything visual). */
 export function toExecutable(name: string, parameters: WorkflowParameter[], nodes: FlowNode[], edges: Edge[], id?: string, projectId?: string): ExecutableWorkflow {

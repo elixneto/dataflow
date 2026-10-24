@@ -2,7 +2,7 @@ import {useEffect, useState} from 'react';
 import {Link, useNavigate, useParams} from 'react-router';
 import type {RunRecord} from '@dataflow/core';
 import {RunResult} from '#run/run-panel';
-import {getProject} from '#mock/projects';
+import {getProject} from '#data/projects';
 import {Header} from '#pages/header';
 
 type StoredRun = RunRecord & {workflowId?: string};

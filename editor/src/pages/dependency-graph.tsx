@@ -3,7 +3,7 @@ import {Background, BackgroundVariant, Controls, MarkerType, Position, ReactFlow
 import '@xyflow/react/dist/style.css';
 import {Graph, layout} from '@dagrejs/dagre';
 import {workflowCalls} from '@dataflow/core';
-import {listFlows, type Flow} from '#mock/flows';
+import {listFlows, type Flow} from '#data/flows';
 import {toExecutable} from '#run/runner';
 import {cn} from '#lib/utils';
 

@@ -1,0 +1,17 @@
+# Optional: a local Postgres for the runner. Without it (no DATABASE_URL), the runner uses PGlite in runner/data.local/.
+#   docker compose up -d
+#   DATABASE_URL=postgres://dataflow:dataflow@localhost:5432/dataflow   (in .env at the root)
+services:
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: dataflow
+      POSTGRES_PASSWORD: dataflow
+      POSTGRES_DB: dataflow
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres:/var/lib/postgresql/data
+
+volumes:
+  postgres:
