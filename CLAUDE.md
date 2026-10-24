@@ -10,6 +10,7 @@ Overview, concepts and how to run: [README.md](README.md). Engine architecture: 
 
 ## Commands (at the root)
 
+- Requirements: Node.js 24+ (`.nvmrc`, `engines` and `engine-strict=true` in every `.npmrc`) and Bun 1.2+. `npm run check` (`scripts/check-env.mjs`) checks both; it also runs before `setup` and `start`.
 - `npm run setup` — installs the dependencies of the three parts (once).
 - `npm run start` — starts **runner and editor together** (concurrently, one terminal); opens at http://localhost:5180/ (project list).
 - `npm run lint` — ESLint over the three parts (`eslint.config.mjs`); it is the first step of `npm run build`, so a missing `;` or an `any` breaks the build.

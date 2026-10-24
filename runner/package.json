@@ -2,6 +2,9 @@
   "name": "dataflow-runner",
   "private": true,
   "version": "0.1.0",
+  "engines": {
+    "node": ">=24"
+  },
   "type": "module",
   "scripts": {
     "start": "bun --watch src/index.ts",

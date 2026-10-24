@@ -25,18 +25,48 @@ Each component has its full explanation in the **Notes** tab of its window, insi
 
 ## Running
 
-Requires [Node.js](https://nodejs.org) 20.19+ (or 22.12+, for Vite 8) and [Bun](https://bun.sh) 1.2+.
+### Requirements
+
+- [Node.js](https://nodejs.org) **24+** (the version is in `.nvmrc`; with [nvm](https://github.com/nvm-sh/nvm) or [nvm-windows](https://github.com/coreybutler/nvm-windows): `nvm install 24 && nvm use 24`).
+- [Bun](https://bun.sh) **1.2+** (runs the runner and the tests). macOS/Linux: `curl -fsSL https://bun.sh/install | bash`; Windows: `powershell -c "irm bun.sh/install.ps1 | iex"`.
+- Git.
+
+`npm run check` confirms both versions. It also runs at the start of `npm run setup` and `npm run start`, and every `.npmrc` has `engine-strict=true`, so an older Node stops with a clear message instead of failing halfway.
+
+### First time
 
 ```bash
-npm run setup   # dependencies of the three parts (once)
-npm run start   # runner (port 5190) + editor (port 5180)
+git clone https://github.com/elixneto/dataflow.git
+cd dataflow
+npm run setup   # checks the environment and installs the dependencies of the three parts
+npm run start   # runner (port 5190) + editor (port 5180), in one terminal
 ```
 
 Open http://localhost:5180. The **Examples** project has an example flow for each component; open one and click **Run**.
 
-Other commands: `npm test` (core and runner tests), `npm run typecheck`, `npm run build` (editor build in `editor/dist`).
+After a `git pull` that changes a `package.json`, run `npm run setup` again.
 
-The runner reads `RUNNER_PORT` (default 5190), `RUNNER_TIMEOUT_MS` (maximum time of a run, default 5 min) and `RUNNER_SCRIPT_TIMEOUT_MS` (maximum time of each TypeScript call, default 30 s). The editor's dev server proxies `/api` to `RUNNER_URL` (default http://localhost:5190).
+### Configuration
+
+The runner reads these environment variables (Bun also loads a `.env` file at the root, if there is one):
+
+| Variable | Default | What it is |
+|---|---|---|
+| `RUNNER_PORT` | `5190` | Runner port |
+| `RUNNER_TIMEOUT_MS` | `300000` (5 min) | Maximum time of a run |
+| `RUNNER_SCRIPT_TIMEOUT_MS` | `30000` (30 s) | Maximum time of each TypeScript call |
+
+The editor's dev server proxies `/api` to `RUNNER_URL` (default http://localhost:5190).
+
+### Troubleshooting
+
+- **`Unsupported engine` / `Node.js 24.0+ is required`**: switch Node with `nvm use` (or install 24) and run `npm run setup` again.
+- **`Bun is not installed`**: install Bun and open a new terminal, so the `PATH` is updated.
+- **Port already in use**: something is still running on 5180 or 5190; stop it, or start with another `RUNNER_PORT` (and the same `RUNNER_URL` for the editor).
+
+### Other commands
+
+`npm test` (core and runner tests), `npm run lint`, `npm run typecheck`, `npm run build` (lint + editor build in `editor/dist`). CI runs the same steps on every pull request.
 
 ### Secrets and files
 
