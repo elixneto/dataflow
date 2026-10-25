@@ -2,6 +2,7 @@ import type {ComponentLogic} from '#types/component-logic.type';
 import {aggregate} from './aggregate';
 import {copy} from './copy';
 import {datagrid} from './datagrid';
+import {distinct} from './distinct';
 import {filter} from './filter';
 import {lookup} from './lookup';
 import {mapper} from './mapper';
@@ -22,6 +23,7 @@ export const COMPONENTS: Record<string, ComponentLogic> = {
   [typescript.type]: typescript,
   [aggregate.type]: aggregate,
   [split.type]: split,
+  [distinct.type]: distinct,
   [datagrid.type]: datagrid,
   [copy.type]: copy,
   [sqlserver.type]: sqlserver,

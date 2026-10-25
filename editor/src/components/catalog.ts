@@ -4,6 +4,7 @@ import {LOOKUP} from '#components/lookup';
 import {AGGREGATE} from '#components/aggregate';
 import {COPY} from '#components/copy';
 import {DATA_GRID} from '#components/datagrid';
+import {DISTINCT} from '#components/distinct';
 import {MAPPER} from '#components/mapper';
 import {TYPESCRIPT} from '#components/typescript';
 import {ROUTER} from '#components/router';
@@ -43,7 +44,7 @@ const FLOW: ComponentDef[] = [
  * Components shown in the palette, in alphabetical order within each section. Each new component is designed
  * (inputs, outputs, card, panel, validation) and added here.
  */
-export const PALETTE: ComponentDef[] = [MAPPER, DATA_GRID, FILTER, ROUTER, LOOKUP, UNION, COPY, AGGREGATE, SPLIT, TYPESCRIPT, SQL_SERVER, WORKFLOW_INVOKER]
+export const PALETTE: ComponentDef[] = [MAPPER, DATA_GRID, FILTER, ROUTER, LOOKUP, UNION, COPY, AGGREGATE, SPLIT, DISTINCT, TYPESCRIPT, SQL_SERVER, WORKFLOW_INVOKER]
   .sort((a, b) => a.label.localeCompare(b.label, 'en'));
 
 export const BY_TYPE: Record<string, ComponentDef> = Object.fromEntries([...PALETTE, ...FLOW].map(c => [c.type, c]));

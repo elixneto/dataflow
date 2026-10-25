@@ -54,7 +54,7 @@ Every port receives and sends **envelopes**, in sequence: there is no port type,
 
 - Each edge becomes an async queue (`Channel`) with limited capacity; all components run at the same time. Envelope 1 is already in the Filter while the query is still reading envelope 2.
 - **Backpressure**: the writer waits when the queue is full, so memory stays constant whatever the volume. The SQL Server Query even pauses the database.
-- **Accumulators** (Lookup, Aggregate) hold envelopes by nature and report how much they hold (it becomes the Memory in the Metrics).
+- **Accumulators** (Lookup, Aggregate) hold envelopes by nature and report how much they hold (it becomes the Memory in the Metrics); Distinct reports only the keys it has seen.
 
 ## 7. Component contract (core)
 

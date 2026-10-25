@@ -19,6 +19,7 @@ Inspired by SnapLogic and Pentaho Kettle, all in JavaScript: the editor in React
 | | **Lookup** | Finds the match in another input by key |
 | | **Union** / **Copy** | Joins paths / sends the same envelope to several |
 | | **Aggregate** / **Split** | Groups envelopes into batches / yields one envelope per item of a list |
+| | **Distinct** | Lets through only the first envelope of each key |
 | Flow | **Workflow Invoker** | Calls another flow, passing the parameters of its Start |
 
 Each component has its full explanation in the **Notes** tab of its window, inside the editor.
