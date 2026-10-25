@@ -109,7 +109,7 @@ function MongoUpsertDocs() {
       <h4>Output</h4>
       <p>The incoming envelope plus <code>$mongodb</code> (the name can be changed): <code>{'{matched, upsertedId}'}</code>. <code>upsertedId</code> is the id of an inserted document, as text, or <code>null</code> when it found one (<code>matched: 1</code>). Whether that one changed is known per batch, in the log; with a batch size of 1 the output also has <code>modified</code>. Override on: only <code>$mongodb</code>.</p>
       <h4>Test run and Run for real</h4>
-      <p>This component writes outside the flow, so the editor&apos;s <b>Run</b> (a test run) does not write: it logs the first upserts it would send, and nothing goes on from it, so the components after it get nothing. <b>Run for real</b> (next to Run, with a confirmation listing what will write) writes. A pinned output is replayed in test runs as usual, so what comes after it can be tested with a real answer.</p>
+      <p>This component writes outside the flow, so the editor&apos;s <b>Run</b> (a test run) does not write: it logs the first upserts it would send, and each envelope goes on with <code></code> = <code>{'{notSent: true}'}</code>, so the rest of the flow (and the End of a called flow) is tested too. <b>Run for real</b> (next to Run, with a confirmation listing what will write) writes. A pinned output is replayed in test runs as usual, so what comes after it can be tested with a real answer.</p>
       <h4>Connection</h4>
       <p>The name of a secret (<code>$SECRETS</code>) holding the connection string, e.g. <code>mongodb+srv://user:password@cluster.example.net</code>. It is never stored in the flow or in the logs. Ideally the user can only write to this collection.</p>
       <h4>Batch size</h4>

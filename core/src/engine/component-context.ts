@@ -97,9 +97,9 @@ export function componentContext(execution: WorkflowExecution, node: ExecutableN
       try {
         // a test run deletes nothing: it only counts what the filter matches (a read)
         const n = await driver({...request, connection, countOnly: dryRun, signal: execution.control.signal});
-        if (!dryRun) return n;
+        if (!dryRun) return {deleted: n};
         log('info', `Test run: ${n} document(s) of ${target} match the filter ${JSON.stringify(request.filter)}; none deleted.`);
-        return null;
+        return {notSent: true, matched: n};
       } finally {
         waiting.stop();
         stopwatch.resume();

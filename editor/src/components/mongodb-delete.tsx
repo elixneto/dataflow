@@ -71,7 +71,7 @@ function MongoDeleteDocs() {
       <h4>Output</h4>
       <p>The incoming envelope plus <code>$mongodb</code> (the name can be changed): <code>{'{deleted}'}</code>, how many documents were deleted. Override on: only <code>$mongodb</code>.</p>
       <h4>Test run and Run for real</h4>
-      <p>It writes to the database, so the editor&apos;s <b>Run</b> deletes nothing: it counts the documents the filter matches and writes it in the log (&quot;12 document(s) match the filter …; none deleted&quot;), and nothing goes on from it. <b>Run for real</b> deletes.</p>
+      <p>It writes to the database, so the editor&apos;s <b>Run</b> deletes nothing: it counts the documents the filter matches and writes it in the log (&quot;12 document(s) match the filter …; none deleted&quot;), and the envelope goes on with <code></code> = <code>{'{notSent: true, matched}'}</code>, so the rest of the flow is tested too. <b>Run for real</b> deletes.</p>
       <h4>Connection</h4>
       <p>The name of a secret (<code>$SECRETS</code>) holding the connection string. It is never stored in the flow or in the logs.</p>
       <h4>Errors</h4>

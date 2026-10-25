@@ -125,9 +125,10 @@ export const mongodbUpsert: ComponentLogic = {
         for (const {doc} of current) yield {error: toError(e), doc};
         return;
       }
-      // a test run: nothing written, nothing goes on
+      // a test run: nothing written; the envelopes go on marked as not sent
       if (answer === null) {
         prepared += current.length;
+        for (const {doc} of current) yield {port: 'out-0', doc: withKey(doc, key, {notSent: true}, ctx.node.override)};
         return;
       }
       const results = answer.results;

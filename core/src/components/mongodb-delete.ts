@@ -64,12 +64,14 @@ export const mongodbDelete: ComponentLogic = {
         if (Object.keys(match).length === 0 && !allowAll) {
           throw new Error('The filter is empty, which would delete the whole collection: turn on "Delete all" to allow it.');
         }
-        const n = await ctx.deleteDocuments('mongodb', {secret: connection, database, collection, filter: match});
-        // a test run: nothing deleted, nothing goes on
-        if (n === null) {
+        const answer = await ctx.deleteDocuments('mongodb', {secret: connection, database, collection, filter: match});
+        // a test run: nothing deleted; the envelope goes on with what the filter matches
+        if ('notSent' in answer) {
           tested += 1;
+          yield {port: 'out-0', doc: withKey(doc, key, answer, ctx.node.override)};
           continue;
         }
+        const n = answer.deleted;
         deleted += n;
         ctx.log('info', `Delete ${calls}: ${n} document(s) from ${target} in ${Math.round(performance.now() - t0)} ms.`);
         yield {port: 'out-0', doc: withKey(doc, key, {deleted: n}, ctx.node.override)};

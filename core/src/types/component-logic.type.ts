@@ -25,7 +25,7 @@ export type ComponentLogic = {
   defaultOutputKey?: string;
   /**
    * A target: writes outside the run (a database, an API). In a test run (`validation`, the editor's Run) it does not
-   * write and its branch stops there, unless it is pinned (docs/architecture.md, section 12). Runs for real in `execution`.
+   * write and its envelopes go on with `{notSent: true}` in its output key, unless it is pinned (docs/architecture.md, section 12). Runs for real in `execution`.
    * A function of the config when it depends on it (e.g. an HTTP request writes only with POST, PUT, PATCH, DELETE).
    */
   sideEffects?: boolean | ((config: Record<string, unknown>) => boolean);

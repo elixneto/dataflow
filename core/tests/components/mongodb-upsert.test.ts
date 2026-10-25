@@ -92,16 +92,16 @@ test('MongoDB Upsert counts inserted, modified and unchanged documents, per batc
   expect(logs.at(-1)).toBe('3 document(s) upserted into crm.people: 1 inserted, 1 modified, 1 unchanged (3 sent).');
 });
 
-test('MongoDB Upsert writes nothing in a test run and its branch stops there, unless it is pinned', async () => {
+test('MongoDB Upsert writes nothing in a test run and the envelopes go on marked as not sent, unless it is pinned', async () => {
   const mongo = fakeMongo();
   const r = await workflowRunner(flow({filter: [{field: '_id', value: '$_id', expression: true}]}),
     {mode: 'validation', id: 'm2', evaluate, documentStores: {mongodb: mongo.driver}, secrets: {MONGO: 'mongodb://x'}});
   expect(mongo.batches).toEqual([]);
   const node = r.components.find(c => c.nodeId === 'mongo')!;
-  expect(node.status).toBe('with-warnings');
-  expect(node.outputs).toEqual({});
+  expect(node.status).toBe('completed');
+  expect(node.outputs).toEqual({'out-0': 3});
   expect(node.logs.some(l => l.message === 'Would upsert into crm.people: filter {"_id":1}, $set {"email":"ana@x.com","name":"Ana"}')).toBe(true);
-  expect(r.components.find(c => c.nodeId === 'after')!.inputs).toEqual({});
+  expect(r.components.find(c => c.nodeId === 'after')!.outputSample['out-0'].map(d => d.mongodb)).toEqual(Array(3).fill({notSent: true}));
 
   const pinned = flow();
   pinned.nodes.find(n => n.id === 'mongo')!.pinned = {'out-0': [{name: 'Pinned'}]};

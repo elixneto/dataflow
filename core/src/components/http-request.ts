@@ -9,8 +9,8 @@ import type {HttpResponse} from '#types/http-response.type';
  * HTTP Request: one request per envelope (method, URL, query params, headers and body are expressions on it; $SECRETS
  * works, e.g. `'Bearer ' + $SECRETS.TOKEN`), and the envelope goes on with `{status, headers, body}` in its output key
  * (the body parsed when the response is JSON). With "Fail on non-2xx", an error status is an error of the envelope.
- * A GET only reads; POST, PUT, PATCH and DELETE write, so in a test run they send nothing (the engine's gate for
- * `sideEffects`, here a function of the method). Up to `concurrency` requests at once, the output in arrival order.
+ * A GET only reads; POST, PUT, PATCH and DELETE write, so in a test run they send nothing and the envelope goes on with
+ * `{notSent: true}` (the engine's gate for `sideEffects`, here a function of the method). Up to `concurrency` requests at once, the output in arrival order.
  * Secret values never reach the logs.
  */
 
@@ -124,8 +124,10 @@ export const httpRequest: ComponentLogic = {
         yield {error, doc};
         return;
       }
+      // a test run of a writing method: nothing sent; the envelope goes on marked as not sent
       if (!response || !request) {
         counts.notSent += 1;
+        yield {port: 'out-0', doc: withKey(doc, key, {notSent: true}, ctx.node.override)};
         return;
       }
       const s = response.status;

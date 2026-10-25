@@ -113,7 +113,7 @@ POST $SECRETS.API_URL + "/sectors"   body ({groupId: $PARAMETERS.groupId, name: 
       <h4>Fail on non-2xx</h4>
       <p>On (default), a status outside 200–299 is an error of the envelope, with the status and the start of the answer, and follows the card&apos;s &quot;On error&quot; policy. Off, it goes on to the output like any other answer, so a Router can look at <code>$response.status</code>.</p>
       <h4>Test run and Run for real</h4>
-      <p>A GET only reads, so it is sent in the editor&apos;s <b>Run</b> too. POST, PUT, PATCH and DELETE write: <b>Run</b> does not send them, it logs what it would send, and nothing goes on from it. <b>Run for real</b> sends them. A pinned output is replayed in test runs, so what comes after can be tested with a real answer.</p>
+      <p>A GET only reads, so it is sent in the editor&apos;s <b>Run</b> too. POST, PUT, PATCH and DELETE write: <b>Run</b> does not send them, it logs what it would send, and the envelope goes on with <code></code> = <code>{'{notSent: true}'}</code>, so the rest of the flow is tested too. <b>Run for real</b> sends them. A pinned output is replayed in test runs, so what comes after can be tested with a real answer.</p>
       <h4>Timeout and concurrency</h4>
       <p>A request with no answer in the timeout (default {DEFAULT_HTTP_TIMEOUT_S} s) is an error of its envelope, as is a network failure. Concurrency (1 to {MAX_HTTP_CONCURRENCY}) is how many requests are in flight at once; the envelopes still go out in the order they came in.</p>
       <h4>Logs</h4>

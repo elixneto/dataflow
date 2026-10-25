@@ -223,12 +223,11 @@ export class WorkflowExecution {
         const logic = COMPONENTS[node.type];
         if (!logic) throw new Error(`Component "${node.type}" does not exist in the runner.`);
         // THE gate for targets (section 12 of docs/architecture.md): in a test run a component with side effects writes
-        // nothing (its ctx sends nothing) and nothing goes out of it, so its branch stops there. A pin replays (above).
+        // nothing (its ctx sends nothing) and its envelopes go on marked `notSent`, so the rest of the flow (and a
+        // called flow's End) is tested too. A pin replays (above).
         dryRun = this.options.mode === 'validation' && writesOutside(logic, node.config);
         const ctx = componentContext(this, node, log, dryRun);
-        const send = async (port: string, doc: Envelope) => {
-          if (!dryRun) await this.send(node, port, doc);
-        };
+        const send = (port: string, doc: Envelope) => this.send(node, port, doc);
         // the stopwatch runs while the component produces the next result (it discounts waiting for inputs)
         for await (const output of timedRequests(logic.execute(inputs, node.config, ctx), stopwatch)) {
           if ('port' in output) {
@@ -248,10 +247,10 @@ export class WorkflowExecution {
           // continue: the incoming envelope goes out as it was through the main output and the flow moves on
           if (policy === 'continue') await send('out-0', output.doc);
         }
-        if (dryRun) log('warning', 'Test run: nothing was written and nothing went on from here. Run for real to write.');
+        if (dryRun) log('info', 'Test run: nothing was written; the envelopes went on marked notSent. Run for real to write.');
       }
       const lost = this.reportDropped(node, log);
-      rec.status = errors > 0 ? 'with-errors' : node.pinned && this.options.mode === 'validation' ? 'pinned' : node.disabled ? 'disabled' : lost || dryRun ? 'with-warnings' : 'completed';
+      rec.status = errors > 0 ? 'with-errors' : node.pinned && this.options.mode === 'validation' ? 'pinned' : node.disabled ? 'disabled' : lost ? 'with-warnings' : 'completed';
     } catch (e) {
       rec.status = 'failed';
       const message = e instanceof Error ? e.message : String(e);

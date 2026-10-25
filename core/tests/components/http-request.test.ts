@@ -82,7 +82,9 @@ test('HTTP Request: a GET runs in a test run, a POST does not send and logs what
   const post = await workflowRunner(flow(POST_SETOR), {mode: 'validation', id: 'h3', evaluate, http: http.send, secrets: SECRETS});
   expect(http.requests).toHaveLength(3);
   const node = nodeOf(post);
-  expect(node.status).toBe('with-warnings');
+  expect(node.status).toBe('completed');
+  // nothing sent, and the envelope goes on marked as such
+  expect(node.outputSample['out-0'].map(d => d.response)).toEqual(Array(3).fill({notSent: true}));
   expect(node.logs.some(l => l.message === 'Test run: POST ***/setores?origem=infofisio not sent, body {"grupoId":"g-1","nome":"Produção"}.')).toBe(true);
   expect(node.logs.some(l => l.message.includes('segredo-123456'))).toBe(false);
 });

@@ -64,10 +64,10 @@ export type ComponentContext = {
   upsertDocuments: (kind: DocumentStoreKind, batch: Omit<DocumentBatch, 'connection' | 'signal'> & {secret: string}) => Promise<UpsertAnswer | null>;
   /**
    * Deletes the documents the filter matches, through the driver the runner registered for that kind, and answers how
-   * many. In a test run of a component with side effects it deletes nothing: it counts what the filter matches, logs it
-   * and answers null.
+   * many (`deleted`). In a test run of a component with side effects it deletes nothing: it counts what the filter
+   * matches, logs it and answers `{notSent: true, matched}`.
    */
-  deleteDocuments: (kind: DocumentStoreKind, request: Omit<DocumentDelete, 'connection' | 'signal' | 'countOnly'> & {secret: string}) => Promise<number | null>;
+  deleteDocuments: (kind: DocumentStoreKind, request: Omit<DocumentDelete, 'connection' | 'signal' | 'countOnly'> & {secret: string}) => Promise<{deleted: number} | {notSent: true; matched: number}>;
   /**
    * Sends an HTTP request through the runner's function (fetch). In a test run of a component that writes (e.g. a POST)
    * it sends nothing: it logs the method, the URL and an excerpt of the body, with the secrets hidden, and answers null.

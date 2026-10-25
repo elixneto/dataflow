@@ -25,7 +25,7 @@ Inspired by SnapLogic and Pentaho Kettle, all in JavaScript: the editor in React
 | | **Limit** | Lets only the first (top) or last (bottom) N envelopes through |
 | Destinations | **MongoDB Delete** | Deletes the documents that match a filter (an empty one only with Delete all); counts only in a test run |
 | | **MongoDB Upsert** | Updates or inserts each envelope into a collection (by filter fields); writes only in Run for real |
-| Destinations | **HTTP Request** | One request per envelope (method, URL, query, headers, body as expressions); answer in `$response`; a GET runs in a test run, POST/PUT/PATCH/DELETE only for real |
+| | **HTTP Request** | One request per envelope (method, URL, query, headers, body as expressions); answer in `$response`; a GET runs in a test run, POST/PUT/PATCH/DELETE only for real |
 | Flow | **Log** | Records a message per envelope (debug, info, warn, error); debug only in test runs |
 | | **Workflow Invoker** | Calls another flow, passing the parameters of its Start |
 

@@ -61,16 +61,18 @@ test('MongoDB Delete deletes once per envelope in a real run, with the filter ev
   expect(node.waitingMs).toBeGreaterThan(0);
 });
 
-test('MongoDB Delete deletes nothing in a test run: it counts what the filter matches and its branch stops there', async () => {
+test('MongoDB Delete deletes nothing in a test run: it counts what the filter matches and the envelope goes on marked as not sent', async () => {
   const mongo = fakeMongo();
   const r = await workflowRunner(flow('{ empresaId: $PARAMETERS.empresaId }'),
     {mode: 'validation', id: 'd2', evaluate, documentDeletes: {mongodb: mongo.driver}, secrets: {MONGO: 'mongodb://x'}});
   // asked only to count
   expect(mongo.calls.every(c => c.countOnly === true)).toBe(true);
   const node = nodeOf(r);
-  expect(node.status).toBe('with-warnings');
+  expect(node.status).toBe('completed');
   expect(node.logs.some(l => l.message === 'Test run: 3 document(s) of crm.staging match the filter {"empresaId":107}; none deleted.')).toBe(true);
-  expect(nodeOf(r, 'after').inputs).toEqual({});
+  expect(nodeOf(r, 'after').outputSample['out-0']).toEqual([
+    {id: 107, mongodb: {notSent: true, matched: 3}, seen: 'yes'}, {id: 91, mongodb: {notSent: true, matched: 3}, seen: 'yes'},
+  ]);
 });
 
 test('MongoDB Delete: an empty filter at run time, a filter that is not an object or fails is an error of the envelope', async () => {
