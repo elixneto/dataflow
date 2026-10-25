@@ -1,4 +1,4 @@
-import {timed} from '#engine/stopwatch';
+import {timed, timedRequests} from '#engine/stopwatch';
 import {invokeWorkflow} from '#engine/invoke-workflow';
 import {envelopeVariables} from '#envelope/expression-variables';
 import type {WorkflowExecution} from '#engine/workflow-execution';
@@ -15,6 +15,8 @@ const LOGGED_UPSERTS = 3;
 export function componentContext(execution: WorkflowExecution, node: ExecutableNode, log: ComponentContext['log'], dryRun = false): ComponentContext {
   const {run, options, parameters} = execution;
   const stopwatch = execution.stopwatchOf(node.id);
+  // runs only while waiting for an outside system: a pull of the next row, a write, the next envelope of a called flow
+  const waiting = execution.waitingOf(node.id);
   let logged = 0;
   return {
     run, node, log,
@@ -34,13 +36,17 @@ export function componentContext(execution: WorkflowExecution, node: ExecutableN
       }
     },
     waitEach: source => timed(source, stopwatch),
-    invokeWorkflow: (workflowId, call) => invokeWorkflow(execution, node, workflowId, call),
+    invokeWorkflow: (workflowId, call) => {
+      const called = invokeWorkflow(execution, node, workflowId, call);
+      return {...called, envelopes: timedRequests(called.envelopes, waiting)};
+    },
     queryDatabase: (kind, {secret, ...query}) => {
       const driver = options.databases?.[kind];
       if (!driver) throw new Error(`This runner does not query ${kind}.`);
       const connection = options.secrets?.[secret];
       if (!connection) throw new Error(`The secret "${secret}" does not exist in this runner.`);
-      return driver({...query, connection, signal: execution.control.signal});
+      // only the pull of the next row: while the component is held by the next one (backpressure), it is not waiting here
+      return timedRequests(driver({...query, connection, signal: execution.control.signal}), waiting);
     },
     upsertDocuments: async (kind, {secret, ...batch}) => {
       const driver = options.documentStores?.[kind];
@@ -58,8 +64,10 @@ export function componentContext(execution: WorkflowExecution, node: ExecutableN
       }
       stopwatch.stop();
       try {
+        waiting.resume();
         return await driver({...batch, connection, signal: execution.control.signal});
       } finally {
+        waiting.stop();
         stopwatch.resume();
       }
     },

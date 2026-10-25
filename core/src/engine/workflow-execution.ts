@@ -43,6 +43,7 @@ export class WorkflowExecution {
   private readonly records: Map<string, ComponentRun>;
   private readonly stopwatches: Map<string, Stopwatch>;
   private readonly memories: Map<string, MemoryMeter>;
+  private readonly waits: Map<string, Stopwatch>;
   private readonly channels: (ExecutableWorkflow['edges'][number] & {channel: Channel<Envelope>})[];
   /** envelopes that went out through an unconnected port (they vanish from the flow): per node and port */
   private readonly dropped = new Map<string, Record<string, number>>();
@@ -60,6 +61,7 @@ export class WorkflowExecution {
     }]));
     this.stopwatches = new Map(wf.nodes.map(node => [node.id, new Stopwatch()]));
     this.memories = new Map(wf.nodes.map(node => [node.id, new MemoryMeter()]));
+    this.waits = new Map(wf.nodes.map(node => [node.id, new Stopwatch()]));
     // one channel per edge
     this.channels = wf.edges.map(e => ({...e, channel: new Channel<Envelope>()}));
   }
@@ -67,6 +69,8 @@ export class WorkflowExecution {
   recordOf(nodeId: string) { return this.records.get(nodeId)!; }
   stopwatchOf(nodeId: string) { return this.stopwatches.get(nodeId)!; }
   memoryOf(nodeId: string) { return this.memories.get(nodeId)!; }
+  /** time waiting for outside systems (the context helpers that talk to them run it) */
+  waitingOf(nodeId: string) { return this.waits.get(nodeId)!; }
 
   /** Runs every component until all of them finish, and returns the record. */
   async execute(initialEnvelopes: EnvelopeData[]): Promise<RunRecord> {
@@ -257,6 +261,8 @@ export class WorkflowExecution {
       stopwatch.stop();
       rec.activeTimeMs = Math.round(stopwatch.total * 100) / 100;
       rec.memory = this.memoryOf(node.id).summary;
+      const waiting = this.waitingOf(node.id).total;
+      if (waiting > 0) rec.waitingMs = Math.round(waiting * 100) / 100;
       rec.start ??= new Date(t0).toISOString();
       rec.end = new Date().toISOString();
       rec.durationMs = Date.now() - Date.parse(rec.start);

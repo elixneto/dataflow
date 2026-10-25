@@ -62,6 +62,8 @@ test('MongoDB Upsert writes in batches in a real run and maps each result to its
   const node = r.components.find(c => c.nodeId === 'mongo')!;
   expect(node.status).toBe('with-errors');
   expect(node.logs.filter(l => l.level === 'error').map(l => l.message)).toEqual(['The filter field "email" has no value.', 'E11000 duplicate key']);
+  expect(node.logs.some(l => /^Batch 1: 2 upsert\(s\) in \d+ ms \(1 inserted, 0 modified, 1 failed\)\.$/.test(l.message))).toBe(true);
+  expect(node.waitingMs).toBeGreaterThan(0);
   // continue: the failed envelopes go on unchanged; the written one carries the result
   expect(node.outputSample['out-0']).toEqual([
     {_id: 2, email: null, name: 'Bia'},

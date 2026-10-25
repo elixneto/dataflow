@@ -75,6 +75,7 @@ export const mongodbUpsert: ComponentLogic = {
     let failed = 0;
     let sent = 0;
     let prepared = 0;
+    let batches = 0;
 
     /** builds the upsert of an envelope; a bad value is an error of that envelope */
     const upsertOf = (doc: Envelope): DocumentUpsert => {
@@ -97,6 +98,7 @@ export const mongodbUpsert: ComponentLogic = {
       ctx.holding(0);
       if (!current.length) return;
       let results;
+      const t0 = performance.now();
       try {
         results = await ctx.upsertDocuments('mongodb', {secret: connection, database, collection, upserts: current.map(b => b.upsert)});
       } catch (e) {
@@ -111,6 +113,11 @@ export const mongodbUpsert: ComponentLogic = {
         return;
       }
       sent += current.length;
+      batches += 1;
+      const inserted = results.filter(r => 'upsertedId' in r && r.upsertedId !== null).length;
+      const modified = results.reduce((n, r) => n + ('modified' in r ? r.modified : 0), 0);
+      const errors = results.filter(r => 'error' in r).length;
+      ctx.log('info', `Batch ${batches}: ${current.length} upsert(s) in ${Math.round(performance.now() - t0)} ms (${inserted} inserted, ${modified} modified${errors ? `, ${errors} failed` : ''}).`);
       for (const [i, {doc}] of current.entries()) {
         const result = results[i];
         if (!result || 'error' in result) {

@@ -20,6 +20,11 @@ export type ComponentRun = {
    * Since everything runs on a single thread, it is practically its CPU. Includes what the script awaits inside (e.g. an HTTP call).
    */
   activeTimeMs?: number;
+  /**
+   * Time waiting for an outside system: rows coming from a database, a write to MongoDB, the envelopes of a called
+   * workflow. Not counted: waiting for envelopes, or for the next component to take them (backpressure).
+   */
+  waitingMs?: number;
   /** workflows the component called (Workflow Invoker): a summary of each run, up to 50 */
   subRuns?: {id: string; workflow: string; status: RunStatus; durationMs: number; error?: string}[];
   /** What the component held at once (only accumulators: Lookup, Aggregate, Sort...). Bytes estimated from the DATA JSON. */

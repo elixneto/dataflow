@@ -91,7 +91,7 @@ function LogsTab({record}: {record: RunRecord}) {
 
 // ---------- Metrics: one row per component ----------
 
-const METRICS_COLUMNS = 'grid-cols-[16px_minmax(0,1fr)_110px_120px_minmax(90px,200px)_minmax(90px,200px)_80px_80px_100px_110px]';
+const METRICS_COLUMNS = 'grid-cols-[16px_minmax(0,1fr)_110px_120px_minmax(90px,200px)_minmax(90px,200px)_80px_80px_80px_100px_110px]';
 
 /** Component name (Mapper, Filter...); the label is what the user gave the node. */
 const componentName = (type: string) => BY_TYPE[type]?.label ?? type;
@@ -103,6 +103,7 @@ function MetricsTab({record, onGoTo, portName}: {record: RunRecord; onGoTo: (nod
         <span/><span>Label</span><span>Component</span><span>Status</span><span className="text-right">In</span><span className="text-right">Out</span>
         <span className="text-right" title="From the first to the last envelope, including the waiting">Duration</span>
         <span className="text-right" title="Time processing, without waiting for envelopes or for the next component (practically the component's CPU)">Active</span>
+        <span className="text-right" title="Time waiting for an outside system (database rows, MongoDB writes, a called workflow); not waiting for envelopes or for the next component">Waiting</span>
         <span className="text-right" title="Peak of what the component held at once (e.g. the Lookup table, the Aggregate batch); size estimated from the JSON">Memory</span>
         <span className="text-right">Start</span>
       </div>
@@ -119,6 +120,7 @@ function MetricsTab({record, onGoTo, portName}: {record: RunRecord; onGoTo: (nod
               <Count port={c.outputs} nodeId={c.nodeId} portName={portName} noPorts={c.type === 'end'}/>
               <span className="text-right font-mono text-xs">{ms(c.durationMs)}</span>
               <span className="text-right font-mono text-xs">{activeMs(c.activeTimeMs)}</span>
+              <span className={cn('text-right font-mono text-xs', c.waitingMs === undefined && 'text-muted-foreground')}>{c.waitingMs === undefined ? '—' : activeMs(c.waitingMs)}</span>
               {c.memory
                 ? <span className="flex flex-col items-end gap-0.5 font-mono text-xs">
                     <span>{bytes(c.memory.peakBytes)}</span>

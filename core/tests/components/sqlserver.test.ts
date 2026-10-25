@@ -32,6 +32,8 @@ test('SQL Server Query yields one envelope per row and sends the evaluated param
   const queries: unknown[] = [];
   const querySqlServer = async function* (q: {connection: string; sql: string; parameters: Record<string, unknown>}) {
     queries.push({connection: q.connection, parameters: q.parameters});
+    // the server takes a moment to send the first row
+    await new Promise(resolve => setTimeout(resolve, 30));
     yield {id: 1, name: 'ana'};
     yield {id: 2, name: 'bia'};
   };
@@ -53,7 +55,11 @@ test('SQL Server Query yields one envelope per row and sends the evaluated param
   const r = await workflowRunner(wfSql, {mode: 'execution', id: 'sql', evaluate, databases: {sqlserver: querySqlServer}, secrets: {MY_DB: 'Server=x'}});
   expect(r.status).toBe('completed');
   expect(queries).toEqual([{connection: 'Server=x', parameters: {since: 10}}]);
-  expect(r.components.find(c => c.nodeId === 's')!.outputSample['out-0']).toEqual([{id: 1, name: 'ana'}, {id: 2, name: 'bia'}]);
+  const node = r.components.find(c => c.nodeId === 's')!;
+  expect(node.outputSample['out-0']).toEqual([{id: 1, name: 'ana'}, {id: 2, name: 'bia'}]);
+  // the wait for the server is Waiting (not Active), and the log says how much of the query it was
+  expect(node.waitingMs).toBeGreaterThanOrEqual(20);
+  expect(node.logs.some(l => /^Query 1: 2 row\(s\) in \d+ ms \(server \d+ ms\)\.$/.test(l.message))).toBe(true);
 
   // a secret that does not exist: fails the envelope (default policy = stop)
   const noSecret = await workflowRunner(wfSql, {mode: 'execution', id: 'sql2', evaluate, databases: {sqlserver: querySqlServer}, secrets: {}});

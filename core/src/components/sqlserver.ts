@@ -97,6 +97,22 @@ export function sqlServerUsedParameters(sql: string): string[] {
 
 const IDENTIFIER = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
+/** The rows of the query, adding up the time spent waiting for the server (not the time the flow takes to consume them). */
+async function* serverTimed<T>(rows: AsyncIterable<T>, add: (ms: number) => void): AsyncIterable<T> {
+  const it = rows[Symbol.asyncIterator]();
+  try {
+    while (true) {
+      const t0 = performance.now();
+      const r = await it.next();
+      add(performance.now() - t0);
+      if (r.done) return;
+      yield r.value;
+    }
+  } finally {
+    await it.return?.();
+  }
+}
+
 export const sqlserver: ComponentLogic = {
   type: 'sqlserver',
   inputs: 1,
@@ -130,15 +146,17 @@ export const sqlserver: ComponentLogic = {
       queries += 1;
       const t0 = Date.now();
       let thisQuery = 0;
+      let server = 0;
       try {
         const values = Object.fromEntries(parameters.map(p => [p.name, ctx.fieldValue(p, doc)]));
         // waiting for the database is not active time
-        const query = ctx.queryDatabase('sqlserver', {secret: connection, sql, parameters: values, timeoutMs: timeoutS * 1000});
+        const query = serverTimed(ctx.queryDatabase('sqlserver', {secret: connection, sql, parameters: values, timeoutMs: timeoutS * 1000}), ms => { server += ms; });
         for await (const row of ctx.waitEach(query)) {
           thisQuery += 1;
           yield {port: 'out-0', doc: mergeFields(doc, row, ctx.node.override)};
         }
-        ctx.log('info', `Query ${queries}: ${thisQuery} row(s) in ${Date.now() - t0} ms.`);
+        // in all, and how much of it was the server (the rest is the flow consuming the rows: backpressure)
+        ctx.log('info', `Query ${queries}: ${thisQuery} row(s) in ${Date.now() - t0} ms (server ${Math.round(server)} ms).`);
       } catch (e) {
         // rows already yielded move on; the envelope that triggered the query goes to the error policy
         if (thisQuery) ctx.log('warning', `Query ${queries} stopped after ${thisQuery} row(s).`);
