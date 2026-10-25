@@ -28,6 +28,7 @@ import {type AvailableVariable, type EnvelopeData, type RunMode, type WorkflowPa
 import {RunPanel} from '#run/run-panel';
 import {cancelOnRunner, runOnRunner, toExecutable} from '#run/runner';
 import {mergeLastRuns, runFromWorkflow} from '#run/run-from';
+import {loadValidationRuns, saveValidationRuns} from '#data/validation-runs';
 import {Toolbar, type ValidationResult} from '#editor/toolbar';
 import {HistoryContext} from '#editor/history';
 import {CommentNodeMemo, COMMENT_SIZE, type CommentNode} from '#editor/comment-node';
@@ -100,8 +101,16 @@ function Editor({flow, onSave}: Props) {
   const [parameters, setParameters] = useState<WorkflowParameter[]>(flow.parameters ?? []);
   const [run, setRun] = useState<RunRecord | null>(null);
   const [running, setRunning] = useState<RunMode | null>(null);
-  // the latest result of each node that ran, while the editor is open (closing the result panel keeps it)
+  // the latest result of each node that ran (closing the result panel keeps it), kept in this browser per flow version
   const [lastRuns, setLastRuns] = useState<Record<string, ComponentRun>>({});
+  useEffect(() => {
+    let active = true;
+    // a run that finished before the stored results arrived wins over them
+    void loadValidationRuns(flow.id, flow.version).then(stored => active && setLastRuns(current => ({...stored, ...current})));
+    return () => {
+      active = false;
+    };
+  }, [flow.id, flow.version]);
   const runId = useRef<string | null>(null);
   // the expression fields suggest what reached each node in the runs so far (kept per flow, per output port)
   const [known, setKnown] = useState(() => loadKnownVariables(flow.id));
@@ -671,7 +680,11 @@ function Editor({flow, onSave}: Props) {
         if (!workflow) throw new Error('Nothing to replay: run the whole flow first.');
         const result = await runOnRunner(workflow, mode, runId.current, undefined, flow.projectId);
         setRun(result);
-        setLastRuns(previous => mergeLastRuns(previous, result));
+        setLastRuns(previous => {
+          const next = mergeLastRuns(previous, result);
+          void saveValidationRuns(flow.id, base.version, next);
+          return next;
+        });
         // even a failed run updates the variables of the ports that produced something
         setKnown(previous => {
           const next = updateKnownVariables(previous, result);

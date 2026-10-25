@@ -85,6 +85,14 @@ for (const [name, url] of targets) {
       expect(await repo.getRun('missing')).toBeUndefined();
     });
 
+    test('does not store editor test runs (validation)', async () => {
+      const test = run('r-test', 'tests', '2026-10-24T13:00:00.000Z');
+      expect(await repo.saveRun({...test, run: {...test.run, mode: 'validation'}})).toBe(false);
+      expect(await repo.saveRun(run('r-real', 'tests', '2026-10-24T14:00:00.000Z'))).toBe(true);
+      expect((await repo.listRuns('tests', 50)).map(r => r.run.id)).toEqual(['r-real']);
+      expect(await repo.getRun('r-test')).toBeUndefined();
+    });
+
     test('API validates ids and the flow\'s project', async () => {
       const api = storageRoutes(repo);
       const put = (path: string, body: unknown) => api.request(path, {method: 'PUT', body: JSON.stringify(body), headers: {'content-type': 'application/json'}});

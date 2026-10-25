@@ -121,13 +121,16 @@ export function repository(db: Database) {
       });
     },
 
-    async saveRun(record: StoredRun) {
+    /** stores an execution run; editor test runs (`validation`) are not stored, they live in the editor's browser */
+    async saveRun(record: StoredRun): Promise<boolean> {
+      if (record.run.mode === 'validation') return false;
       await db.query(
         `INSERT INTO runs (id, project_id, workflow_id, mode, status, started_at, duration_ms, record) VALUES ($1, $2, $3, $4, $5, $6, $7, $8::text::jsonb)
          ON CONFLICT (id) DO UPDATE SET status = excluded.status, duration_ms = excluded.duration_ms, record = excluded.record`,
         [record.run.id, record.projectId ?? null, record.workflowId ?? null, record.run.mode, record.status, record.run.startedAt,
           Math.round(record.durationMs), JSON.stringify(record)],
       );
+      return true;
     },
 
     /** the latest runs (of a project), without the per-component detail */

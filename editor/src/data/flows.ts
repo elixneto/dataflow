@@ -6,6 +6,7 @@ import type {GroupNode} from '#editor/group-node';
 import type {ComponentNode} from '#editor/component-node';
 import {EXAMPLES_PROJECT} from '#data/projects';
 import {persist} from '#data/api';
+import {forgetValidationRuns} from '#data/validation-runs';
 
 /*
  * Flows, stored in the runner's database as lean definitions (toDefinition). Read from the copy loaded when the
@@ -505,8 +506,9 @@ export function getFlow(id: string): Flow | undefined {
   return listFlows().find(f => f.id === id);
 }
 
+/** saving keeps the version (a draft of it): only publishing (deploy, not built yet) will raise it */
 export function saveFlow(flow: Flow): Flow {
-  const saved: Flow = {...flow, version: flow.version + 1, updatedAt: new Date().toISOString()};
+  const saved: Flow = {...flow, updatedAt: new Date().toISOString()};
   put(saved);
   return saved;
 }
@@ -514,6 +516,7 @@ export function saveFlow(flow: Flow): Flow {
 export function deleteFlow(id: string) {
   loaded = loaded.filter(f => f.id !== id);
   persist('DELETE', `/flows/${encodeURIComponent(id)}`);
+  void forgetValidationRuns(id);
 }
 
 export function duplicateFlow(id: string): Flow | undefined {

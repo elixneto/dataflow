@@ -6,7 +6,7 @@ Overview, concepts and how to run: [README.md](README.md). Engine architecture: 
 |---|---|---|
 | `editor/` | App (Vite + React + React Flow) at the root: projects → flows (editor), runs, secrets, files | see [editor/CLAUDE.md](editor/CLAUDE.md) |
 | `core/` | TypeScript engine without React or Node: contract (`src/types/`, one type per file, imported as `#types/<name>.type`), `src/envelope/` (building envelopes, expression variables), `src/validation/` (key names, cycles), `src/errors/`, `src/engine/` (envelope-by-envelope execution: entry point `workflowRunner` (`workflow-runner.ts`) → class `WorkflowExecution`), components (logic) | used by the editor (alias `@dataflow/core`) and by the runner |
-| `runner/` | Runner in Bun + Hono (port 5190): projects, flows and runs in Postgres (`src/storage/`: `DATABASE_URL`, or PGlite in `runner/data.local/` without it), secrets and files per project, expressions and scripts in `node:vm` | runs separately; the editor talks to it through `/api` |
+| `runner/` | Runner in Bun + Hono (port 5190): projects, flows and execution runs in Postgres (editor test runs stay in the browser's IndexedDB) (`src/storage/`: `DATABASE_URL`, or PGlite in `runner/data.local/` without it), secrets and files per project, expressions and scripts in `node:vm` | runs separately; the editor talks to it through `/api` |
 
 ## Commands (at the root)
 

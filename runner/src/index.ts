@@ -76,7 +76,7 @@ app.post('/runs', async c => {
     inProgress.delete(id);
   }
   const stored: StoredRun = {...record, projectId: request.projectId, workflowId: request.workflow.id};
-  // a failure to store does not lose the result: the editor still gets it
+  // only execution runs are stored (editor test runs stay in the editor); a failure to store does not lose the result
   await repo.saveRun(stored).catch(error => console.error('Could not store the run:', error));
   return c.json(record);
 });
