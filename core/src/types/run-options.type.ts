@@ -9,6 +9,7 @@ import type {DocumentStoreKind} from '#types/document-store-kind.type';
 import type {UpsertDocuments} from '#types/upsert-documents.type';
 import type {AggregateDocuments} from '#types/aggregate-documents.type';
 import type {DeleteDocuments} from '#types/delete-documents.type';
+import type {SendHttp} from '#types/send-http.type';
 
 export type RunOptions = {
   mode: RunMode;
@@ -31,6 +32,8 @@ export type RunOptions = {
   documentQueries?: Partial<Record<DocumentStoreKind, AggregateDocuments>>;
   /** document database drivers that delete, by kind */
   documentDeletes?: Partial<Record<DocumentStoreKind, DeleteDocuments>>;
+  /** sends HTTP requests (HTTP Request component); without it, the component fails */
+  http?: SendHttp;
   /** workflows the Workflow Invoker can call, by id */
   workflows?: Record<string, ExecutableWorkflow>;
   /** run that called this one (filled in by the Workflow Invoker) */

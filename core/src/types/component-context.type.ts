@@ -13,6 +13,8 @@ import type {DocumentBatch} from '#types/document-batch.type';
 import type {UpsertAnswer} from '#types/upsert-answer.type';
 import type {DocumentQuery} from '#types/document-query.type';
 import type {DocumentDelete} from '#types/document-delete.type';
+import type {HttpRequest} from '#types/http-request.type';
+import type {HttpResponse} from '#types/http-response.type';
 
 export type ComponentContext = {
   run: WorkflowCurrentRun;
@@ -66,4 +68,11 @@ export type ComponentContext = {
    * and answers null.
    */
   deleteDocuments: (kind: DocumentStoreKind, request: Omit<DocumentDelete, 'connection' | 'signal' | 'countOnly'> & {secret: string}) => Promise<number | null>;
+  /**
+   * Sends an HTTP request through the runner's function (fetch). In a test run of a component that writes (e.g. a POST)
+   * it sends nothing: it logs the method, the URL and an excerpt of the body, with the secrets hidden, and answers null.
+   */
+  sendHttp: (request: Omit<HttpRequest, 'signal'>) => Promise<HttpResponse | null>;
+  /** the text with the run's secret values hidden (for logs and error messages) */
+  mask: (text: string) => string;
 };

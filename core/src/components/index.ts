@@ -4,6 +4,7 @@ import {copy} from './copy';
 import {datagrid} from './datagrid';
 import {distinct} from './distinct';
 import {filter} from './filter';
+import {httpRequest} from './http-request';
 import {limit} from './limit';
 import {log} from './log';
 import {lookup} from './lookup';
@@ -38,6 +39,7 @@ export const COMPONENTS: Record<string, ComponentLogic> = {
   [mongodbPipeline.type]: mongodbPipeline,
   [mongodbUpsert.type]: mongodbUpsert,
   [mongodbDelete.type]: mongodbDelete,
+  [httpRequest.type]: httpRequest,
   [workflowInvoker.type]: workflowInvoker,
   [log.type]: log,
 };

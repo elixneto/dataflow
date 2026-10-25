@@ -25,7 +25,7 @@ import {cn} from '#lib/utils';
 import {cleanFlow, toDefinition, type Flow, type FlowNode} from '#data/flows';
 import {getProject, EXAMPLES_PROJECT} from '#data/projects';
 import {onSaveError} from '#data/api';
-import {COMPONENTS, type AvailableVariable, type EnvelopeData, type RunMode, type WorkflowParameter, type RunRecord, type ComponentRun} from '@dataflow/core';
+import {COMPONENTS, writesOutside, type AvailableVariable, type EnvelopeData, type RunMode, type WorkflowParameter, type RunRecord, type ComponentRun} from '@dataflow/core';
 import {RunPanel} from '#run/run-panel';
 import {cancelOnRunner, runOnRunner, toExecutable} from '#run/runner';
 import {mergeLastRuns, runFromWorkflow} from '#run/run-from';
@@ -200,7 +200,7 @@ function Editor({flow, onSave}: Props) {
   }, [lastRuns, running, nodes, edges, name, parameters, flow.id, flow.projectId]);
   // the enabled targets (components that write outside the flow): Run for real lists them before writing
   const targets = useMemo(
-    () => nodes.filter(n => n.type === 'component' && !n.data.disabled && COMPONENTS[n.data.type]?.sideEffects).map(n => (n as ComponentNode).data.label),
+    () => nodes.filter(n => n.type === 'component' && !n.data.disabled && writesOutside(COMPONENTS[n.data.type], n.data.config)).map(n => (n as ComponentNode).data.label),
     [nodes],
   );
   const pinnedIds = useMemo(() => new Set(nodes.filter(n => n.type === 'component' && n.data.pinned).map(n => n.id)), [nodes]);

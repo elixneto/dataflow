@@ -1,12 +1,15 @@
 import {timed, timedRequests} from '#engine/stopwatch';
 import {invokeWorkflow} from '#engine/invoke-workflow';
 import {envelopeVariables} from '#envelope/expression-variables';
+import {toError} from '#errors/normalize-error';
 import type {WorkflowExecution} from '#engine/workflow-execution';
 import type {ComponentContext} from '#types/component-context.type';
 import type {ExecutableNode} from '#types/executable-node.type';
 
 /** How many of the upserts a test run would send are written out in full in the log. */
 const LOGGED_UPSERTS = 3;
+/** How much of a request body a test run writes in the log. */
+const BODY_EXCERPT = 300;
 
 /**
  * What the engine gives a component while it runs (`ctx`): expressions, scripts, waits, database, memory...
@@ -18,6 +21,10 @@ export function componentContext(execution: WorkflowExecution, node: ExecutableN
   // runs only while waiting for an outside system: a pull of the next row, a write, the next envelope of a called flow
   const waiting = execution.waitingOf(node.id);
   let logged = 0;
+  let inFlight = 0;
+  // secret values never go to a log: longest first, so one that contains another is hidden whole
+  const secretValues = Object.values(options.secrets ?? {}).filter(v => v.length >= 4).sort((a, b) => b.length - a.length);
+  const mask = (text: string) => secretValues.reduce((t, secret) => t.split(secret).join('***'), text);
   return {
     run, node, log,
     prepareScript: async code => {
@@ -98,6 +105,27 @@ export function componentContext(execution: WorkflowExecution, node: ExecutableN
         stopwatch.resume();
       }
     },
+    sendHttp: async request => {
+      if (!options.http) throw new Error('This runner does not send HTTP requests.');
+      if (dryRun) {
+        const body = request.body === undefined ? '' : `, body ${mask(request.body.slice(0, BODY_EXCERPT))}${request.body.length > BODY_EXCERPT ? '…' : ''}`;
+        log('info', `Test run: ${request.method} ${mask(request.url)} not sent${body}.`);
+        return null;
+      }
+      // several requests at once: waiting runs while at least one is in flight
+      if (inFlight++ === 0) waiting.resume();
+      const t0 = performance.now();
+      try {
+        const response = await options.http({...request, signal: execution.control.signal});
+        log('debug', `${request.method} ${mask(request.url)} → ${response.status} in ${Math.round(performance.now() - t0)} ms.`);
+        return response;
+      } catch (e) {
+        throw new Error(mask(toError(e).message));
+      } finally {
+        if (--inFlight === 0) waiting.stop();
+      }
+    },
+    mask,
     holding: (envelopes, held) => execution.memoryOf(node.id).holding(envelopes, held),
   };
 }

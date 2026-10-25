@@ -5,6 +5,7 @@ import {evaluate} from './expressions';
 import {prepareScript} from './scripts';
 import {querySqlServer} from './databases/sql-server';
 import {mongoDriver} from './databases/mongodb';
+import {sendHttp} from './http';
 import {projectRoutes, projectSecrets} from './projects';
 import {describeDatabase, openDatabase} from './storage/database';
 import {repository, type StoredRun} from './storage/repository';
@@ -112,6 +113,7 @@ app.post('/runs', async c => {
       documentStores: {mongodb: mongo.upsert},
       documentQueries: {mongodb: mongo.aggregate},
       documentDeletes: {mongodb: mongo.remove},
+      http: sendHttp,
       secrets: await projectSecrets(request.projectId),
       signal: control.signal,
       timeoutMs: TIMEOUT_MS,

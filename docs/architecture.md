@@ -69,7 +69,7 @@ type ComponentLogic = {
   variableInputs?: {min, max, key}                        // e.g. Union
   variableOutputs?: {min, max, key}                       // e.g. Copy
   defaultOutputKey?: string                               // key in DATA (the node can change it)
-  sideEffects?: boolean                                   // a target: writes outside (section 12)
+  sideEffects?: boolean | ((config) => boolean)          // a target: writes outside (section 12)
   validate(config): string[]                              // assembly, without data
   execute(inputs, config, ctx): AsyncIterable<{port, doc} | {error, doc}>
 }
@@ -127,9 +127,9 @@ Environment variables: `DATABASE_URL` (Postgres; without it, PGlite in `runner/d
 
 ## 12. Targets in test runs
 
-Targets are components that write outside the flow (today the **MongoDB Upsert** and the **MongoDB Delete**, which in a test run only counts what its filter matches; later SQL insert, HTTP...). The rule exists so nobody writes half-baked data by running a flow "just to see if it works" and forgetting to disable the target. The user should not have to write a fake output either: what comes after a target usually needs its real answer (a generated id, a response body).
+Targets are components that write outside the flow (today the **MongoDB Upsert**, the **MongoDB Delete**, which in a test run only counts what its filter matches, and the **HTTP Request** with a writing method; later SQL insert...). The rule exists so nobody writes half-baked data by running a flow "just to see if it works" and forgetting to disable the target. The user should not have to write a fake output either: what comes after a target usually needs its real answer (a generated id, a response body).
 
-- **A target declares itself**: `sideEffects: true` on its `ComponentLogic` (later possibly a function of the config, e.g. an HTTP request is a target only for POST, PUT, PATCH and DELETE). Reading components (SQL Server Query, HTTP GET/HEAD) run normally in any mode.
+- **A target declares itself**: `sideEffects` on its `ComponentLogic`: `true`, or a function of the config (`writesOutside`, `core/src/engine/side-effects.ts`): the HTTP Request is a target only for POST, PUT, PATCH and DELETE (`ctx.sendHttp` logs what it would send, secrets masked, and answers null). Reading components (SQL Server Query, MongoDB Pipeline, HTTP GET) run normally in any mode.
 - **Editor runs use `mode: 'validation'`** (the editor's Run). Triggers (endpoint, cron) will always run in `execution`.
 - **Implemented**: the gate is in one place, `WorkflowExecution.runNode` (`core/src/engine/workflow-execution.ts`): in `validation`, a component with `sideEffects` runs with a context whose writes send nothing (`upsertDocuments` logs the first upserts it would send and answers null) and nothing goes out of it, so its branch stops there (the components after it get nothing) and it ends "with warnings". A pinned target replays its pin as usual. Errors it finds before writing (a filter value missing, a secret that does not exist) still show.
 - **How the MongoDB Upsert writes** (in `execution`): in batches (default 500); each batch is one unordered `bulkWrite` of `updateOne(filter, {$set: document}, {upsert: true})` operations, so it lands in one write and one bad document does not stop the others. The ones with the same filter keep their arrival order, so the last one wins: the first occurrence of each filter goes in the first round, the next ones in later rounds (`upsertInRounds`, `runner/src/databases/mongodb.ts`); sent in the same unordered write they would have no order, and with a filter that is not a unique index both may insert. A round of one goes as `updateOne`. Each envelope gets `{matched, upsertedId}` (or its error); `bulkWrite` answers modified only as a total, so the per-envelope `modified` comes only with a batch of one. The log counts, per batch and in all, inserted, modified and unchanged (matched minus modified).

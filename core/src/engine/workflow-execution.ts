@@ -2,6 +2,7 @@ import {Channel, empty} from '../channel';
 import {COMPONENTS} from '../components';
 import {END, SAMPLE_SIZE, START} from '#engine/constants';
 import {Stopwatch, timedRequests} from '#engine/stopwatch';
+import {writesOutside} from '#engine/side-effects';
 import {MemoryMeter} from '#engine/memory-meter';
 import {flowOrder} from '#engine/flow-order';
 import {errorPolicy, withError} from '#engine/error-envelope';
@@ -223,7 +224,7 @@ export class WorkflowExecution {
         if (!logic) throw new Error(`Component "${node.type}" does not exist in the runner.`);
         // THE gate for targets (section 12 of docs/architecture.md): in a test run a component with side effects writes
         // nothing (its ctx sends nothing) and nothing goes out of it, so its branch stops there. A pin replays (above).
-        dryRun = this.options.mode === 'validation' && logic.sideEffects === true;
+        dryRun = this.options.mode === 'validation' && writesOutside(logic, node.config);
         const ctx = componentContext(this, node, log, dryRun);
         const send = async (port: string, doc: Envelope) => {
           if (!dryRun) await this.send(node, port, doc);

@@ -23,6 +23,7 @@ export {dataGridConfig, datagrid, cellValue, type DataGridColumn} from './compon
 export {routerCases, routerElsePort, router, type RouterCase} from './components/router';
 export {sqlServerConfig, sqlServerUsedParameters, sqlServerReadOnlyIssue, sqlserver, DEFAULT_SQL_SERVER_TIMEOUT_S, type SqlServerParameter} from './components/sqlserver';
 export {mongoPipelineConfig, mongoPipelineIssue, mongoPipelineTextIssue, mongodbPipeline, pipelineExpression, DEFAULT_PIPELINE, DEFAULT_MONGODB_TIMEOUT_S} from './components/mongodb-pipeline';
+export {httpConfig, httpRequest, httpWrites, HTTP_METHODS, DEFAULT_HTTP_TIMEOUT_S, MAX_HTTP_CONCURRENCY, type HttpMethod, type HttpPair} from './components/http-request';
 export {mongoDeleteConfig, mongodbDelete, emptyFilterText, DEFAULT_DELETE_FILTER} from './components/mongodb-delete';
 export {mongoUpsertConfig, mongodbUpsert, DEFAULT_MONGODB_BATCH_SIZE, MAX_MONGODB_BATCH_SIZE, type MongoFilterKey, type MongoDocumentSource} from './components/mongodb-upsert';
 export {copy, MAX_COPY_OUTPUTS, MIN_COPY_OUTPUTS, copyOutputCount} from './components/copy';
@@ -31,5 +32,6 @@ export {log, logConfig, LOG_LEVELS, MAX_LOG_LINES, type LogComponentLevel} from 
 export {workflowInvokerConfig, workflowInvoker, type InvokerParameter} from './components/workflow';
 export {MAX_WORKFLOW_DEPTH, SAMPLE_SIZE, START, END} from '#engine/constants';
 export {workflowRunner} from '#engine/workflow-runner';
+export {writesOutside} from '#engine/side-effects';
 export {flowOrder} from '#engine/flow-order';
 export {resolveParameters} from '#engine/workflow-parameters';
