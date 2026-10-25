@@ -142,7 +142,7 @@ export type PinActions = {
   onPin: (nodeId: string, pinned: Record<string, EnvelopeData[]> | undefined) => void;
 };
 
-/** Pin / Unpin of a component's output, under its output preview. */
+/** Pin / Unpin of a component's main output, under its output preview. */
 function PinButton({c, actions}: {c: ComponentRun; actions: PinActions}) {
   if (actions.pinned.has(c.nodeId)) {
     return (
@@ -152,11 +152,12 @@ function PinButton({c, actions}: {c: ComponentRun; actions: PinActions}) {
       </button>
     );
   }
-  if (c.type === 'start' || c.type === 'end' || c.status === 'not-run' || c.status === 'failed' || Object.keys(c.outputSample).length === 0) return null;
-  const cut = Object.entries(c.outputs).some(([port, n]) => n > (c.outputSample[port]?.length ?? 0));
+  const main = c.outputSample['out-0'];
+  if (c.type === 'start' || c.type === 'end' || c.status === 'not-run' || c.status === 'failed' || !main) return null;
+  const cut = (c.outputs['out-0'] ?? 0) > main.length;
   return (
-    <button type="button" onClick={() => actions.onPin(c.nodeId, structuredClone(c.outputSample))}
-            title={cut ? `Only the first ${SAMPLE_SIZE} envelopes of each output are pinned` : 'The node stops executing and replays this output'}
+    <button type="button" onClick={() => actions.onPin(c.nodeId, {'out-0': structuredClone(main)})}
+            title={cut ? `Only the first ${SAMPLE_SIZE} envelopes are pinned` : 'In editor runs, the node stops executing and sends this out through its main output'}
             className="flex h-7 items-center gap-1.5 rounded-md border border-input px-2 text-xs text-muted-foreground hover:text-foreground">
       <Pin className="size-3.5" aria-hidden="true"/> Pin output{cut ? ` (first ${SAMPLE_SIZE})` : ''}
     </button>

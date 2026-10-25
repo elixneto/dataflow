@@ -82,8 +82,8 @@ The runner stores every run in the `runs` table (the full record in `jsonb`, wit
 
 ### Pinned output and "Run from here"
 
-- **Pin** (like n8n's pin data): in the result's Data tab, a component's output can be pinned. It is saved on the node (`pinned`: the DATA per output port, up to the 50 of the sample) and goes to the runner in `ExecutableNode.pinned`. A pinned node does not execute: it reads and drops its input and replays the pinned envelopes (status `pinned`, a pin on the card; clicking it unpins). Whatever only feeds pinned nodes does not run (`not-run`), so an expensive or failing query upstream can be skipped while the rest of the flow is built.
-- **Run from here** (the play button on the card, after a run): runs only that node and what comes after it. Each node outside that part with an edge into it is pinned for this run only with what it sent in the last run (`runFromWorkflow`, `editor/src/run/run-from.ts`); the other nodes are left out of the run. It shows only where every one of those nodes ran without failing, so a node that failed can be fixed and run again from itself. It replays the samples, so at most 50 envelopes per port.
+- **Pin** (like n8n's pin data): in the result's Data tab, a component's main output can be pinned. It is saved on the node (`pinned`: the DATA per output port; the editor pins `out-0`, up to the 50 of the sample) and goes to the runner in `ExecutableNode.pinned`. **Only in editor runs** (`mode: 'validation'`, which is what the editor's Run uses): the components before it run as usual, and the pinned node reads and drops its input, does not execute and sends the pinned envelopes out (status `pinned`, a pin on the card; clicking it unpins). A real run (`execution`) ignores the pin and executes the node, so a pin can never change what a production run does.
+- **Run from here** (the play button on the card, after a run): runs (in `validation`) only that node and what comes after it. Each node outside that part with an edge into it is pinned for this run only with what it sent in the last run (`runFromWorkflow`, `editor/src/run/run-from.ts`); the other nodes are left out of the run. It shows only where every one of those nodes ran without failing, so a node that failed can be fixed and run again from itself. It replays the samples, so at most 50 envelopes per port.
 
 ## 9. Workflow Invoker
 
@@ -123,7 +123,7 @@ Environment variables: `DATABASE_URL` (Postgres; without it, PGlite in `runner/d
 There are no targets yet (components that write outside: SQL insert, HTTP...), but the rule is decided, so nobody writes half-baked data by running a flow "just to see if it works" and forgetting to disable the target. The user should not have to write a fake output either: what comes after a target usually needs its real answer (a generated id, a response body).
 
 - **A target declares itself**: `sideEffects: true` on its `ComponentLogic` (or a function of the config, e.g. an HTTP request is a target only for POST, PUT, PATCH and DELETE). Reading components (SQL Server Query, HTTP GET/HEAD) run normally in any mode.
-- **Editor runs use `mode: 'validation'`** (the `RunMode` already exists, today nothing reads it). Triggers (endpoint, cron) always run in `execution`.
+- **Editor runs use `mode: 'validation'`** (the editor's Run already does; today only the pins read it). Triggers (endpoint, cron) always run in `execution`.
 - **What a target does in `validation`**, in this order:
   1. **SQL**: writes inside a transaction that is always rolled back. The output is real (rows affected, `OUTPUT inserted.id`) and nothing stays.
   2. **Pinned output** (like n8n's pin data): every real run stores the target's last output per input sample; a test run replays it. The user can also pin an output by hand (already possible, see section 8), but never has to.

@@ -17,20 +17,29 @@ const chain = (): ExecutableWorkflow => ({
   edges: [edge('start', 'm1'), edge('m1', 'm2'), edge('m2', 'end')],
 });
 
-test('a pinned node replays its output without executing, and what only feeds it does not run', async () => {
+test('in an editor run, a pinned node replays its output without executing and what comes before it still runs', async () => {
   const wf = chain();
   // without the pin, Mapper 1 fails ($a does not exist)
-  expect((await workflowRunner(wf, {mode: 'execution', id: 'p0', evaluate})).status).toBe('failed');
+  expect((await workflowRunner(wf, {mode: 'validation', id: 'p0', evaluate})).status).toBe('failed');
 
   wf.nodes[1].pinned = {'out-0': [{b: 1}, {b: 2}, {b: 3}]};
-  const r = await workflowRunner(wf, {mode: 'execution', id: 'p1', evaluate});
+  const r = await workflowRunner(wf, {mode: 'validation', id: 'p1', evaluate});
   expect(r.status).toBe('completed');
   const byId = (id: string) => r.components.find(c => c.nodeId === id)!;
-  expect(byId('start').status).toBe('not-run');
+  expect(byId('start').status).toBe('completed');
   expect(byId('m1').status).toBe('pinned');
+  expect(byId('m1').inputs['in-0']).toBe(1);
   expect(byId('m1').outputs['out-0']).toBe(3);
   expect(byId('m2').outputSample['out-0']).toEqual([{b: 1, double: 2}, {b: 2, double: 4}, {b: 3, double: 6}]);
   expect(byId('end').inputs['in-0']).toBe(3);
+});
+
+test('a real run ignores the pin and executes the node', async () => {
+  const wf = chain();
+  wf.nodes[1].pinned = {'out-0': [{b: 1}]};
+  const r = await workflowRunner(wf, {mode: 'execution', id: 'p3', evaluate});
+  expect(r.status).toBe('failed');
+  expect(r.components.find(c => c.nodeId === 'm1')!.status).toBe('failed');
 });
 
 test('a node that feeds a pinned node and a running one still runs, and the pinned one drops its input', async () => {
@@ -48,7 +57,7 @@ test('a node that feeds a pinned node and a running one still runs, and the pinn
   };
   // more envelopes than a channel holds: the pinned node must keep reading so the Copy does not get stuck
   const input = Array.from({length: 300}, (_, i) => ({i}));
-  const r = await workflowRunner(wf, {mode: 'execution', id: 'p2', evaluate, input});
+  const r = await workflowRunner(wf, {mode: 'validation', id: 'p2', evaluate, input});
   expect(r.status).toBe('completed');
   const byId = (id: string) => r.components.find(c => c.nodeId === id)!;
   expect(byId('c').status).toBe('completed');

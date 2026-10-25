@@ -12,8 +12,9 @@ export type ExecutableNode = {
   override?: boolean;
   disabled?: boolean;
   /**
-   * Pinned output (like n8n's pin data): the DATA of each envelope per output port. The node does not execute, its
-   * input is read and dropped, and these envelopes go out instead; whatever only feeds pinned nodes does not run.
+   * Pinned output (like n8n's pin data): the DATA of each envelope per output port. Only in editor runs (`validation`):
+   * the components before it run as usual, the node does not execute, its input is read and dropped, and these
+   * envelopes go out instead. A real run (`execution`) ignores it.
    */
   pinned?: Record<string, EnvelopeData[]>;
 };

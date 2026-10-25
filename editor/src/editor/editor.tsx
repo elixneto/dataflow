@@ -148,7 +148,7 @@ function Editor({flow, onSave}: Props) {
         if (node.type !== 'start' && node.type !== 'end' && runFromWorkflow(whole, node.id, run)) available.add(node.id);
       }
     }
-    return {available, run: (nodeId: string) => executeRef.current('execution', nodeId)};
+    return {available, run: (nodeId: string) => executeRef.current('validation', nodeId)};
   }, [run, running, nodes, edges, name, parameters, flow.id, flow.projectId]);
   const pinnedIds = useMemo(() => new Set(nodes.filter(n => n.type === 'component' && n.data.pinned).map(n => n.id)), [nodes]);
   const warnings = useMemo(() => {
@@ -675,7 +675,7 @@ function Editor({flow, onSave}: Props) {
 
   executeRef.current = execute;
 
-  /** Pins the output of the last run on the node (or unpins, with undefined): it stops executing and replays it. */
+  /** Pins the output of the last run on the node (or unpins, with undefined): in editor runs it stops executing and replays it. */
   function pin(nodeId: string, pinned: Record<string, EnvelopeData[]> | undefined) {
     record();
     updateNodeData(nodeId, {pinned});
@@ -711,7 +711,7 @@ function Editor({flow, onSave}: Props) {
             setChanged(true);
           }}
           validation={validation}
-          onRun={() => execute('execution')}
+          onRun={() => execute('validation')}
           onStop={() => runId.current && cancelOnRunner(runId.current)}
           validating={validating || running !== null}
           running={running}

@@ -9,7 +9,7 @@ export type ComponentRun = {
   /**
    * disabled = bypass (did not execute, only passed through); with-warnings = ran, but something deserves attention
    * (e.g. envelopes dropped by an unconnected output, nothing reached the End); pinned = did not execute, replayed its
-   * pinned output; not-run also covers what was skipped because it only feeds pinned nodes
+   * pinned output (editor runs only)
    */
   status: 'not-run' | 'completed' | 'disabled' | 'pinned' | 'with-warnings' | 'with-errors' | 'failed';
   start?: string;

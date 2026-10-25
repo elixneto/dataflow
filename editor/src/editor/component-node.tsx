@@ -29,7 +29,7 @@ export type ComponentData = {
   override?: boolean;
   /** the user's free note (Notes tab of the window) */
   notes?: string;
-  /** pinned output: the DATA of each envelope per output port; the node does not execute and replays it */
+  /** pinned output: the DATA of each envelope per output port; in editor runs the node does not execute and replays it */
   pinned?: Record<string, EnvelopeData[]>;
 };
 
@@ -260,7 +260,7 @@ function ComponentNodeView({id, data, selected}: NodeProps<ComponentNode>) {
           </span>
         )}
         {data.pinned && (
-          <button type="button" onClick={unpin} title="Pinned output: does not execute. Click to unpin." aria-label="Unpin output"
+          <button type="button" onClick={unpin} title="Pinned output: in editor runs it does not execute. Click to unpin." aria-label="Unpin output"
                   className="nodrag flex size-5 shrink-0 items-center justify-center rounded text-primary transition-colors hover:bg-accent">
             <Pin className="size-3" aria-hidden="true"/>
           </button>
