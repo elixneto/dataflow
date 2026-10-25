@@ -1,6 +1,6 @@
 import {expect, test} from 'bun:test';
 import {COMPONENTS, workflowRunner} from '../../src/index';
-import type {DocumentBatch, ExecutableWorkflow, UpsertResult} from '../../src/index';
+import type {DocumentBatch, ExecutableWorkflow, UpsertAnswer} from '../../src/index';
 import {evaluate} from '../helpers';
 
 /** Data Grid (3 people, the 2nd without email) → MongoDB Upsert (by email) → Mapper → End. */
@@ -29,12 +29,13 @@ const flow = (config: Record<string, unknown> = {}): ExecutableWorkflow => ({
 
 function fakeMongo(fail?: (filter: Record<string, unknown>) => string | undefined) {
   const batches: Omit<DocumentBatch, 'signal'>[] = [];
-  const driver = async (batch: DocumentBatch): Promise<UpsertResult[]> => {
+  const driver = async (batch: DocumentBatch): Promise<UpsertAnswer> => {
     batches.push({connection: batch.connection, database: batch.database, collection: batch.collection, upserts: batch.upserts});
-    return batch.upserts.map((u, i) => {
+    const results = batch.upserts.map((u, i) => {
       const error = fail?.(u.filter);
-      return error ? {error} : {matched: i % 2, modified: i % 2, upsertedId: i % 2 ? null : `id-${String(u.filter.email)}`};
+      return error ? {error} : {matched: i % 2, upsertedId: i % 2 ? null : `id-${String(u.filter.email)}`};
     });
+    return {results, modified: results.filter(r => 'matched' in r && r.matched).length};
   };
   return {batches, driver};
 }
@@ -67,20 +68,20 @@ test('MongoDB Upsert writes in batches in a real run and maps each result to its
   // continue: the failed envelopes go on unchanged; the written one carries the result
   expect(node.outputSample['out-0']).toEqual([
     {_id: 2, email: null, name: 'Bia'},
-    {_id: 1, email: 'ana@x.com', name: 'Ana', mongodb: {matched: 0, modified: 0, upsertedId: 'id-ana@x.com'}},
+    {_id: 1, email: 'ana@x.com', name: 'Ana', mongodb: {matched: 0, upsertedId: 'id-ana@x.com'}},
     {_id: 3, email: 'caio@x.com', name: 'Caio'},
   ]);
 });
 
 test('MongoDB Upsert counts inserted, modified and unchanged documents, per batch and in all', async () => {
   // the 1st is new, the 2nd matched and changed, the 3rd matched a document that already had these values
-  const answers: UpsertResult[] = [
-    {matched: 0, modified: 0, upsertedId: 'new-1'},
-    {matched: 1, modified: 1, upsertedId: null},
-    {matched: 1, modified: 0, upsertedId: null},
+  // the batch of 2 answers 1 modified in total; the batch of 1 matched one that did not change
+  const answers: UpsertAnswer[] = [
+    {results: [{matched: 0, upsertedId: 'new-1'}, {matched: 1, upsertedId: null}], modified: 1},
+    {results: [{matched: 1, upsertedId: null, modified: 0}], modified: 0},
   ];
   let next = 0;
-  const driver = async (batch: DocumentBatch) => batch.upserts.map(() => answers[next++]);
+  const driver = async () => answers[next++];
   const r = await workflowRunner(flow({filter: [{field: '_id', value: '$_id', expression: true}]}),
     {mode: 'execution', id: 'm6', evaluate, documentStores: {mongodb: driver}, secrets: {MONGO: 'mongodb://x'}});
   const logs = r.components.find(c => c.nodeId === 'mongo')!.logs.map(l => l.message);
@@ -126,7 +127,7 @@ test('MongoDB Upsert writes a Date as a date (also one made in an expression) an
   const batches: DocumentBatch[] = [];
   const driver = async (batch: DocumentBatch) => {
     batches.push(batch);
-    return batch.upserts.map((): UpsertResult => ({matched: 0, modified: 0, upsertedId: 'x'}));
+    return {results: batch.upserts.map(() => ({matched: 0, upsertedId: 'x'})), modified: 0};
   };
   const wf = flow({filter: [{field: '_id', value: '$_id', expression: true}]});
   // the Data Grid gives text; a TypeScript-like expression document brings real dates

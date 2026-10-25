@@ -1,11 +1,11 @@
-import {BSON, MongoClient, type Document} from 'mongodb';
-import {mongoPipelineIssue, type AggregateDocuments, type DocumentUpsert, type UpsertDocuments, type UpsertResult} from '@dataflow/core';
+import {BSON, MongoBulkWriteError, MongoClient, type Document} from 'mongodb';
+import {mongoPipelineIssue, type AggregateDocuments, type DocumentUpsert, type UpsertAnswer, type UpsertDocuments, type UpsertResult} from '@dataflow/core';
 
 /*
- * MongoDB Upsert: `updateOne(filter, {$set: document}, {upsert: true})` per document with the official driver, so each
- * envelope gets its own answer: matched, modified and the id of an inserted document (bulkWrite only answers totals
- * per batch). The documents of a batch go at the same time (the driver's pool limits how many are in flight), except
- * the ones with the same filter: those go one after the other, in arrival order (see `upsertInOrder`).
+ * MongoDB Upsert: each batch is one unordered `bulkWrite` of `updateOne(filter, {$set: document}, {upsert: true})`
+ * operations with the official driver, so the whole batch lands in one write; the ones with the same filter keep
+ * their arrival order (later rounds, see `upsertInRounds`), and a batch of one goes as `updateOne`. Each envelope gets
+ * its own answer (matched, or the id of an inserted document, or its error); modified comes as the batch's total.
  * MongoDB Pipeline: `aggregate(pipeline)` with the cursor read as the flow asks (backpressure), each document turned into
  * plain JSON values (`toEnvelopeValue`). The pipeline arrives as Extended JSON ({$oid}, {$date}...: the component's
  * mongosh helpers) and becomes BSON here.
@@ -44,23 +44,57 @@ export function toEnvelopeValue(value: unknown): unknown {
   return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, toEnvelopeValue(v)]));
 }
 
+/** A bulk write's answer, by position in what was sent: the ids of the inserted ones and the errors. */
+export type BulkAnswer = {upsertedIds: Record<number, unknown>; errors: Record<number, string>; modified: number};
+
+/** One upsert written on its own (updateOne): it also says whether the document changed. */
+export type SingleAnswer = {matched: number; modified: number; upsertedId: unknown};
+
 /**
- * Runs the upserts of a batch: the ones with the same filter (same fields and values) one after the other, in arrival
- * order, so the last one wins; the others at the same time. Sent together, two upserts of the same filter have no
- * order (when their data differs, either one may be the final document), and with a filter that is not a unique
- * index both may insert. The results come back in the order of `upserts`; one that fails does not stop the next one
- * of its filter.
+ * Writes the upserts of a batch together: one unordered bulk write, so one bad document does not stop the others.
+ * Upserts with the same filter (same fields and values) keep their arrival order, so the last one wins: the first
+ * occurrence of each filter goes in the first round, the second ones in the next round, and so on (usually there is
+ * only one round). Sent in the same unordered write, two upserts of the same filter would have no order (when their
+ * data differs, either one may be the final document), and with a filter that is not a unique index both may insert.
+ * A round of one upsert goes on its own (updateOne), which also answers whether that document changed.
+ * The results come back in the order of `upserts`.
  */
-export function upsertInOrder(upserts: DocumentUpsert[], write: (upsert: DocumentUpsert) => Promise<UpsertResult>): Promise<UpsertResult[]> {
-  const last = new Map<string, Promise<unknown>>();
-  return Promise.all(upserts.map(upsert => {
+export async function upsertInRounds(
+  upserts: DocumentUpsert[],
+  writeOne: (upsert: DocumentUpsert) => Promise<SingleAnswer>,
+  writeMany: (upserts: DocumentUpsert[]) => Promise<BulkAnswer>,
+): Promise<UpsertAnswer> {
+  const rounds: number[][] = [];
+  const seen = new Map<string, number>();
+  upserts.forEach((upsert, i) => {
     const key = JSON.stringify(upsert.filter);
-    const result = (last.get(key) ?? Promise.resolve())
-      .then(() => write(upsert))
-      .catch((e: unknown): UpsertResult => ({error: message(e)}));
-    last.set(key, result);
-    return result;
-  }));
+    const round = seen.get(key) ?? 0;
+    seen.set(key, round + 1);
+    (rounds[round] ??= []).push(i);
+  });
+  const results: UpsertResult[] = new Array(upserts.length);
+  let modified = 0;
+  for (const round of rounds) {
+    if (round.length === 1) {
+      const i = round[0];
+      try {
+        const r = await writeOne(upserts[i]);
+        results[i] = {matched: r.matched, modified: r.modified, upsertedId: idText(r.upsertedId)};
+        modified += r.modified;
+      } catch (e) {
+        results[i] = {error: message(e)};
+      }
+      continue;
+    }
+    const answer = await writeMany(round.map(i => upserts[i]));
+    modified += answer.modified;
+    round.forEach((i, k) => {
+      if (k in answer.errors) results[i] = {error: answer.errors[k]};
+      else if (k in answer.upsertedIds) results[i] = {matched: 0, upsertedId: idText(answer.upsertedIds[k])};
+      else results[i] = {matched: 1, upsertedId: null};
+    });
+  }
+  return {results, modified};
 }
 
 export function mongoDriver() {
@@ -86,11 +120,29 @@ export function mongoDriver() {
       throw Object.assign(new Error(`Could not connect to MongoDB: ${message(e)}`), {name: 'ConnectionError'});
     }
     const target = connected.db(database).collection(collection);
-    return upsertInOrder(upserts, async ({filter, document}) => {
-      if (signal.aborted) return {error: 'Run interrupted.'};
-      const r = await target.updateOne(filter, {$set: document}, {upsert: true});
-      return {matched: r.matchedCount, modified: r.modifiedCount, upsertedId: idText(r.upsertedId)};
-    });
+    const ops = (list: DocumentUpsert[]) => list.map(({filter, document}) => ({updateOne: {filter, update: {$set: document}, upsert: true}}));
+    return upsertInRounds(upserts,
+      async ({filter, document}) => {
+        if (signal.aborted) throw new Error('Run interrupted.');
+        const r = await target.updateOne(filter, {$set: document}, {upsert: true});
+        return {matched: r.matchedCount, modified: r.modifiedCount, upsertedId: r.upsertedId};
+      },
+      async list => {
+        if (signal.aborted) throw new Error('Run interrupted.');
+        try {
+          const r = await target.bulkWrite(ops(list), {ordered: false});
+          return {upsertedIds: r.upsertedIds, errors: {}, modified: r.modifiedCount};
+        } catch (e) {
+          // some documents failed: the others were written, and the answer says which is which
+          if (!(e instanceof MongoBulkWriteError)) throw e;
+          const failed = Array.isArray(e.writeErrors) ? e.writeErrors : [e.writeErrors];
+          return {
+            upsertedIds: e.result.upsertedIds,
+            errors: Object.fromEntries(failed.map(w => [w.index, w.errmsg ?? 'MongoDB did not write this document.'])),
+            modified: e.result.modifiedCount,
+          };
+        }
+      });
   };
 
   const aggregate: AggregateDocuments = async function* ({connection, database, collection, pipeline, timeoutMs, signal}) {

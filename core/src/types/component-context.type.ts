@@ -10,7 +10,7 @@ import type {WorkflowCurrentRun} from '#types/workflow-current-run.type';
 import type {EnvelopeData} from '#types/envelope-data.type';
 import type {DocumentStoreKind} from '#types/document-store-kind.type';
 import type {DocumentBatch} from '#types/document-batch.type';
-import type {UpsertResult} from '#types/upsert-result.type';
+import type {UpsertAnswer} from '#types/upsert-answer.type';
 import type {DocumentQuery} from '#types/document-query.type';
 
 export type ComponentContext = {
@@ -55,8 +55,8 @@ export type ComponentContext = {
   aggregateDocuments: (kind: DocumentStoreKind, query: Omit<DocumentQuery, 'connection' | 'signal'> & {secret: string}) => AsyncIterable<Record<string, unknown>>;
   /**
    * Writes a batch of upserts through the document database driver the runner registered for that kind; one result per
-   * upsert, in order. In a test run of a component with side effects it writes nothing: it logs what it would send and
-   * answers null.
+   * upsert, in order, and the count of modified documents. In a test run of a component with side effects it writes
+   * nothing: it logs what it would send and answers null.
    */
-  upsertDocuments: (kind: DocumentStoreKind, batch: Omit<DocumentBatch, 'connection' | 'signal'> & {secret: string}) => Promise<UpsertResult[] | null>;
+  upsertDocuments: (kind: DocumentStoreKind, batch: Omit<DocumentBatch, 'connection' | 'signal'> & {secret: string}) => Promise<UpsertAnswer | null>;
 };

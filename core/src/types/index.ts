@@ -34,6 +34,7 @@ export type * from './run-options.type';
 export type * from './run-record.type';
 export type * from './run-status.type';
 export type * from './script-function.type';
+export type * from './upsert-answer.type';
 export type * from './upsert-documents.type';
 export type * from './upsert-result.type';
 export type * from './workflow-current-run.type';

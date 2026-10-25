@@ -12,11 +12,12 @@ import type {ExpressionField} from '#types/expression-field.type';
  * pairs (values are expressions on the envelope, e.g. `email` = `$email`); the document is the whole DATA or an
  * expression. `_id` never goes in the `$set` (an upsert takes it from the filter; MongoDB does not change it).
  *
- * Writes in batches: one `updateOne` per document (the ones of a batch at the same time, those with the same filter
- * one after the other, in arrival order: runner/src/databases/mongodb.ts) and maps each result back to its envelope:
- * the envelope goes out with `{matched, modified, upsertedId}` in its output key; one that failed goes to the error
- * policy. The log counts, per batch and in all, the documents inserted, modified and unchanged (matched, nothing to
- * change). In a test run it writes nothing (the engine's gate for `sideEffects`).
+ * Writes in batches: each batch goes together, in one bulk write (those with the same filter keep their arrival
+ * order; a batch of one goes as updateOne: runner/src/databases/mongodb.ts), and each result is mapped back to its
+ * envelope: the envelope goes out with `{matched, upsertedId}` in its output key (plus `modified` for a batch of one,
+ * the only case where it is known per document); one that failed goes to the error policy. The log counts, per batch
+ * and in all, the documents inserted, modified and unchanged (matched, nothing to change), from the batch's totals.
+ * In a test run it writes nothing (the engine's gate for `sideEffects`).
  */
 
 export type MongoFilterKey = ExpressionField & {field: string};
@@ -114,10 +115,10 @@ export const mongodbUpsert: ComponentLogic = {
       batch = [];
       ctx.holding(0);
       if (!current.length) return;
-      let results;
+      let answer;
       const t0 = performance.now();
       try {
-        results = await ctx.upsertDocuments('mongodb', {secret: connection, database, collection, upserts: current.map(b => b.upsert)});
+        answer = await ctx.upsertDocuments('mongodb', {secret: connection, database, collection, upserts: current.map(b => b.upsert)});
       } catch (e) {
         // the whole batch failed (connection, authentication): each of its envelopes goes to the error policy
         failed += current.length;
@@ -125,20 +126,23 @@ export const mongodbUpsert: ComponentLogic = {
         return;
       }
       // a test run: nothing written, nothing goes on
-      if (results === null) {
+      if (answer === null) {
         prepared += current.length;
         return;
       }
+      const results = answer.results;
       sent += current.length;
       batches += 1;
-      const counts = {inserted: 0, modified: 0, unchanged: 0, failed: 0};
+      // a bulk write says how many changed only in total: matched minus modified are the unchanged ones (they
+      // already had these values, e.g. the same envelope twice)
+      const counts = {inserted: 0, modified: answer.modified, unchanged: 0, failed: 0};
+      let matched = 0;
       for (const r of results) {
         if ('error' in r) counts.failed += 1;
         else if (r.upsertedId !== null) counts.inserted += 1;
-        else if (r.modified > 0) counts.modified += 1;
-        // matched a document that already had these values (e.g. the same envelope twice)
-        else if (r.matched > 0) counts.unchanged += 1;
+        else if (r.matched > 0) matched += 1;
       }
+      counts.unchanged = Math.max(0, matched - answer.modified);
       totals.inserted += counts.inserted;
       totals.modified += counts.modified;
       totals.unchanged += counts.unchanged;
