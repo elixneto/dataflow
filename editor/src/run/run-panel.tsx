@@ -1,5 +1,5 @@
 import {useState, type ReactNode} from 'react';
-import {ChevronDown, ChevronRight, CircleAlert, CircleCheck, CircleMinus, CircleX, Clock, Pin, PinOff, X} from 'lucide-react';
+import {ChevronDown, ChevronRight, ChevronUp, CircleAlert, CircleCheck, CircleMinus, CircleX, Clock, Loader2, Pin, PinOff} from 'lucide-react';
 import {SAMPLE_SIZE, type ComponentRun, type EnvelopeData, type RunRecord} from '@dataflow/core';
 import {cn} from '#lib/utils';
 import {BY_TYPE} from '#components/catalog';
@@ -211,14 +211,18 @@ function DataTab({record, pins}: {record: RunRecord; pins?: PinActions}) {
 }
 
 /** A run's result in tabs: Logs (all, by time), Metrics (per component) and Data (input and output). */
-export function RunResult({record, onGoTo, portName, actions, pins}: {
+export function RunResult({record, onGoTo, portName, actions, pins, busy, collapsed}: {
   record: RunRecord;
   onGoTo: (nodeId: string) => void;
   portName: PortName;
   /** in the editor: pin a component's output from the Data tab */
   pins?: PinActions;
-  /** buttons to the right of the tabs (e.g. close the panel) */
+  /** buttons to the right of the tabs (e.g. minimize the panel) */
   actions?: ReactNode;
+  /** a new run is in progress: the tabs and their content are read-only until it ends */
+  busy?: boolean;
+  /** only the header (the panel minimized); the tab and what is open in it are kept */
+  collapsed?: boolean;
 }) {
   const [tab, setTab] = useState<Tab>('logs');
 
@@ -230,7 +234,7 @@ export function RunResult({record, onGoTo, portName, actions, pins}: {
         <span className="font-mono text-xs text-muted-foreground" title="WORKFLOW_CURRENT_RUN.id">{record.run.id.slice(0, 8)}</span>
         <span className="text-xs text-muted-foreground">startedAt <span className="font-mono text-foreground">{record.run.startedAt}</span></span>
         <span className="text-xs text-muted-foreground">total <span className="font-mono text-foreground">{ms(record.durationMs)}</span></span>
-        <div role="tablist" className="ml-auto flex gap-1">
+        <div role="tablist" inert={busy} className={cn('ml-auto flex gap-1', busy && 'opacity-60', collapsed && 'invisible')}>
           {([['logs', 'Logs'], ['metrics', 'Metrics'], ['data', 'Data']] as const).map(([value, label]) => (
             <button key={value} type="button" role="tab" aria-selected={tab === value} onClick={() => setTab(value)}
                     className={cn('rounded-md px-3 py-1 text-sm transition-colors',
@@ -241,8 +245,8 @@ export function RunResult({record, onGoTo, portName, actions, pins}: {
         </div>
         {actions}
       </header>
-      {record.error && <p className="border-b border-border bg-destructive/10 px-4 py-2 text-sm text-destructive">{record.error}</p>}
-      <div role="tabpanel" className="min-h-0 overflow-y-auto">
+      {record.error && !collapsed && <p className="border-b border-border bg-destructive/10 px-4 py-2 text-sm text-destructive">{record.error}</p>}
+      <div role="tabpanel" inert={busy} aria-busy={busy} hidden={collapsed} className={cn('min-h-0 overflow-y-auto', busy && 'cursor-progress opacity-60')}>
         {tab === 'logs' && <LogsTab record={record}/>}
         {tab === 'metrics' && <MetricsTab record={record} onGoTo={onGoTo} portName={portName}/>}
         {tab === 'data' && <DataTab record={record} pins={pins}/>}
@@ -251,19 +255,32 @@ export function RunResult({record, onGoTo, portName, actions, pins}: {
   );
 }
 
-/** The result in the editor's footer, right after running. */
-export function RunPanel({record, onClose, onGoTo, portName, pinned, onPin}: {
+/**
+ * The result in the editor's footer. A new run updates it in place (the tab and the open components stay); while it
+ * runs, the panel is read-only. Minimized, only a bar is left.
+ */
+export function RunPanel({record, busy, minimized, onMinimize, onGoTo, portName, pinned, onPin}: {
   record: RunRecord;
-  onClose: () => void;
+  busy: boolean;
+  minimized: boolean;
+  onMinimize: (minimized: boolean) => void;
   onGoTo: (nodeId: string) => void;
   portName: PortName;
 } & PinActions) {
   return (
     <section className="absolute inset-x-0 bottom-0 z-20 flex max-h-[55%] flex-col border-t border-border bg-sidebar shadow-2xl" aria-label="Run result">
-      <RunResult record={record} onGoTo={onGoTo} portName={portName} pins={{pinned, onPin}} actions={
-        <button type="button" onClick={onClose} className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground" aria-label="Close result">
-          <X className="size-4" aria-hidden="true"/>
-        </button>
+      <RunResult record={record} busy={busy} collapsed={minimized} onGoTo={onGoTo} portName={portName} pins={{pinned, onPin}} actions={
+        <>
+          {busy && (
+            <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
+              <Loader2 className="size-4 animate-spin" aria-hidden="true"/> Running…
+            </span>
+          )}
+          <button type="button" onClick={() => onMinimize(!minimized)} className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+                  aria-label={minimized ? 'Restore result' : 'Minimize result'} aria-expanded={!minimized}>
+            {minimized ? <ChevronUp className="size-4" aria-hidden="true"/> : <ChevronDown className="size-4" aria-hidden="true"/>}
+          </button>
+        </>
       }/>
     </section>
   );

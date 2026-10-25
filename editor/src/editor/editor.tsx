@@ -143,11 +143,25 @@ function Editor({flow, onSave}: Props) {
       },
     };
   }, [known, parameters, secretNames, edges]);
-  // each component's output bump is painted by the result (it goes away when the result is closed)
+  // the result panel minimized: the canvas goes back to its normal colors, without the run's marks
+  const [minimized, setMinimized] = useState(false);
+  const shownRun = minimized ? null : run;
+  // each component's output bump is painted by the result (it goes away when the result is minimized)
   const lastRunStatus = useMemo(
-    () => Object.fromEntries((run?.components ?? []).map(c => [c.nodeId, c])),
-    [run],
+    () => Object.fromEntries((shownRun?.components ?? []).map(c => [c.nodeId, c])),
+    [shownRun],
   );
+  // the panel follows the canvas: removed nodes leave it, new ones show up as not run, labels follow renames
+  const panelRecord = useMemo(() => {
+    if (!run) return null;
+    const current = new Map(nodes.filter(n => n.type === 'component').map(n => [n.id, n as ComponentNode]));
+    const ran = run.components.filter(c => current.has(c.nodeId)).map(c => ({...c, label: current.get(c.nodeId)!.data.label}));
+    const seen = new Set(ran.map(c => c.nodeId));
+    const added = [...current.values()].filter(n => !seen.has(n.id)).map((n): ComponentRun => ({
+      nodeId: n.id, label: n.data.label, type: n.data.type, status: 'not-run', inputs: {}, outputs: {}, logs: [], inputSample: [], outputSample: {},
+    }));
+    return {...run, components: [...ran, ...added]};
+  }, [run, nodes]);
   // the latest execute (it reads the state of the render), for the cards' "Run from here"
   const executeRef = useRef<(mode: RunMode, from?: string) => void>(() => undefined);
   const pinRef = useRef<(nodeId: string, pinned: Record<string, EnvelopeData[]> | undefined) => void>(() => undefined);
@@ -180,13 +194,13 @@ function Editor({flow, onSave}: Props) {
     const byNode: Record<string, string[]> = {};
     const add = (id: string, msg: string) => (byNode[id] ??= []).push(msg);
     for (const p of issues) add(p.nodeId, p.message);
-    for (const c of run?.components ?? []) {
+    for (const c of shownRun?.components ?? []) {
       if (c.status !== 'failed' && c.status !== 'with-errors') continue;
       const errors = c.logs.filter(l => l.level === 'error').map(l => l.message);
       for (const m of errors.length ? errors.slice(0, 5) : ['The run failed.']) add(c.nodeId, m);
     }
     return byNode;
-  }, [issues, run]);
+  }, [issues, shownRun]);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => () => {
@@ -897,9 +911,9 @@ function Editor({flow, onSave}: Props) {
                 );
               })}
             </div>
-            {run && (
-              <RunPanel key={run.run.id} record={run} onClose={() => setRun(null)} onGoTo={goTo} portName={portName}
-                        pinned={pinnedIds} onPin={pin}/>
+            {panelRecord && (
+              <RunPanel record={panelRecord} busy={running !== null} minimized={minimized} onMinimize={setMinimized}
+                        onGoTo={goTo} portName={portName} pinned={pinnedIds} onPin={pin}/>
             )}
           </main>
         </div>
