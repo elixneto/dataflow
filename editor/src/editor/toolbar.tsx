@@ -89,11 +89,12 @@ export function Toolbar(p: Props) {
       <div className="flex items-center gap-2">
         <ConnectionStatus/>
         <ThemeButton/>
-        <Button variant="outline" size="sm" onClick={p.onComment}>
-          <MessageSquarePlus className="size-4" aria-hidden="true"/> Comment
+        {/* below 2xl only the icons: with Run for real, the labels no longer fit */}
+        <Button variant="outline" size="sm" onClick={p.onComment} aria-label="Comment" title="Comment">
+          <MessageSquarePlus className="size-4" aria-hidden="true"/> <span className="hidden 2xl:inline">Comment</span>
         </Button>
-        <Button variant="outline" size="sm" onClick={p.onGroup} title="Colored rectangle behind the components">
-          <Group className="size-4" aria-hidden="true"/> Group
+        <Button variant="outline" size="sm" onClick={p.onGroup} aria-label="Group" title="Group: colored rectangle behind the components">
+          <Group className="size-4" aria-hidden="true"/> <span className="hidden 2xl:inline">Group</span>
         </Button>
         {p.dependencies}
         <ArrangeButton onArrange={p.onArrange}/>

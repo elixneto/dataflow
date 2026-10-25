@@ -91,7 +91,8 @@ function LogsTab({record}: {record: RunRecord}) {
 
 // ---------- Metrics: one row per component ----------
 
-const METRICS_COLUMNS = 'grid-cols-[16px_minmax(0,1fr)_110px_120px_minmax(90px,200px)_minmax(90px,200px)_80px_80px_80px_100px_110px_minmax(160px,1.2fr)]';
+// the label and the timeline share what is left; below the minimums the tab scrolls sideways instead of squeezing them
+const METRICS_COLUMNS = 'grid-cols-[16px_minmax(140px,1.4fr)_110px_120px_minmax(70px,160px)_minmax(70px,160px)_80px_80px_80px_100px_110px_minmax(180px,1fr)]';
 
 /** Component name (Mapper, Filter...); the label is what the user gave the node. */
 const componentName = (type: string) => BY_TYPE[type]?.label ?? type;
@@ -110,7 +111,8 @@ function Timeline({c, runStart, runMs}: {c: ComponentRun; runStart: number; runM
   return (
     <span className="relative block h-3 w-full rounded-sm bg-muted/60" title={title} aria-label={title}>
       <span className="absolute inset-y-0 flex min-w-0.5 overflow-hidden rounded-sm bg-primary/25"
-            style={{left: pct(Date.parse(c.start) - runStart), width: pct(open)}}>
+            // a component that opened at the very end still shows a sliver inside the axis
+            style={{left: `min(${pct(Date.parse(c.start) - runStart)}, calc(100% - 2px))`, width: pct(open)}}>
         <span className="h-full bg-primary" style={{width: open ? `${(active / open) * 100}%` : 0}}/>
         <span className="h-full bg-primary/55" style={{width: open ? `${(waiting / open) * 100}%` : 0}}/>
       </span>
@@ -121,7 +123,7 @@ function Timeline({c, runStart, runMs}: {c: ComponentRun; runStart: number; runM
 function MetricsTab({record, onGoTo, portName}: {record: RunRecord; onGoTo: (nodeId: string) => void; portName: PortName}) {
   const runStart = Date.parse(record.run.startedAt);
   return (
-    <div className="flex flex-col">
+    <div className="flex min-w-[1250px] flex-col">
       <div className={cn('grid gap-2 border-b border-border px-4 py-1.5 text-xs text-muted-foreground', METRICS_COLUMNS)}>
         <span/><span>Label</span><span>Component</span><span>Status</span><span className="text-right">In</span><span className="text-right">Out</span>
         <span className="text-right" title="From its first envelope until it finished (the one before it sent everything and it sent its last result), including the waiting">Open</span>
@@ -273,7 +275,7 @@ export function RunResult({record, onGoTo, portName, actions, pins, busy, collap
         {actions}
       </header>
       {record.error && !collapsed && <p className="border-b border-border bg-destructive/10 px-4 py-2 text-sm text-destructive">{record.error}</p>}
-      <div role="tabpanel" inert={busy} aria-busy={busy} hidden={collapsed} className={cn('min-h-0 overflow-y-auto', busy && 'cursor-progress opacity-60')}>
+      <div role="tabpanel" inert={busy} aria-busy={busy} hidden={collapsed} className={cn('min-h-0 overflow-auto', busy && 'cursor-progress opacity-60')}>
         {tab === 'logs' && <LogsTab record={record}/>}
         {tab === 'metrics' && <MetricsTab record={record} onGoTo={onGoTo} portName={portName}/>}
         {tab === 'data' && <DataTab record={record} pins={pins}/>}
