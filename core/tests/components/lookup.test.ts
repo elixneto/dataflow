@@ -55,12 +55,14 @@ test('Lookup matches dates by their instant (a millisecond apart is another key)
     project: 'Test', workflow: 'Lookup dates', parameters: [],
     nodes: [
       {id: 'start', type: 'start', label: 'Start', config: {acceptsInput: true}},
+      {id: 'c', type: 'copy', label: 'Copy', config: {outputCount: 2}},
       {id: 'l', type: 'lookup', label: 'Lookup', outputKey: 'shift', config: {keys: [{main: '$at', lookup: '$at'}]}},
       {id: 'end', type: 'end', label: 'End', config: {}},
     ],
     edges: [
-      {source: 'start', sourcePort: 'out-0', target: 'l', targetPort: 'in-0'},
-      {source: 'start', sourcePort: 'out-0', target: 'l', targetPort: 'in-1'},
+      {source: 'start', sourcePort: 'out-0', target: 'c', targetPort: 'in-0'},
+      {source: 'c', sourcePort: 'out-0', target: 'l', targetPort: 'in-0'},
+      {source: 'c', sourcePort: 'out-1', target: 'l', targetPort: 'in-1'},
       {source: 'l', sourcePort: 'out-0', target: 'end', targetPort: 'in-0'},
     ],
   };

@@ -1,5 +1,5 @@
 import type {Edge} from '@xyflow/react';
-import {findCycle, nameIssue} from '@dataflow/core';
+import {findCycle, nameIssue, portConnectionIssues} from '@dataflow/core';
 import {isFlowNode, END, START, BY_TYPE} from '#components/catalog';
 import type {FlowNode} from '#data/flows';
 import {ERROR_PORT, errorPolicy, inputCount, outputCount, outputLabel, isOptionalOutput, type ComponentNode} from '#editor/component-node';
@@ -32,6 +32,13 @@ export function validateFlow(nodes: FlowNode[], edges: Edge[]): Issue[] {
   if (cycle) {
     const first = byId.get(cycle[0])!;
     fail(first, `is part of a cycle (infinite loop): ${cycle.map(id => byId.get(id)?.data.label ?? id).join(' → ')}.`);
+  }
+
+  // one edge per port (the End's input takes several): the canvas refuses more, a pasted or imported flow may have them
+  const edgePorts = edges.map(e => ({source: e.source, sourcePort: e.sourceHandle ?? 'out-0', target: e.target, targetPort: e.targetHandle ?? 'in-0'}));
+  for (const issue of portConnectionIssues(edgePorts, id => byId.get(id)?.data.type === END)) {
+    const node = byId.get(issue.nodeId);
+    if (node) fail(node, issue.message);
   }
 
   // who reaches the End (walking backwards). Disabled is a bypass: it passes what comes in through in-0 to

@@ -1,7 +1,8 @@
-import {START} from '#engine/constants';
+import {END, START} from '#engine/constants';
 import {resolveParameters} from '#engine/workflow-parameters';
 import {WorkflowExecution} from '#engine/workflow-execution';
 import {findCycle} from '#validation/workflow-cycle';
+import {portConnectionIssues} from '#validation/port-connections';
 import type {EnvelopeData} from '#types/envelope-data.type';
 import type {ExecutableWorkflow} from '#types/executable-workflow.type';
 import type {RunOptions} from '#types/run-options.type';
@@ -16,8 +17,8 @@ function initialEnvelopes(input: unknown): EnvelopeData[] {
 }
 
 /**
- * Runs the workflow envelope by envelope (see WorkflowExecution). Before starting, checks the parameters, cycles and the
- * input. Returns the record with start, end, counts, logs and samples per component.
+ * Runs the workflow envelope by envelope (see WorkflowExecution). Before starting, checks the parameters, cycles, ports with
+ * more than one edge and the input. Returns the record with start, end, counts, logs and samples per component.
  */
 export async function workflowRunner(wf: ExecutableWorkflow, options: RunOptions): Promise<RunRecord> {
   const {parameters, missing} = resolveParameters(wf, options.parameterValues);
@@ -25,11 +26,15 @@ export async function workflowRunner(wf: ExecutableWorkflow, options: RunOptions
 
   if (missing.length) return execution.finish('failed', `Required parameter without a value: ${missing.join(', ')}.`);
 
+  const name = (id: string) => wf.nodes.find(n => n.id === id)?.label ?? id;
   const cycle = findCycle(wf.nodes.map(n => n.id), wf.edges);
   if (cycle) {
-    const name = (id: string) => wf.nodes.find(n => n.id === id)?.label ?? id;
     return execution.finish('failed', `The flow has a cycle (infinite loop): ${cycle.map(name).join(' → ')}.`);
   }
+
+  // one edge per port (the End's input takes several): a flow from the API or the YAML may have more
+  const crowded = portConnectionIssues(wf.edges, id => wf.nodes.find(n => n.id === id)?.type === END);
+  if (crowded.length) return execution.finish('failed', crowded.map(i => `"${name(i.nodeId)}" ${i.message}`).join(' '));
 
   const startAcceptsInput = wf.nodes.find(n => n.type === START)?.config.acceptsInput === true;
   if (options.input !== undefined && !startAcceptsInput) {
