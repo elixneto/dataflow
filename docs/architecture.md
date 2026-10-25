@@ -136,7 +136,7 @@ There are no targets yet (components that write outside: SQL insert, HTTP...), b
 
 ## 14. Suggested components
 
-Ideas taken from n8n, not built yet (Split, Remove Duplicates and Sort are already being done; n8n's Loop Over Items is our Aggregate).
+Ideas taken from n8n, not built yet (its Split Out, Remove Duplicates and Sort are our Split, Distinct and Sort; its Loop Over Items is our Aggregate).
 
 | Component | What it does |
 |---|---|
