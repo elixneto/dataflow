@@ -113,7 +113,17 @@ All under `/api` (the editor's Vite dev server proxies it to the runner on port 
 
 Environment variables: `DATABASE_URL` (Postgres; without it, PGlite in `runner/data.local/`), `RUNNER_PORT` (default 5190), `RUNNER_TIMEOUT_MS` (maximum time of a run, default 5 min) and `RUNNER_SCRIPT_TIMEOUT_MS` (maximum time of each TypeScript `process` call, default 30 s).
 
-## 12. Not done yet
+## 12. Targets in test runs (planned)
+
+There are no targets yet (components that write outside: SQL insert, HTTP...), but the rule is decided, so nobody writes half-baked data by running a flow "just to see if it works" and forgetting to disable the target.
+
+- **A target declares itself**: `sideEffects: true` on its `ComponentLogic`. Reading components (SQL Server Query) do not.
+- **Editor runs use `mode: 'validation'`** (the `RunMode` already exists, today nothing reads it). In it, a target does not write: it builds what it would send (the SQL statement with its parameters, the HTTP request), puts it in the record as "would send" and passes the envelope on as if it had succeeded. The rest of the flow runs normally.
+- **Running for real is a separate action** (`mode: 'execution'`). In the editor it asks for confirmation, listing the enabled targets that are going to write. Triggers (endpoint, cron) always run in `execution`.
+- **Optional, per target**: a test connection (a second secret used in `validation`, so it really writes, but to a staging database) and, for SQL, writing inside a transaction that is always rolled back (catches constraint errors; does not apply to HTTP).
+- The Disable button stays as it is: it bypasses a component in any mode.
+
+## 13. Not done yet
 
 - Secrets and files in the database / blob storage (today they live in runner folders).
 - Triggers: an endpoint per flow and scheduling (cron).
