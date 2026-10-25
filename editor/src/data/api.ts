@@ -35,7 +35,7 @@ export async function request<T>(path: string, init?: RequestInit): Promise<T> {
     response = await fetch(`${API}${path}`, init);
   } catch {
     reportConnection(LOST);
-    throw new Error('The runner did not respond. Is it running? (npm run start at the repository root)');
+    throw new Error('The runner did not respond.');
   }
   const body = await response.json().catch(() => ({}));
   if (!response.ok) throw new ApiError(body.error ?? `The runner returned ${response.status}.`, response.status);

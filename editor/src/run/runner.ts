@@ -56,7 +56,7 @@ export function testInputOf(workflow: ExecutableWorkflow): unknown {
   }
 }
 
-const NOT_RESPONDING = 'The runner did not respond. Is it running? (npm run start at the repository root)';
+const NOT_RESPONDING = 'The runner did not respond.';
 
 /** Calls the runner. In dev, Vite forwards /api to http://localhost:5190. */
 export async function runOnRunner(workflow: ExecutableWorkflow, mode: RunMode, id: string, parameters?: Record<string, string>, projectId?: string): Promise<RunRecord> {
