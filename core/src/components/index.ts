@@ -5,6 +5,7 @@ import {datagrid} from './datagrid';
 import {distinct} from './distinct';
 import {filter} from './filter';
 import {limit} from './limit';
+import {log} from './log';
 import {lookup} from './lookup';
 import {mapper} from './mapper';
 import {mongodbUpsert} from './mongodb-upsert';
@@ -34,4 +35,5 @@ export const COMPONENTS: Record<string, ComponentLogic> = {
   [sqlserver.type]: sqlserver,
   [mongodbUpsert.type]: mongodbUpsert,
   [workflowInvoker.type]: workflowInvoker,
+  [log.type]: log,
 };

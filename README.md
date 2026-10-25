@@ -23,7 +23,8 @@ Inspired by SnapLogic and Pentaho Kettle, all in JavaScript: the editor in React
 | | **Sort** | Sorts the envelopes by keys |
 | | **Limit** | Lets only the first (top) or last (bottom) N envelopes through |
 | Destinations | **MongoDB Upsert** | Updates or inserts each envelope into a collection (by filter fields); writes only in Run for real |
-| Flow | **Workflow Invoker** | Calls another flow, passing the parameters of its Start |
+| Flow | **Log** | Records a message per envelope (debug, info, warn, error); debug only in test runs |
+| | **Workflow Invoker** | Calls another flow, passing the parameters of its Start |
 
 Each component has its full explanation in the **Notes** tab of its window, inside the editor.
 

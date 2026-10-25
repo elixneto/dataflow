@@ -80,7 +80,7 @@ function LogsTab({record}: {record: RunRecord}) {
   return (
     <ul className="flex flex-col gap-0.5 px-4 py-2 font-mono text-xs">
       {lines.map((l, i) => (
-        <li key={i} className={cn(l.level === 'error' && 'text-destructive', l.level === 'warning' && 'text-comment')}>
+        <li key={i} className={cn(l.level === 'error' && 'text-destructive', l.level === 'warning' && 'text-comment', l.level === 'debug' && 'text-muted-foreground')}>
           <span className="text-muted-foreground">{time(l.at)}</span>{' '}
           <span className="text-muted-foreground">[{l.order} {l.label}]</span> {l.message}
         </li>

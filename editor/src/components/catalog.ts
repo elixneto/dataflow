@@ -1,6 +1,7 @@
 import {Flag, Play} from 'lucide-react';
 import {FILTER} from '#components/filter';
 import {LIMIT} from '#components/limit';
+import {LOG} from '#components/log';
 import {LOOKUP} from '#components/lookup';
 import {AGGREGATE} from '#components/aggregate';
 import {COPY} from '#components/copy';
@@ -50,7 +51,7 @@ const FLOW: ComponentDef[] = [
  * Components shown in the palette, ordered by category (CATEGORY_ORDER) and then by label. Each new component is designed
  * (inputs, outputs, card, panel, validation) and added here.
  */
-export const PALETTE: ComponentDef[] = [MAPPER, DATA_GRID, FILTER, ROUTER, LOOKUP, UNION, COPY, AGGREGATE, SPLIT, DISTINCT, SORT, LIMIT, TYPESCRIPT, SQL_SERVER, MONGODB_UPSERT, WORKFLOW_INVOKER]
+export const PALETTE: ComponentDef[] = [MAPPER, DATA_GRID, FILTER, ROUTER, LOOKUP, UNION, COPY, AGGREGATE, SPLIT, DISTINCT, SORT, LIMIT, TYPESCRIPT, SQL_SERVER, MONGODB_UPSERT, WORKFLOW_INVOKER, LOG]
   .sort((a, b) => CATEGORY_ORDER.indexOf(a.category) - CATEGORY_ORDER.indexOf(b.category) || a.label.localeCompare(b.label, 'en'));
 
 export const BY_TYPE: Record<string, ComponentDef> = Object.fromEntries([...PALETTE, ...FLOW].map(c => [c.type, c]));

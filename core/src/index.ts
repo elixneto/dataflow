@@ -24,6 +24,7 @@ export {sqlServerConfig, sqlServerUsedParameters, sqlServerReadOnlyIssue, sqlser
 export {mongoUpsertConfig, mongodbUpsert, DEFAULT_MONGODB_BATCH_SIZE, MAX_MONGODB_BATCH_SIZE, type MongoFilterKey, type MongoDocumentSource} from './components/mongodb-upsert';
 export {copy, MAX_COPY_OUTPUTS, MIN_COPY_OUTPUTS, copyOutputCount} from './components/copy';
 export {MAX_UNION_INPUTS, MIN_UNION_INPUTS, unionInputCount, union} from './components/union';
+export {log, logConfig, LOG_LEVELS, MAX_LOG_LINES, type LogComponentLevel} from './components/log';
 export {workflowInvokerConfig, workflowInvoker, type InvokerParameter} from './components/workflow';
 export {MAX_WORKFLOW_DEPTH, SAMPLE_SIZE, START, END} from '#engine/constants';
 export {workflowRunner} from '#engine/workflow-runner';
