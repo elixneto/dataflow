@@ -11,9 +11,11 @@ import type {ExpressionField} from '#types/expression-field.type';
  * pairs (values are expressions on the envelope, e.g. `email` = `$email`); the document is the whole DATA or an
  * expression. `_id` never goes in the `$set` (an upsert takes it from the filter; MongoDB does not change it).
  *
- * Writes in batches (`bulkWrite`, unordered) and maps each result back to its envelope: the envelope goes out with
- * `{matched, modified, upsertedId}` in its output key; one that failed goes to the error policy. In a test run it
- * writes nothing (the engine's gate for `sideEffects`).
+ * Writes in batches: one `updateOne` per document (the ones of a batch at the same time, those with the same filter
+ * one after the other, in arrival order: runner/src/databases/mongodb.ts) and maps each result back to its envelope:
+ * the envelope goes out with `{matched, modified, upsertedId}` in its output key; one that failed goes to the error
+ * policy. The log counts, per batch and in all, the documents inserted, modified and unchanged (matched, nothing to
+ * change). In a test run it writes nothing (the engine's gate for `sideEffects`).
  */
 
 export type MongoFilterKey = ExpressionField & {field: string};
@@ -35,6 +37,8 @@ export function mongoUpsertConfig(config: Record<string, unknown>) {
     batchSize: Number.isFinite(size) && size >= 1 ? Math.min(size, MAX_MONGODB_BATCH_SIZE) : DEFAULT_MONGODB_BATCH_SIZE,
   };
 }
+
+const describe = (c: {inserted: number; modified: number; unchanged: number}) => `${c.inserted} inserted, ${c.modified} modified, ${c.unchanged} unchanged`;
 
 const isObject = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 
@@ -76,6 +80,7 @@ export const mongodbUpsert: ComponentLogic = {
     let sent = 0;
     let prepared = 0;
     let batches = 0;
+    const totals = {inserted: 0, modified: 0, unchanged: 0};
 
     /** builds the upsert of an envelope; a bad value is an error of that envelope */
     const upsertOf = (doc: Envelope): DocumentUpsert => {
@@ -114,10 +119,18 @@ export const mongodbUpsert: ComponentLogic = {
       }
       sent += current.length;
       batches += 1;
-      const inserted = results.filter(r => 'upsertedId' in r && r.upsertedId !== null).length;
-      const modified = results.reduce((n, r) => n + ('modified' in r ? r.modified : 0), 0);
-      const errors = results.filter(r => 'error' in r).length;
-      ctx.log('info', `Batch ${batches}: ${current.length} upsert(s) in ${Math.round(performance.now() - t0)} ms (${inserted} inserted, ${modified} modified${errors ? `, ${errors} failed` : ''}).`);
+      const counts = {inserted: 0, modified: 0, unchanged: 0, failed: 0};
+      for (const r of results) {
+        if ('error' in r) counts.failed += 1;
+        else if (r.upsertedId !== null) counts.inserted += 1;
+        else if (r.modified > 0) counts.modified += 1;
+        // matched a document that already had these values (e.g. the same envelope twice)
+        else if (r.matched > 0) counts.unchanged += 1;
+      }
+      totals.inserted += counts.inserted;
+      totals.modified += counts.modified;
+      totals.unchanged += counts.unchanged;
+      ctx.log('info', `Batch ${batches}: ${current.length} upsert(s) in ${Math.round(performance.now() - t0)} ms (${describe(counts)}${counts.failed ? `, ${counts.failed} failed` : ''}).`);
       for (const [i, {doc}] of current.entries()) {
         const result = results[i];
         if (!result || 'error' in result) {
@@ -143,6 +156,6 @@ export const mongodbUpsert: ComponentLogic = {
     }
     yield* flush();
     if (prepared) ctx.log('info', `${prepared} upsert(s) prepared for ${database}.${collection}, none sent${failed ? `, ${failed} failed` : ''}.`);
-    else ctx.log('info', `${written} document(s) upserted into ${database}.${collection}${failed ? `, ${failed} failed` : ''} (${sent} sent).`);
+    else ctx.log('info', `${written} document(s) upserted into ${database}.${collection}: ${describe(totals)}${failed ? `, ${failed} failed` : ''} (${sent} sent).`);
   },
 };

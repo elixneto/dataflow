@@ -111,7 +111,7 @@ function MongoUpsertDocs() {
       <h4>Connection</h4>
       <p>The name of a secret (<code>$SECRETS</code>) holding the connection string, e.g. <code>mongodb+srv://user:password@cluster.example.net</code>. It is never stored in the flow or in the logs. Ideally the user can only write to this collection.</p>
       <h4>Batch size</h4>
-      <p>How many envelopes are sent together (default {DEFAULT_MONGODB_BATCH_SIZE}). Each envelope still gets its own answer.</p>
+      <p>How many envelopes are sent together (default {DEFAULT_MONGODB_BATCH_SIZE}). Each envelope still gets its own answer. Envelopes with the same filter (e.g. the same <code>_id</code> twice) are written one after the other, in the order they arrived, so the last one wins. The log counts, per batch and in all, the documents <b>inserted</b>, <b>modified</b> and <b>unchanged</b> (it found the document and it already had those values).</p>
       <h4>Errors</h4>
       <p>A document that fails (e.g. a duplicate key in a unique index) is an error of its envelope and follows the card&apos;s &quot;On error&quot; policy; the others of the batch are written. A connection or login failure fails every envelope of the batch.</p>
     </>

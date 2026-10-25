@@ -62,7 +62,7 @@ test('MongoDB Upsert writes in batches in a real run and maps each result to its
   const node = r.components.find(c => c.nodeId === 'mongo')!;
   expect(node.status).toBe('with-errors');
   expect(node.logs.filter(l => l.level === 'error').map(l => l.message)).toEqual(['The filter field "email" has no value.', 'E11000 duplicate key']);
-  expect(node.logs.some(l => /^Batch 1: 2 upsert\(s\) in \d+ ms \(1 inserted, 0 modified, 1 failed\)\.$/.test(l.message))).toBe(true);
+  expect(node.logs.some(l => /^Batch 1: 2 upsert\(s\) in \d+ ms \(1 inserted, 0 modified, 0 unchanged, 1 failed\)\.$/.test(l.message))).toBe(true);
   expect(node.waitingMs).toBeGreaterThan(0);
   // continue: the failed envelopes go on unchanged; the written one carries the result
   expect(node.outputSample['out-0']).toEqual([
@@ -70,6 +70,25 @@ test('MongoDB Upsert writes in batches in a real run and maps each result to its
     {_id: 1, email: 'ana@x.com', name: 'Ana', mongodb: {matched: 0, modified: 0, upsertedId: 'id-ana@x.com'}},
     {_id: 3, email: 'caio@x.com', name: 'Caio'},
   ]);
+});
+
+test('MongoDB Upsert counts inserted, modified and unchanged documents, per batch and in all', async () => {
+  // the 1st is new, the 2nd matched and changed, the 3rd matched a document that already had these values
+  const answers: UpsertResult[] = [
+    {matched: 0, modified: 0, upsertedId: 'new-1'},
+    {matched: 1, modified: 1, upsertedId: null},
+    {matched: 1, modified: 0, upsertedId: null},
+  ];
+  let next = 0;
+  const driver = async (batch: DocumentBatch) => batch.upserts.map(() => answers[next++]);
+  const r = await workflowRunner(flow({filter: [{field: '_id', value: '$_id', expression: true}]}),
+    {mode: 'execution', id: 'm6', evaluate, documentStores: {mongodb: driver}, secrets: {MONGO: 'mongodb://x'}});
+  const logs = r.components.find(c => c.nodeId === 'mongo')!.logs.map(l => l.message);
+  expect(logs.filter(m => m.startsWith('Batch')).map(m => m.replace(/in \d+ ms/, 'in N ms'))).toEqual([
+    'Batch 1: 2 upsert(s) in N ms (1 inserted, 1 modified, 0 unchanged).',
+    'Batch 2: 1 upsert(s) in N ms (0 inserted, 0 modified, 1 unchanged).',
+  ]);
+  expect(logs.at(-1)).toBe('3 document(s) upserted into crm.people: 1 inserted, 1 modified, 1 unchanged (3 sent).');
 });
 
 test('MongoDB Upsert writes nothing in a test run and its branch stops there, unless it is pinned', async () => {
