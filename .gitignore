@@ -11,4 +11,4 @@ runner/secrets.local.json
 runner/files.local/
 
 # runner's embedded database (PGlite), when DATABASE_URL is not set
-runner/data.local/
+runner/data.local*

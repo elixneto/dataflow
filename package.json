@@ -10,7 +10,7 @@
     "check": "node scripts/check-env.mjs",
     "prestart": "node scripts/check-env.mjs",
     "start": "concurrently -k -n runner,editor -c magenta,cyan \"npm:start:runner\" \"npm:start:editor\"",
-    "start:runner": "bun --watch runner/src/index.ts",
+    "start:runner": "node scripts/dev-runner.mjs",
     "start:editor": "npm --prefix editor run start",
     "setup": "node scripts/check-env.mjs && npm --prefix editor install && bun install --cwd=runner && bun install --cwd=core && npm install",
     "test": "bun test --cwd=core && bun test --cwd=runner",

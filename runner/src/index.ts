@@ -9,6 +9,7 @@ import {projectRoutes, projectSecrets} from './projects';
 import {describeDatabase, openDatabase} from './storage/database';
 import {repository, type StoredRun} from './storage/repository';
 import {storageRoutes} from './storage/routes';
+import {backupWorkspace} from './storage/backup';
 
 /*
  * Workflow runner (see docs/architecture.md).
@@ -26,7 +27,40 @@ const TIMEOUT_MS = Number(process.env.RUNNER_TIMEOUT_MS ?? 5 * 60_000);
 /** runs in progress right now, for the Stop button */
 const inProgress = new Map<string, AbortController>();
 
-const repo = repository(await openDatabase());
+const database = await openDatabase();
+const repo = repository(database);
+
+// the local database (PGlite, without DATABASE_URL): a copy of projects and flows on every start
+if (!process.env.DATABASE_URL) {
+  await backupWorkspace(repo)
+    .then(n => console.log(`Backup of ${n.projects} project(s) and ${n.flows} flow(s) in runner/data.local.backup.json.`))
+    .catch(error => console.error('Could not write the backup:', error));
+}
+
+let stopping: Promise<void> | null = null;
+
+/**
+ * Stops cleanly: interrupts the runs and closes the database before leaving. PGlite stopped in the middle of a write
+ * can leave runner/data.local unreadable, so every way out goes through here (Ctrl+C, a kill, the dev watcher).
+ */
+function stop(reason: string) {
+  stopping ??= (async () => {
+    console.log(`Stopping the runner (${reason}): closing the database.`);
+    for (const control of inProgress.values()) control.abort();
+    await database.close().catch(error => console.error('Could not close the database:', error));
+    process.exit(0);
+  })();
+  return stopping;
+}
+
+process.on('SIGINT', () => void stop('SIGINT'));
+process.on('SIGTERM', () => void stop('SIGTERM'));
+// the dev watcher (scripts/dev-runner.mjs) asks for the stop through stdin: Windows has no signals between processes
+if (process.env.RUNNER_STOP_ON_STDIN) {
+  process.stdin.on('data', chunk => String(chunk).includes('stop') && void stop('restart'));
+  // the watcher went away (killed): the runner does not stay behind with the database open
+  process.stdin.on('end', () => void stop('watcher gone'));
+}
 
 type RunRequest = {
   /** id chosen by the caller (so it can cancel while it runs); without it, the runner generates one */

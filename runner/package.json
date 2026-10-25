@@ -7,7 +7,7 @@
   },
   "type": "module",
   "scripts": {
-    "start": "bun --watch src/index.ts",
+    "start": "node ../scripts/dev-runner.mjs",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

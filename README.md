@@ -80,7 +80,7 @@ The first time the editor opens, whatever this browser had saved before the data
 - **`Unsupported engine` / `Node.js 24.0+ is required`**: switch Node with `nvm use` (or install 24) and run `npm run setup` again.
 - **`Bun is not installed`**: install Bun and open a new terminal, so the `PATH` is updated.
 - **The editor shows "The runner did not respond"**: projects and flows come from the runner, so it must be running (`npm run start` starts both). Check its terminal for a database error (a wrong `DATABASE_URL`, Postgres not started).
-- **Start over with an empty local database**: stop the runner and delete `runner/data.local/`.
+- **Start over with an empty local database**: stop the runner (Ctrl+C) and move `runner/data.local/` away. Each start leaves a copy of the projects and flows in `runner/data.local.backup.json`.
 - **Port already in use**: something is still running on 5180 or 5190; stop it, or start with another `RUNNER_PORT` (and the same `RUNNER_URL` for the editor).
 
 ### Other commands
