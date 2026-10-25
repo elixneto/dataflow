@@ -5,10 +5,12 @@
 // waiting for it to close the database: on a change (then it starts again), on Ctrl+C, when this script is stopped.
 // Watches only runner/src and core/src (not the tests, the docs, the editor or node_modules). Plain Node.
 import {spawn} from 'node:child_process';
-import {watch} from 'node:fs';
+import {readFileSync, unlinkSync, watch, writeFileSync} from 'node:fs';
 import {fileURLToPath} from 'node:url';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
+/** one watcher per repository: a second one would start a second runner on the same database */
+const WATCHER_LOCK = fileURLToPath(new URL('../runner/data.local.watcher.lock', import.meta.url));
 const WATCHED = ['runner/src', 'core/src'];
 const WITH_EDITOR = process.argv.includes('--with-editor');
 /** waits this long after the last change (an editor saving several files restarts once) */
@@ -18,6 +20,41 @@ const STOP_TIMEOUT_MS = 15_000;
 
 const COLORS = {runner: '\x1b[35m', editor: '\x1b[36m'};
 const say = (message) => console.log(`${COLORS.runner}[dev-runner]\x1b[0m ${message}`);
+
+const alive = (pid) => {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (e) {
+    return e.code === 'EPERM';
+  }
+};
+
+/** takes the watcher lock or leaves: another live watcher of this repository is an error that names it */
+function lockWatcher() {
+  let held = null;
+  try {
+    held = JSON.parse(readFileSync(WATCHER_LOCK, 'utf8'));
+  } catch {
+    // no lock
+  }
+  if (held && held.pid !== process.pid && alive(held.pid)) {
+    console.error(`[dev-runner] another dev runner is already running for this repository (PID ${held.pid}, since ${held.startedAt}). `
+      + `Stop it first (Ctrl+C in its terminal); if that process is not a dev runner, delete ${WATCHER_LOCK}.`);
+    process.exit(1);
+  }
+  if (held) say(`taking over the lock left by PID ${held.pid} (no longer running).`);
+  writeFileSync(WATCHER_LOCK, JSON.stringify({pid: process.pid, startedAt: new Date().toISOString()}));
+  process.on('exit', () => {
+    try {
+      if (JSON.parse(readFileSync(WATCHER_LOCK, 'utf8')).pid === process.pid) unlinkSync(WATCHER_LOCK);
+    } catch {
+      // already gone
+    }
+  });
+}
+
+lockWatcher();
 
 /** the child's output, line by line, with its name in front (like concurrently did) */
 function prefixed(name, stream) {

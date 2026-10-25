@@ -3,6 +3,7 @@ import {fileURLToPath} from 'node:url';
 import {SQL} from 'bun';
 import {PGlite} from '@electric-sql/pglite';
 import {migrate} from './migrations';
+import {lockFolder} from './lock';
 
 /*
  * The runner's database: Postgres. With DATABASE_URL, a real server (Bun's own client, Bun.sql); without it, PGlite,
@@ -34,13 +35,24 @@ function postgres(url: string): Database {
 }
 
 function embedded(folder?: string): Database {
-  const db = new PGlite(folder);
+  // a folder on disk is for one process only (lock.ts); in memory there is nothing to share
+  const release = folder ? lockFolder(folder) : () => undefined;
+  let db: PGlite;
+  try {
+    db = new PGlite(folder);
+  } catch (e) {
+    release();
+    throw e;
+  }
   // PGlite runs one query at a time; a transaction holds it until it ends
   const wrap = (client: Pick<PGlite, 'query' | 'exec'>): Database => ({
     query: async <T>(text: string, params: unknown[] = []) => (await client.query<T>(text, params)).rows,
     exec: async text => void await client.exec(text),
     transaction: work => db.transaction(tx => work(wrap(tx))),
-    close: () => db.close(),
+    close: async () => {
+      await db.close();
+      release();
+    },
   });
   return wrap(db);
 }
