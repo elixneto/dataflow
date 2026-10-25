@@ -1,7 +1,7 @@
 import {expect, test} from 'bun:test';
 import {workflowRunner, type ExecutableWorkflow} from '@dataflow/core';
-import {evaluate} from './expressions';
-import {prepareScript} from './scripts';
+import {evaluate} from '../src/expressions';
+import {prepareScript} from '../src/scripts';
 
 /** Start → (Aggregate, if there is a batch) → TypeScript → End */
 const flow = (code: string, batch?: number, override = true): ExecutableWorkflow => ({

@@ -1,8 +1,8 @@
 import {afterAll, beforeAll, describe, expect, test} from 'bun:test';
 import type {RunRecord} from '@dataflow/core';
-import {openDatabase, type Database} from './database';
-import {repository, type Repository} from './repository';
-import {storageRoutes} from './routes';
+import {openDatabase, type Database} from '../../src/storage/database';
+import {repository, type Repository} from '../../src/storage/repository';
+import {storageRoutes} from '../../src/storage/routes';
 
 // always against PGlite in memory; with TEST_DATABASE_URL, also against a real Postgres (its tables are dropped first)
 const targets: [string, string][] = [['PGlite', 'memory://']];

@@ -3,6 +3,5 @@
   "compilerOptions": {
     "types": ["bun"]
   },
-  "include": ["src/**/*.test.ts", "tests"],
-  "exclude": []
+  "include": ["tests"]
 }

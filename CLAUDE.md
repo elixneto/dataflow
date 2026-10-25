@@ -14,7 +14,7 @@ Overview, concepts and how to run: [README.md](README.md). Engine architecture: 
 - `npm run setup` — installs the dependencies of the three parts (once).
 - `npm run start` — starts **runner and editor together** (concurrently, one terminal); opens at http://localhost:5180/ (project list).
 - `npm run lint` — ESLint over the three parts (`eslint.config.mjs`); it is the first step of `npm run build`, so a missing `;` or an `any` breaks the build.
-- `npm test` — core and runner tests (`bun test`). `npm run typecheck` — the three parts. `npm run build` — editor build.
+- `npm test` — core and runner tests (`bun test`). Tests live in each part's `tests/` folder (never next to the code), mirroring `src/`: `core/tests/components/`, `core/tests/engine/`, `core/tests/validation/`, `runner/tests/`. `npm run typecheck` — the three parts. `npm run build` — editor build.
 - Each part has an `.npmrc` pointing to the public npm registry, so it installs the same even with another registry configured on the machine.
 
 ## New component
