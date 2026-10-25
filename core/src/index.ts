@@ -14,6 +14,7 @@ export {filterCondition, filter} from './components/filter';
 export {lookupConfig, lookup, type LookupKey, type IfNotFound} from './components/lookup';
 export {DEFAULT_CODE, typescriptConfig, typescript} from './components/typescript';
 export {aggregate, aggregateConfig, MAX_BATCH_SIZE} from './components/aggregate';
+export {split, splitList} from './components/split';
 export {dataGridConfig, datagrid, cellValue, type DataGridColumn} from './components/datagrid';
 export {routerCases, routerElsePort, router, type RouterCase} from './components/router';
 export {sqlServerConfig, sqlServerUsedParameters, sqlServerReadOnlyIssue, sqlserver, DEFAULT_SQL_SERVER_TIMEOUT_S, type SqlServerParameter} from './components/sqlserver';

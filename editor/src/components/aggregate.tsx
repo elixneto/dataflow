@@ -35,7 +35,7 @@ function AggregateDocs() {
       <h4>Input</h4>
       <p>1 envelope port.</p>
       <h4>Output</h4>
-      <p>1 envelope for every N that come in; the last batch may be smaller. To go back to one envelope per record, the TypeScript can return a list.</p>
+      <p>1 envelope for every N that come in; the last batch may be smaller. To go back to one envelope per record, use a Split (or a TypeScript that returns a list).</p>
       <h4>Disabled</h4>
       <p>The envelopes pass through without being grouped.</p>
     </>
