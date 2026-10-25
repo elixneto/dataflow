@@ -67,12 +67,13 @@ type ComponentLogic = {
   variableInputs?: {min, max, key}                        // e.g. Union
   variableOutputs?: {min, max, key}                       // e.g. Copy
   defaultOutputKey?: string                               // key in DATA (the node can change it)
+  sideEffects?: boolean                                   // a target: writes outside (section 12)
   validate(config): string[]                              // assembly, without data
   execute(inputs, config, ctx): AsyncIterable<{port, doc} | {error, doc}>
 }
 ```
 
-The `ctx` gives the component: `fieldValue` (text or expression), `log`, `prepareScript` (TypeScript), `queryDatabase(kind, ...)` (through the driver the runner registered for that database, e.g. `sqlserver`), `invokeWorkflow`, `wait`/`waitEach` (waits that do not count as active time) and `holding` (memory). Whatever talks to the outside (sandbox, database) is injected by the runner; the core only receives the function.
+The `ctx` gives the component: `fieldValue` (text or expression), `log`, `prepareScript` (TypeScript), `queryDatabase(kind, ...)` (through the driver the runner registered for that database, e.g. `sqlserver`), `upsertDocuments(kind, ...)` (writes a batch through a document database driver, e.g. `mongodb`; one result per document; in a test run it sends nothing and answers null), `invokeWorkflow`, `wait`/`waitEach` (waits that do not count as active time) and `holding` (memory). Whatever talks to the outside (sandbox, database) is injected by the runner; the core only receives the function.
 
 ## 8. Run record
 
@@ -118,17 +119,18 @@ All under `/api` (the editor's Vite dev server proxies it to the runner on port 
 
 Environment variables: `DATABASE_URL` (Postgres; without it, PGlite in `runner/data.local/`), `RUNNER_PORT` (default 5190), `RUNNER_TIMEOUT_MS` (maximum time of a run, default 5 min) and `RUNNER_SCRIPT_TIMEOUT_MS` (maximum time of each TypeScript `process` call, default 30 s).
 
-## 12. Targets in test runs (planned)
+## 12. Targets in test runs
 
-There are no targets yet (components that write outside: SQL insert, HTTP...), but the rule is decided, so nobody writes half-baked data by running a flow "just to see if it works" and forgetting to disable the target. The user should not have to write a fake output either: what comes after a target usually needs its real answer (a generated id, a response body).
+Targets are components that write outside the flow (today the **MongoDB Upsert**; later SQL insert, HTTP...). The rule exists so nobody writes half-baked data by running a flow "just to see if it works" and forgetting to disable the target. The user should not have to write a fake output either: what comes after a target usually needs its real answer (a generated id, a response body).
 
-- **A target declares itself**: `sideEffects: true` on its `ComponentLogic` (or a function of the config, e.g. an HTTP request is a target only for POST, PUT, PATCH and DELETE). Reading components (SQL Server Query, HTTP GET/HEAD) run normally in any mode.
-- **Editor runs use `mode: 'validation'`** (the editor's Run already does; today only the pins read it). Triggers (endpoint, cron) always run in `execution`.
-- **What a target does in `validation`**, in this order:
+- **A target declares itself**: `sideEffects: true` on its `ComponentLogic` (later possibly a function of the config, e.g. an HTTP request is a target only for POST, PUT, PATCH and DELETE). Reading components (SQL Server Query, HTTP GET/HEAD) run normally in any mode.
+- **Editor runs use `mode: 'validation'`** (the editor's Run). Triggers (endpoint, cron) will always run in `execution`.
+- **Implemented**: the gate is in one place, `WorkflowExecution.runNode` (`core/src/engine/workflow-execution.ts`): in `validation`, a component with `sideEffects` runs with a context whose writes send nothing (`upsertDocuments` logs the first upserts it would send and answers null) and nothing goes out of it, so its branch stops there (the components after it get nothing) and it ends "with warnings". A pinned target replays its pin as usual. Errors it finds before writing (a filter value missing, a secret that does not exist) still show.
+- **What a target does in `validation`**, planned refinements, in this order:
   1. **SQL**: writes inside a transaction that is always rolled back. The output is real (rows affected, `OUTPUT inserted.id`) and nothing stays.
-  2. **Pinned output** (like n8n's pin data): every real run stores the target's last output per input sample; a test run replays it. The user can also pin an output by hand (already possible, see section 8), but never has to.
-  3. **Nothing to replay**: the target records what it would send (the statement with its parameters, the request) and stops the branch there; the components after it show as not run. No output is made up.
-- **Running for real** is a separate action (`mode: 'execution'`) that asks for confirmation, listing the enabled targets that are going to write. In the test dialog, one target can be marked "run for real" on its own, with the same confirmation.
+  2. **Pinned output** (like n8n's pin data): every real run stores the target's last output per input sample; a test run replays it. Today the user pins an output by hand (section 8).
+  3. **Nothing to replay**: what is implemented now (the target logs what it would send and stops the branch). No output is made up.
+- **Run for real** (implemented): a toolbar button next to Run that runs in `execution` after a confirmation listing the enabled targets that are going to write. Planned: in the test dialog, one target can be marked "run for real" on its own, with the same confirmation.
 - **Optional, per target**: a test connection (a second secret used in `validation`, so it really writes, but to a staging database).
 - The Disable button stays as it is: it bypasses a component in any mode.
 
@@ -137,7 +139,7 @@ There are no targets yet (components that write outside: SQL insert, HTTP...), b
 - Secrets and files in the database / blob storage (today they live in runner folders).
 - Triggers: an endpoint per flow and scheduling (cron).
 - Authentication in the runner.
-- Sources and targets beyond SQL Server (CSV, HTTP, other databases).
+- Sources and targets beyond SQL Server and MongoDB (CSV, HTTP, other databases).
 
 ## 14. Suggested components
 

@@ -1,6 +1,6 @@
 import {useState, type ReactNode} from 'react';
 import {Link} from 'react-router';
-import {CheckCircle2, CircleAlert, Download, Eraser, Group, Loader2, MessageSquarePlus, Network, Play, Redo2, Save, Square, Undo2, Workflow} from 'lucide-react';
+import {CheckCircle2, CircleAlert, Download, Eraser, Group, Loader2, MessageSquarePlus, Network, Play, Redo2, Save, Square, Undo2, Workflow, Zap} from 'lucide-react';
 import type {RunMode} from '@dataflow/core';
 import type {ArrangeDirection} from '#editor/layout';
 import {Button} from '#ui/button';
@@ -18,6 +18,10 @@ type Props = {
   onName: (name: string) => void;
   validation: ValidationResult;
   onRun: () => void;
+  /** runs in `execution`: the targets write (after the confirmation) */
+  onRunForReal: () => void;
+  /** labels of the enabled components that write outside the flow */
+  targets: string[];
   onStop: () => void;
   validating: boolean;
   running: RunMode | null;
@@ -107,13 +111,51 @@ export function Toolbar(p: Props) {
             <Square className="size-3.5 fill-current" aria-hidden="true"/> Stop
           </Button>
         ) : (
-          <Button size="sm" onClick={p.onRun} disabled={p.validating}>
-            {p.validating ? <Loader2 className="size-4 animate-spin" aria-hidden="true"/> : <Play className="size-4" aria-hidden="true"/>}
-            Run
-          </Button>
+          <>
+            <RunForRealButton targets={p.targets} disabled={p.validating} onConfirm={p.onRunForReal}/>
+            <Button size="sm" onClick={p.onRun} disabled={p.validating} title="Test run: components that write outside the flow do not write">
+              {p.validating ? <Loader2 className="size-4 animate-spin" aria-hidden="true"/> : <Play className="size-4" aria-hidden="true"/>}
+              Run
+            </Button>
+          </>
         )}
       </div>
     </header>
+  );
+}
+
+/** Run for real (`execution`): a confirmation listing the enabled components that are going to write. */
+function RunForRealButton({targets, disabled, onConfirm}: {targets: string[]; disabled: boolean; onConfirm: () => void}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="relative">
+      <Button variant="outline" size="sm" onClick={() => setOpen(v => !v)} disabled={disabled} aria-expanded={open} aria-haspopup="dialog">
+        <Zap className="size-4" aria-hidden="true"/> Run for real
+      </Button>
+      {open && (
+        <div role="dialog" aria-label="Run for real"
+             onKeyDown={e => e.key === 'Escape' && setOpen(false)}
+             className="absolute top-full right-0 z-50 mt-1 flex w-72 flex-col gap-3 rounded-md border border-border bg-popover p-3 text-sm text-popover-foreground shadow-md">
+          <p className="font-medium">{targets.length ? 'These will write:' : 'Nothing writes outside the flow.'}</p>
+          {targets.length > 0 && (
+            <ul className="flex max-h-48 flex-col gap-1 overflow-y-auto">
+              {targets.map((label, i) => (
+                <li key={i} className="flex items-center gap-2"><Zap className="size-3.5 shrink-0 text-destructive" aria-hidden="true"/> <span className="truncate">{label}</span></li>
+              ))}
+            </ul>
+          )}
+          <div className="flex justify-end gap-2">
+            <Button variant="ghost" size="sm" onClick={() => setOpen(false)}>Cancel</Button>
+            <Button variant="destructive" size="sm" autoFocus onClick={() => {
+              setOpen(false);
+              onConfirm();
+            }}>
+              Run for real
+            </Button>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 

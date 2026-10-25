@@ -8,6 +8,9 @@ import type {DatabaseKind} from '#types/database-kind.type';
 import type {DatabaseQuery} from '#types/database-query.type';
 import type {WorkflowCurrentRun} from '#types/workflow-current-run.type';
 import type {EnvelopeData} from '#types/envelope-data.type';
+import type {DocumentStoreKind} from '#types/document-store-kind.type';
+import type {DocumentBatch} from '#types/document-batch.type';
+import type {UpsertResult} from '#types/upsert-result.type';
 
 export type ComponentContext = {
   run: WorkflowCurrentRun;
@@ -44,4 +47,10 @@ export type ComponentContext = {
    * connection string becomes the connection string here; the run's signal cancels the query.
    */
   queryDatabase: (kind: DatabaseKind, query: Omit<DatabaseQuery, 'connection' | 'signal'> & {secret: string}) => AsyncIterable<Record<string, unknown>>;
+  /**
+   * Writes a batch of upserts through the document database driver the runner registered for that kind; one result per
+   * upsert, in order. In a test run of a component with side effects it writes nothing: it logs what it would send and
+   * answers null.
+   */
+  upsertDocuments: (kind: DocumentStoreKind, batch: Omit<DocumentBatch, 'connection' | 'signal'> & {secret: string}) => Promise<UpsertResult[] | null>;
 };

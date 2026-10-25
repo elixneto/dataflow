@@ -4,6 +4,7 @@ import {workflowRunner, type RunMode, type RunRecord, type ExecutableWorkflow} f
 import {evaluate} from './expressions';
 import {prepareScript} from './scripts';
 import {querySqlServer} from './databases/sql-server';
+import {mongoDriver} from './databases/mongodb';
 import {projectRoutes, projectSecrets} from './projects';
 import {describeDatabase, openDatabase} from './storage/database';
 import {repository, type StoredRun} from './storage/repository';
@@ -58,6 +59,7 @@ app.post('/runs', async c => {
   const control = new AbortController();
   inProgress.set(id, control);
   let record: RunRecord;
+  const mongo = mongoDriver();
   try {
     record = await workflowRunner(request.workflow, {
       mode: request.mode === 'execution' ? 'execution' : 'validation',
@@ -68,12 +70,14 @@ app.post('/runs', async c => {
       evaluate,
       prepareScript,
       databases: {sqlserver: querySqlServer},
+      documentStores: {mongodb: mongo.upsert},
       secrets: await projectSecrets(request.projectId),
       signal: control.signal,
       timeoutMs: TIMEOUT_MS,
     });
   } finally {
     inProgress.delete(id);
+    await mongo.close();
   }
   const stored: StoredRun = {...record, projectId: request.projectId, workflowId: request.workflow.id};
   // only execution runs are stored (editor test runs stay in the editor); a failure to store does not lose the result

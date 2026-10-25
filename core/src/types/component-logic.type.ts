@@ -23,6 +23,11 @@ export type ComponentLogic = {
    * Without it, the component writes directly into the DATA fields (e.g. Mapper).
    */
   defaultOutputKey?: string;
+  /**
+   * A target: writes outside the run (a database, an API). In a test run (`validation`, the editor's Run) it does not
+   * write and its branch stops there, unless it is pinned (docs/architecture.md, section 12). Runs for real in `execution`.
+   */
+  sideEffects?: boolean;
   /** configuration issues (no data): short messages, without the component's name */
   validate: (config: Record<string, unknown>) => Issue[];
   /** envelope by envelope */

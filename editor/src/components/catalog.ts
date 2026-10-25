@@ -12,6 +12,7 @@ import {ROUTER} from '#components/router';
 import {SORT} from '#components/sort';
 import {SPLIT} from '#components/split';
 import {SQL_SERVER} from '#components/sqlserver';
+import {MONGODB_UPSERT} from '#components/mongodb-upsert';
 import {UNION} from '#components/union';
 import {WORKFLOW_INVOKER} from '#components/workflow';
 import type {Category} from '#types/category.type';
@@ -46,7 +47,7 @@ const FLOW: ComponentDef[] = [
  * Components shown in the palette, in alphabetical order within each section. Each new component is designed
  * (inputs, outputs, card, panel, validation) and added here.
  */
-export const PALETTE: ComponentDef[] = [MAPPER, DATA_GRID, FILTER, ROUTER, LOOKUP, UNION, COPY, AGGREGATE, SPLIT, DISTINCT, SORT, LIMIT, TYPESCRIPT, SQL_SERVER, WORKFLOW_INVOKER]
+export const PALETTE: ComponentDef[] = [MAPPER, DATA_GRID, FILTER, ROUTER, LOOKUP, UNION, COPY, AGGREGATE, SPLIT, DISTINCT, SORT, LIMIT, TYPESCRIPT, SQL_SERVER, MONGODB_UPSERT, WORKFLOW_INVOKER]
   .sort((a, b) => a.label.localeCompare(b.label, 'en'));
 
 export const BY_TYPE: Record<string, ComponentDef> = Object.fromEntries([...PALETTE, ...FLOW].map(c => [c.type, c]));

@@ -7,6 +7,7 @@ import {filter} from './filter';
 import {limit} from './limit';
 import {lookup} from './lookup';
 import {mapper} from './mapper';
+import {mongodbUpsert} from './mongodb-upsert';
 import {router} from './router';
 import {split} from './split';
 import {sort} from './sort';
@@ -31,5 +32,6 @@ export const COMPONENTS: Record<string, ComponentLogic> = {
   [datagrid.type]: datagrid,
   [copy.type]: copy,
   [sqlserver.type]: sqlserver,
+  [mongodbUpsert.type]: mongodbUpsert,
   [workflowInvoker.type]: workflowInvoker,
 };

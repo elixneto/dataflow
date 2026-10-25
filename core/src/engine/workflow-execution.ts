@@ -179,6 +179,7 @@ export class WorkflowExecution {
     const stopwatch = this.stopwatchOf(node.id);
     const t0 = Date.now();
     let errors = 0;
+    let dryRun = false;
     try {
       const inputs = Object.fromEntries(Object.entries(this.inputsOf(node.id)).map(([port, source]) => [port, this.watchInput(node, port, source)]));
 
@@ -216,29 +217,36 @@ export class WorkflowExecution {
       } else {
         const logic = COMPONENTS[node.type];
         if (!logic) throw new Error(`Component "${node.type}" does not exist in the runner.`);
-        const ctx = componentContext(this, node, log);
+        // THE gate for targets (section 12 of docs/architecture.md): in a test run a component with side effects writes
+        // nothing (its ctx sends nothing) and nothing goes out of it, so its branch stops there. A pin replays (above).
+        dryRun = this.options.mode === 'validation' && logic.sideEffects === true;
+        const ctx = componentContext(this, node, log, dryRun);
+        const send = async (port: string, doc: Envelope) => {
+          if (!dryRun) await this.send(node, port, doc);
+        };
         // the stopwatch runs while the component produces the next result (it discounts waiting for inputs)
         for await (const output of timedRequests(logic.execute(inputs, node.config, ctx), stopwatch)) {
           if ('port' in output) {
-            await this.send(node, output.port, output.doc);
+            await send(output.port, output.doc);
             continue;
           }
           const policy = errorPolicy(node);
           // Divert = handled error: the envelope goes out through the error port and the component does not count as "with errors"
           if (policy === 'divert') {
             log('warning', `Diverted to the error port: ${output.error.message}`);
-            await this.send(node, 'error', withError(output.doc, output.error, node.label));
+            await send('error', withError(output.doc, output.error, node.label));
             continue;
           }
           errors += 1;
           log('error', output.error.message);
           if (policy === 'stop') throw new RunInterrupted(`"${node.label}": ${output.error.message}`);
           // continue: the incoming envelope goes out as it was through the main output and the flow moves on
-          if (policy === 'continue') await this.send(node, 'out-0', output.doc);
+          if (policy === 'continue') await send('out-0', output.doc);
         }
+        if (dryRun) log('warning', 'Test run: nothing was written and nothing went on from here. Run for real to write.');
       }
       const lost = this.reportDropped(node, log);
-      rec.status = errors > 0 ? 'with-errors' : node.pinned && this.options.mode === 'validation' ? 'pinned' : node.disabled ? 'disabled' : lost ? 'with-warnings' : 'completed';
+      rec.status = errors > 0 ? 'with-errors' : node.pinned && this.options.mode === 'validation' ? 'pinned' : node.disabled ? 'disabled' : lost || dryRun ? 'with-warnings' : 'completed';
     } catch (e) {
       rec.status = 'failed';
       const message = e instanceof Error ? e.message : String(e);

@@ -5,6 +5,8 @@ import type {PrepareScript} from '#types/prepare-script.type';
 import type {DatabaseKind} from '#types/database-kind.type';
 import type {QueryDatabase} from '#types/query-database.type';
 import type {RunMode} from '#types/run-mode.type';
+import type {DocumentStoreKind} from '#types/document-store-kind.type';
+import type {UpsertDocuments} from '#types/upsert-documents.type';
 
 export type RunOptions = {
   mode: RunMode;
@@ -21,6 +23,8 @@ export type RunOptions = {
   prepareScript?: PrepareScript;
   /** database drivers, by kind; a component querying a kind without a driver fails */
   databases?: Partial<Record<DatabaseKind, QueryDatabase>>;
+  /** document database drivers that write (upserts), by kind; a component writing to a kind without a driver fails */
+  documentStores?: Partial<Record<DocumentStoreKind, UpsertDocuments>>;
   /** workflows the Workflow Invoker can call, by id */
   workflows?: Record<string, ExecutableWorkflow>;
   /** run that called this one (filled in by the Workflow Invoker) */
