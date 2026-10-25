@@ -180,7 +180,9 @@ function Editor({flow, onSave}: Props) {
       const whole = toExecutable(name, parameters, nodes, edges, flow.id, flow.projectId);
       for (const node of whole.nodes) {
         if (node.type === 'start' || node.type === 'end') continue;
-        if (runFromWorkflow(whole, node.id, lastRuns)) available.add(node.id);
+        // a node that nothing feeds and that never ran has nothing to replay
+        const fed = whole.edges.some(e => e.target === node.id);
+        if ((fed || lastRuns[node.id]) && runFromWorkflow(whole, node.id, lastRuns)) available.add(node.id);
         const ran = lastRuns[node.id];
         if (!node.pinned && ran && ran.status !== 'failed' && ran.outputSample['out-0']) canPin.add(node.id);
       }
