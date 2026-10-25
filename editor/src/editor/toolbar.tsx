@@ -1,6 +1,6 @@
 import {useState, type ReactNode} from 'react';
 import {Link} from 'react-router';
-import {CheckCircle2, CircleAlert, Download, Eraser, Group, Loader2, MessageSquarePlus, Network, Play, Redo2, Save, Square, Undo2, Workflow, Zap} from 'lucide-react';
+import {CheckCircle2, CircleAlert, Download, Group, Loader2, MessageSquarePlus, Network, Play, Redo2, Save, Square, Undo2, Workflow, Zap} from 'lucide-react';
 import type {RunMode} from '@dataflow/core';
 import type {ArrangeDirection} from '#editor/layout';
 import {Button} from '#ui/button';
@@ -25,7 +25,6 @@ type Props = {
   onStop: () => void;
   validating: boolean;
   running: RunMode | null;
-  onClear: () => void;
   onArrange: (direction: ArrangeDirection) => void;
   onComment: () => void;
   onGroup: () => void;
@@ -98,9 +97,6 @@ export function Toolbar(p: Props) {
         </Button>
         {p.dependencies}
         <ArrangeButton onArrange={p.onArrange}/>
-        <Button variant="ghost" size="sm" onClick={p.onClear}>
-          <Eraser className="size-4" aria-hidden="true"/> Clear
-        </Button>
         <Button variant="ghost" size="icon-sm" onClick={p.onDownload} aria-label="Download YAML" title="Download YAML">
           <Download className="size-4" aria-hidden="true"/>
         </Button>

@@ -716,7 +716,7 @@ function Editor({flow, onSave}: Props) {
     fitView({nodes: [{id: nodeId}], duration: 400, maxZoom: 1.1, padding: 0.6});
   }
 
-  // ---------- validate / clear ----------
+  // ---------- validate / run ----------
 
   /**
    * Checks the assembly; if it is ok, runs it on the runner (validation = simulates, execution = for real). With `from`,
@@ -782,12 +782,6 @@ function Editor({flow, onSave}: Props) {
     requestAnimationFrame(() => fitView({padding: 0.15, maxZoom: 1, duration: 300}));
   }
 
-  function clear() {
-    record();
-    setNodes(current => current.filter(isFixedNode));
-    setEdges([]);
-  }
-
   return (
     <HistoryContext.Provider value={history}>
     <ParametersContext.Provider value={parameters}>
@@ -811,7 +805,6 @@ function Editor({flow, onSave}: Props) {
           onStop={() => runId.current && cancelOnRunner(runId.current)}
           validating={validating || running !== null}
           running={running}
-          onClear={clear}
           onArrange={arrange}
           onComment={addComment}
           onGroup={addGroup}
