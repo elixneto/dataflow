@@ -265,6 +265,12 @@ function ComponentNodeView({id, data, selected}: NodeProps<ComponentNode>) {
             <Pin className="size-3" aria-hidden="true"/>
           </button>
         )}
+        {runFrom.canPin.has(id) && (
+          <button type="button" onClick={() => runFrom.pin(id)} title="Pin output (in editor runs it stops executing and sends the last output)" aria-label="Pin output"
+                  className="nodrag flex size-5 shrink-0 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-accent hover:text-foreground">
+            <Pin className="size-3" aria-hidden="true"/>
+          </button>
+        )}
         {runFrom.available.has(id) && (
           <button type="button" onClick={() => runFrom.run(id)} title="Run from here (reuses what reached it in the last run)" aria-label="Run from here"
                   className="nodrag flex size-5 shrink-0 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-accent hover:text-foreground">

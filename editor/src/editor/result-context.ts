@@ -15,8 +15,15 @@ export function useWarnings() {
   return useContext(WarningsContext);
 }
 
-/** "Run from here": the nodes it is available on (after a run) and the action. */
-export const RunFromContext = createContext<{available: Set<string>; run: (nodeId: string) => void}>({available: new Set(), run: () => undefined});
+/** "Run from here" and Pin on the cards: the nodes each is available on (they have data from a run) and the actions. */
+export type RunFromActions = {
+  available: Set<string>;
+  run: (nodeId: string) => void;
+  canPin: Set<string>;
+  pin: (nodeId: string) => void;
+};
+
+export const RunFromContext = createContext<RunFromActions>({available: new Set(), run: () => undefined, canPin: new Set(), pin: () => undefined});
 
 export function useRunFrom() {
   return useContext(RunFromContext);

@@ -24,10 +24,10 @@ import {CATEGORIES, CATEGORY_COLOR, DRAG_MIME, isFlowNode, END, START, BY_TYPE} 
 import {cn} from '#lib/utils';
 import {cleanFlow, toDefinition, type Flow, type FlowNode} from '#data/flows';
 import {getProject, EXAMPLES_PROJECT} from '#data/projects';
-import {type AvailableVariable, type EnvelopeData, type RunMode, type WorkflowParameter, type RunRecord} from '@dataflow/core';
+import {type AvailableVariable, type EnvelopeData, type RunMode, type WorkflowParameter, type RunRecord, type ComponentRun} from '@dataflow/core';
 import {RunPanel} from '#run/run-panel';
 import {cancelOnRunner, runOnRunner, toExecutable} from '#run/runner';
-import {runFromWorkflow} from '#run/run-from';
+import {mergeLastRuns, runFromWorkflow} from '#run/run-from';
 import {Toolbar, type ValidationResult} from '#editor/toolbar';
 import {HistoryContext} from '#editor/history';
 import {CommentNodeMemo, COMMENT_SIZE, type CommentNode} from '#editor/comment-node';
@@ -100,6 +100,8 @@ function Editor({flow, onSave}: Props) {
   const [parameters, setParameters] = useState<WorkflowParameter[]>(flow.parameters ?? []);
   const [run, setRun] = useState<RunRecord | null>(null);
   const [running, setRunning] = useState<RunMode | null>(null);
+  // the latest result of each node that ran, while the editor is open (closing the result panel keeps it)
+  const [lastRuns, setLastRuns] = useState<Record<string, ComponentRun>>({});
   const runId = useRef<string | null>(null);
   // the expression fields suggest what reached each node in the runs so far (kept per flow, per output port)
   const [known, setKnown] = useState(() => loadKnownVariables(flow.id));
@@ -139,17 +141,31 @@ function Editor({flow, onSave}: Props) {
   );
   // the latest execute (it reads the state of the render), for the cards' "Run from here"
   const executeRef = useRef<(mode: RunMode, from?: string) => void>(() => undefined);
-  // "Run from here" shows on every component that can replay what reached it in the last run
+  const pinRef = useRef<(nodeId: string, pinned: Record<string, EnvelopeData[]> | undefined) => void>(() => undefined);
+  // "Run from here" shows on every component that can replay what reached it in the previous runs; Pin on every one
+  // whose main output has a sample
   const runFrom = useMemo(() => {
     const available = new Set<string>();
-    if (run && !running) {
+    const canPin = new Set<string>();
+    if (!running) {
       const whole = toExecutable(name, parameters, nodes, edges, flow.id, flow.projectId);
       for (const node of whole.nodes) {
-        if (node.type !== 'start' && node.type !== 'end' && runFromWorkflow(whole, node.id, run)) available.add(node.id);
+        if (node.type === 'start' || node.type === 'end') continue;
+        if (runFromWorkflow(whole, node.id, lastRuns)) available.add(node.id);
+        const ran = lastRuns[node.id];
+        if (!node.pinned && ran && ran.status !== 'failed' && ran.outputSample['out-0']) canPin.add(node.id);
       }
     }
-    return {available, run: (nodeId: string) => executeRef.current('validation', nodeId)};
-  }, [run, running, nodes, edges, name, parameters, flow.id, flow.projectId]);
+    return {
+      available,
+      run: (nodeId: string) => executeRef.current('validation', nodeId),
+      canPin,
+      pin: (nodeId: string) => {
+        const sample = lastRuns[nodeId]?.outputSample['out-0'];
+        if (sample) pinRef.current(nodeId, {'out-0': structuredClone(sample)});
+      },
+    };
+  }, [lastRuns, running, nodes, edges, name, parameters, flow.id, flow.projectId]);
   const pinnedIds = useMemo(() => new Set(nodes.filter(n => n.type === 'component' && n.data.pinned).map(n => n.id)), [nodes]);
   const warnings = useMemo(() => {
     const byNode: Record<string, string[]> = {};
@@ -651,10 +667,11 @@ function Editor({flow, onSave}: Props) {
       try {
         runId.current = crypto.randomUUID();
         const whole = toExecutable(name, parameters, getNodes(), getEdges(), flow.id, flow.projectId);
-        const workflow = from && run ? runFromWorkflow(whole, from, run) : whole;
+        const workflow = from ? runFromWorkflow(whole, from, lastRuns) : whole;
         if (!workflow) throw new Error('Nothing to replay: run the whole flow first.');
         const result = await runOnRunner(workflow, mode, runId.current, undefined, flow.projectId);
         setRun(result);
+        setLastRuns(previous => mergeLastRuns(previous, result));
         // even a failed run updates the variables of the ports that produced something
         setKnown(previous => {
           const next = updateKnownVariables(previous, result);
@@ -674,6 +691,7 @@ function Editor({flow, onSave}: Props) {
   }
 
   executeRef.current = execute;
+  pinRef.current = pin;
 
   /** Pins the output of the last run on the node (or unpins, with undefined): in editor runs it stops executing and replays it. */
   function pin(nodeId: string, pinned: Record<string, EnvelopeData[]> | undefined) {
