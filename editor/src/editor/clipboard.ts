@@ -1,10 +1,13 @@
 import type {Edge} from '@xyflow/react';
-import type {FlowNode} from '#data/flows';
+import {parse as parseYaml, stringify as stringifyYaml} from 'yaml';
+import {cleanEdge, fullNode, leanNode, type FlowNode} from '#data/flows';
 
 /*
- * Copying components through the system clipboard (the browser's copy / cut / paste events): a JSON text with a
- * marker, so pasting works into another flow, another tab or another window, and any other text is left alone.
- * Pure functions: the editor decides when (nothing selected, text selected, a field focused: the browser copies).
+ * Copying components through the system clipboard (the browser's copy / cut / paste events): a YAML text that starts
+ * with a marker, so pasting works into another flow, another tab or another window, and any other text is left
+ * alone. YAML in the same style and node shape as the flow's "Download YAML" (and the future import): scripts and SQL
+ * come out as multi-line blocks. The JSON of the first version is still accepted. Pure functions: the editor decides
+ * when (nothing selected, text selected, a field focused: the browser copies).
  */
 
 const MARKER = 'components';
@@ -12,26 +15,30 @@ const VERSION = 1;
 
 export type ComponentsPayload = {dataflow: typeof MARKER; version: typeof VERSION; flowId: string; nodes: FlowNode[]; edges: Edge[]};
 
-/** The payload of the chosen nodes and the edges between them, without screen state (selection, measures). */
+/** The text of the chosen nodes and the edges between them, without screen state (selection, measures) nor defaults. */
 export function serializeComponents(flowId: string, chosen: FlowNode[], edges: Edge[]): string {
   const ids = new Set(chosen.map(n => n.id));
-  const payload: ComponentsPayload = {
+  const payload = {
     dataflow: MARKER, version: VERSION, flowId,
-    nodes: chosen.map(({selected: _selected, dragging: _dragging, ...node}) => node as FlowNode),
-    edges: edges.filter(e => ids.has(e.source) && ids.has(e.target)).map(({selected: _selected, ...edge}) => edge),
+    nodes: chosen.map(leanNode),
+    edges: edges.filter(e => ids.has(e.source) && ids.has(e.target)).map(cleanEdge),
   };
-  return JSON.stringify(payload);
+  return stringifyYaml(payload, {blockQuote: 'literal', lineWidth: 0, indent: 2});
 }
 
-/** The payload, if the text is one; anything else (any copied text) is null. */
+/** The payload, if the text is one (YAML that starts with the marker, or the JSON of the first version); else null. */
 export function parseComponents(text: string): ComponentsPayload | null {
-  if (!text.trimStart().startsWith('{')) return null;
+  const start = text.trimStart();
+  if (!start.startsWith(`dataflow: ${MARKER}`) && !start.startsWith('{')) return null;
   try {
-    const value = JSON.parse(text) as Partial<ComponentsPayload>;
-    if (value.dataflow !== MARKER || value.version !== VERSION || !Array.isArray(value.nodes) || !Array.isArray(value.edges)) return null;
-    if (!value.nodes.every(n => n && typeof n.id === 'string' && n.position)) return null;
-    return value as ComponentsPayload;
+    const value = (start.startsWith('{') ? JSON.parse(start) : parseYaml(start)) as Record<string, unknown> | null;
+    if (!value || value.dataflow !== MARKER || value.version !== VERSION || !Array.isArray(value.nodes)) return null;
+    const nodes = (value.nodes as Record<string, unknown>[]).filter(n => n && typeof n.id === 'string' && n.position).map(fullNode);
+    if (nodes.length !== value.nodes.length) return null;
+    const edges = Array.isArray(value.edges) ? (value.edges as Edge[]).map(cleanEdge) : [];
+    return {dataflow: MARKER, version: VERSION, flowId: typeof value.flowId === 'string' ? value.flowId : '', nodes, edges};
   } catch {
+    // marked but broken: left to the browser
     return null;
   }
 }

@@ -434,6 +434,23 @@ export type FlowDefinition = Omit<Flow, 'description' | 'parameters' | 'nodes' |
 const isEmpty = (value: unknown) => value === '' || (Array.isArray(value) && value.length === 0)
   || (typeof value === 'object' && value !== null && !Array.isArray(value) && Object.keys(value).length === 0);
 
+/** A node as stored and downloaded: no screen state, no `type` for a component, no empty config. */
+export function leanNode(node: FlowNode): Record<string, unknown> {
+  const {type, data, ...others} = without(node, NODE_SCREEN_STATE) as FlowNode & {data: Record<string, unknown>};
+  const lean = Object.fromEntries(Object.entries(data).filter(([key, value]) => !(key === 'config' && isEmpty(value))));
+  return {...others, ...(type === 'component' ? {} : {type}), data: lean};
+}
+
+/** The other way: the node with its defaults back (accepts old nodes, which still have them). */
+export function fullNode(node: Record<string, unknown>): FlowNode {
+  const type = (node.type as string | undefined) ?? 'component';
+  const data = (node.data ?? {}) as Record<string, unknown>;
+  return without({...node, type, data: type === 'component' ? {config: {}, ...data} : data}, NODE_SCREEN_STATE) as FlowNode;
+}
+
+/** An edge without screen state. */
+export const cleanEdge = (edge: Edge): Edge => without(edge, EDGE_SCREEN_STATE);
+
 /** The flow without screen state nor defaults: what is stored and downloaded. */
 export function toDefinition(flow: Flow): FlowDefinition {
   const {description, folder, parameters, nodes, edges, ...rest} = cleanFlow(flow);
@@ -442,11 +459,7 @@ export function toDefinition(flow: Flow): FlowDefinition {
     ...(folder ? {folder} : {}),
     ...(description ? {description} : {}),
     ...(parameters?.length ? {parameters} : {}),
-    nodes: nodes.map(node => {
-      const {type, data, ...others} = node as FlowNode & {data: Record<string, unknown>};
-      const lean = Object.fromEntries(Object.entries(data).filter(([key, value]) => !(key === 'config' && isEmpty(value))));
-      return {...others, ...(type === 'component' ? {} : {type}), data: lean};
-    }),
+    nodes: nodes.map(leanNode),
     ...(edges.length ? {edges} : {}),
   };
 }
@@ -457,12 +470,8 @@ export function fromDefinition(definition: FlowDefinition): Flow {
     ...definition,
     description: definition.description ?? '',
     parameters: definition.parameters ?? [],
-    nodes: definition.nodes.map(node => {
-      const type = (node.type as string | undefined) ?? 'component';
-      const data = (node.data ?? {}) as Record<string, unknown>;
-      return without({...node, type, data: type === 'component' ? {config: {}, ...data} : data}, NODE_SCREEN_STATE) as FlowNode;
-    }),
-    edges: (definition.edges ?? []).map(e => without(e, EDGE_SCREEN_STATE)),
+    nodes: definition.nodes.map(fullNode),
+    edges: (definition.edges ?? []).map(cleanEdge),
   };
 }
 
