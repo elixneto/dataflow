@@ -115,12 +115,16 @@ Environment variables: `DATABASE_URL` (Postgres; without it, PGlite in `runner/d
 
 ## 12. Targets in test runs (planned)
 
-There are no targets yet (components that write outside: SQL insert, HTTP...), but the rule is decided, so nobody writes half-baked data by running a flow "just to see if it works" and forgetting to disable the target.
+There are no targets yet (components that write outside: SQL insert, HTTP...), but the rule is decided, so nobody writes half-baked data by running a flow "just to see if it works" and forgetting to disable the target. The user should not have to write a fake output either: what comes after a target usually needs its real answer (a generated id, a response body).
 
-- **A target declares itself**: `sideEffects: true` on its `ComponentLogic`. Reading components (SQL Server Query) do not.
-- **Editor runs use `mode: 'validation'`** (the `RunMode` already exists, today nothing reads it). In it, a target does not write: it builds what it would send (the SQL statement with its parameters, the HTTP request), puts it in the record as "would send" and passes the envelope on as if it had succeeded. The rest of the flow runs normally.
-- **Running for real is a separate action** (`mode: 'execution'`). In the editor it asks for confirmation, listing the enabled targets that are going to write. Triggers (endpoint, cron) always run in `execution`.
-- **Optional, per target**: a test connection (a second secret used in `validation`, so it really writes, but to a staging database) and, for SQL, writing inside a transaction that is always rolled back (catches constraint errors; does not apply to HTTP).
+- **A target declares itself**: `sideEffects: true` on its `ComponentLogic` (or a function of the config, e.g. an HTTP request is a target only for POST, PUT, PATCH and DELETE). Reading components (SQL Server Query, HTTP GET/HEAD) run normally in any mode.
+- **Editor runs use `mode: 'validation'`** (the `RunMode` already exists, today nothing reads it). Triggers (endpoint, cron) always run in `execution`.
+- **What a target does in `validation`**, in this order:
+  1. **SQL**: writes inside a transaction that is always rolled back. The output is real (rows affected, `OUTPUT inserted.id`) and nothing stays.
+  2. **Pinned output** (like n8n's pin data): every real run stores the target's last output per input sample; a test run replays it. The user can also pin an output by hand, but never has to.
+  3. **Nothing to replay**: the target records what it would send (the statement with its parameters, the request) and stops the branch there; the components after it show as not run. No output is made up.
+- **Running for real** is a separate action (`mode: 'execution'`) that asks for confirmation, listing the enabled targets that are going to write. In the test dialog, one target can be marked "run for real" on its own, with the same confirmation.
+- **Optional, per target**: a test connection (a second secret used in `validation`, so it really writes, but to a staging database).
 - The Disable button stays as it is: it bypasses a component in any mode.
 
 ## 13. Not done yet
