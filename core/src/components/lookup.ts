@@ -1,4 +1,5 @@
 import {withKey} from '#envelope/envelope-data';
+import {isDate} from '#envelope/dates';
 import {toError} from '#errors/normalize-error';
 import type {ComponentLogic} from '#types/component-logic.type';
 import type {Envelope} from '#types/envelope.type';
@@ -31,6 +32,9 @@ class NotFound extends Error {
   }
 }
 
+/** A key value as text: 1 matches "1"; a date is its instant (String() would drop the milliseconds). */
+const keyText = (value: unknown) => (isDate(value) ? value.toISOString() : String(value));
+
 export const lookup: ComponentLogic = {
   type: 'lookup',
   inputs: 2,
@@ -50,7 +54,7 @@ export const lookup: ComponentLogic = {
   async* execute(inputs, config, ctx) {
     const {keys, ifNotFound} = lookupConfig(config);
     const keyOf = (doc: Envelope, side: 'main' | 'lookup') =>
-      JSON.stringify(keys.map(k => String(ctx.fieldValue({value: k[side], expression: true}, doc))));
+      JSON.stringify(keys.map(k => keyText(ctx.fieldValue({value: k[side], expression: true}, doc))));
 
     const table = new Map<string, Envelope>();
     // holds the main input while the lookup input has not finished (both may come from the same component)

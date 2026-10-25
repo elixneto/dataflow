@@ -47,3 +47,14 @@ test('Sort with a failing key is an error of the envelope', async () => {
   const r = await workflowRunner(flow([{value: '$missing.x', direction: 'asc'}]), {mode: 'execution', id: 'sort2', evaluate, input: [{a: 1}]});
   expect(r.status).toBe('failed');
 });
+
+test('Sort orders dates by time (not by their text)', async () => {
+  // as text, "Sat ..." would come before "Wed ..."; by time, January comes first
+  const input = [
+    {id: 1, at: new Date('2026-10-24T10:00:00.000Z')},
+    {id: 2, at: new Date('2026-01-07T10:00:00.000Z')},
+    {id: 3, at: new Date('2026-10-24T09:59:59.999Z')},
+  ];
+  const node = await sorted([{value: '$at', direction: 'asc'}], input);
+  expect(node.outputSample['out-0'].map(d => d.id)).toEqual([2, 3, 1]);
+});

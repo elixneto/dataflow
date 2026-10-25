@@ -66,3 +66,34 @@ test('SQL Server Query yields one envelope per row and sends the evaluated param
   expect(noSecret.status).toBe('failed');
   expect(noSecret.error).toContain('MY_DB');
 });
+
+test('SQL Server Query: a date column reaches the next component as a Date, a date-looking text stays text', async () => {
+  const querySqlServer = async function* () {
+    yield {id: 1, created: new Date('2026-10-25T18:00:00.123Z'), code: '2026-10-25'};
+  };
+  const wf: ExecutableWorkflow = {
+    project: 'Test', workflow: 'SQL', parameters: [],
+    nodes: [
+      {id: 'start', type: 'start', label: 'Start', config: {}},
+      {id: 's', type: 'sqlserver', label: 'Customers', override: true, config: {connection: 'MY_DB', sql: 'SELECT 1', parameters: []}},
+      {id: 'm', type: 'mapper', label: 'Year', config: {fields: [{target: 'year', value: '$created.getUTCFullYear()', expression: true}]}},
+      {id: 'end', type: 'end', label: 'End', config: {}},
+    ],
+    edges: [
+      {source: 'start', sourcePort: 'out-0', target: 's', targetPort: 'in-0'},
+      {source: 's', sourcePort: 'out-0', target: 'm', targetPort: 'in-0'},
+      {source: 'm', sourcePort: 'out-0', target: 'end', targetPort: 'in-0'},
+    ],
+  };
+  const reached: Record<string, unknown>[] = [];
+  const r = await workflowRunner(wf, {mode: 'execution', id: 'sql-dates', evaluate, databases: {sqlserver: querySqlServer}, secrets: {MY_DB: 'x'},
+    onReachEnd: async doc => void reached.push(doc.DATA)});
+  expect(r.status).toBe('completed');
+  expect(reached[0].created).toBeInstanceOf(Date);
+  expect((reached[0].created as Date).toISOString()).toBe('2026-10-25T18:00:00.123Z');
+  // an expression sees a real date
+  expect(reached[0].year).toBe(2026);
+  expect(reached[0].code).toBe('2026-10-25');
+  // the run's samples (for the screen) show it as ISO text
+  expect(r.components.find(c => c.nodeId === 's')!.outputSample['out-0'][0].created).toBe('2026-10-25T18:00:00.123Z');
+});

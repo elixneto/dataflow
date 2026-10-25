@@ -27,9 +27,12 @@ function pool(connection: string) {
   return p;
 }
 
-/** A value that fits in the envelope (JSON): a date becomes ISO, binary becomes base64. */
-function toEnvelopeValue(value: unknown): unknown {
-  if (value instanceof Date) return value.toISOString();
+/**
+ * A value for the envelope: dates stay Date (date, datetime, datetime2, smalldatetime, datetimeoffset; a date column at
+ * midnight UTC, as the driver gives it), so the components after it know they are dates by their type; binary becomes
+ * base64. The run's samples show dates as ISO text.
+ */
+export function toEnvelopeValue(value: unknown): unknown {
   if (Buffer.isBuffer(value)) return value.toString('base64');
   return value;
 }

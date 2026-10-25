@@ -1,5 +1,6 @@
 export type * from '#types/index';
 export * from '#envelope/envelope-data';
+export * from '#envelope/dates';
 export * from '#envelope/expression-variables';
 export * from '#envelope/available-variables';
 export * from '#validation/expression-check';

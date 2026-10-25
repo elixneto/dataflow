@@ -70,7 +70,7 @@ function SortDocs() {
       <p>The same envelopes, in order. Nothing goes out before the input ends.</p>
       <h4>Keys</h4>
       <p>A JS expression each, ascending or descending (the arrow next to it). The first key decides; the next ones break ties, and envelopes still tied keep their arrival order. E.g.: <code>$city</code> ascending, then <code>$total</code> descending.</p>
-      <p>Numbers compare as numbers, booleans <code>false</code> before <code>true</code>, everything else as text (dates in ISO format sort correctly). <code>null</code> and <code>undefined</code> always go last.</p>
+      <p>Numbers compare as numbers, booleans <code>false</code> before <code>true</code>, dates (a SQL Server or MongoDB date column) by time, everything else as text (dates kept as ISO text also sort correctly). <code>null</code> and <code>undefined</code> always go last.</p>
       <h4>Memory</h4>
       <p>Holds the whole input until it ends: meant for thousands of envelopes, not millions. To sort a database query, prefer its <code>ORDER BY</code>.</p>
       <h4>Disabled</h4>

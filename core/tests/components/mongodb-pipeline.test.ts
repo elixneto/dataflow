@@ -97,3 +97,14 @@ test('MongoDB Pipeline: a pipeline that is not a list, writes or fails to evalua
   const noSecret = await workflowRunner(flow('[]'), {mode: 'validation', id: 'p4', evaluate, documentQueries: {mongodb: mongo.driver}, secrets: {}});
   expect(nodeOf(noSecret).logs.some(l => l.message.includes('"MONGO" does not exist'))).toBe(true);
 });
+
+test('MongoDB Pipeline: a date of the document reaches the next component as a Date', async () => {
+  const driver = async function* () {
+    yield {_id: 'id-1', at: new Date('2026-10-25T18:00:00.000Z'), label: '2026-10-25'};
+  };
+  const reached: Record<string, unknown>[] = [];
+  await workflowRunner(flow('[]'), {mode: 'validation', id: 'p5', evaluate, documentQueries: {mongodb: driver}, secrets: {MONGO: 'mongodb://x'},
+    onReachEnd: async doc => void reached.push(doc.DATA)});
+  expect(reached[0].at).toBeInstanceOf(Date);
+  expect(reached[0].label).toBe('2026-10-25');
+});

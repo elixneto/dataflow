@@ -121,3 +121,22 @@ test('MongoDB Upsert: a batch that fails as a whole fails each of its envelopes'
   const noSecret = await workflowRunner(flow(), {mode: 'validation', id: 'm5', evaluate, documentStores: {mongodb: driver}, secrets: {}});
   expect(noSecret.components.find(c => c.nodeId === 'mongo')!.logs.some(l => l.message.includes('"MONGO" does not exist'))).toBe(true);
 });
+
+test('MongoDB Upsert writes a Date as a date (also one made in an expression) and leaves date-looking text as text', async () => {
+  const batches: DocumentBatch[] = [];
+  const driver = async (batch: DocumentBatch) => {
+    batches.push(batch);
+    return batch.upserts.map((): UpsertResult => ({matched: 0, modified: 0, upsertedId: 'x'}));
+  };
+  const wf = flow({filter: [{field: '_id', value: '$_id', expression: true}]});
+  // the Data Grid gives text; a TypeScript-like expression document brings real dates
+  wf.nodes.find(n => n.id === 'mongo')!.config.source = 'expression';
+  wf.nodes.find(n => n.id === 'mongo')!.config.document = {value: '({name: $name, at: new Date("2026-10-25T18:00:00.000Z"), nested: {when: new Date(0)}, text: "2026-10-25"})', expression: true};
+  await workflowRunner(wf, {mode: 'execution', id: 'm7', evaluate, documentStores: {mongodb: driver}, secrets: {MONGO: 'mongodb://x'}});
+  const set = batches[0].upserts[0].document as {at: unknown; nested: {when: unknown}; text: unknown};
+  // made in node:vm (another realm), it arrives as a Date of this realm, so the driver writes a BSON date
+  expect(set.at).toBeInstanceOf(Date);
+  expect((set.at as Date).toISOString()).toBe('2026-10-25T18:00:00.000Z');
+  expect(set.nested.when).toBeInstanceOf(Date);
+  expect(set.text).toBe('2026-10-25');
+});

@@ -64,7 +64,7 @@ test('an upsert that fails does not stop the next ones of its filter', async () 
   expect(fake.events.indexOf('start a2')).toBeGreaterThan(fake.events.indexOf('fail fail-a1'));
 });
 
-test('documents from MongoDB become plain JSON values', () => {
+test('documents from MongoDB become envelope values: dates stay Date, the rest plain JSON', () => {
   const {ObjectId, Decimal128, Long, Binary, Int32, Timestamp} = BSON;
   const doc = {
     _id: new ObjectId('64f1a2b3c4d5e6f708091a2b'),
@@ -80,14 +80,16 @@ test('documents from MongoDB become plain JSON values', () => {
   };
   expect(toEnvelopeValue(doc)).toEqual({
     _id: '64f1a2b3c4d5e6f708091a2b',
-    at: '2026-10-25T18:00:00.000Z',
+    at: new Date('2026-10-25T18:00:00.000Z'),
     price: '12.3400000000000000001',
     small: 42,
     huge: '9223372036854775807',
     count: 7,
     file: 'aGk=',
-    items: [{when: '2026-01-01T00:00:00.000Z', ref: '64f1a2b3c4d5e6f708091a2c'}],
+    items: [{when: new Date('2026-01-01T00:00:00.000Z'), ref: '64f1a2b3c4d5e6f708091a2c'}],
     stamp: {$timestamp: {t: 1, i: 2}},
     plain: {text: 'x', n: 1.5, yes: true, none: null},
   });
+  const converted = toEnvelopeValue(doc) as {at: unknown};
+  expect(converted.at).toBeInstanceOf(Date);
 });

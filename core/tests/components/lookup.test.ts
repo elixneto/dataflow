@@ -49,3 +49,24 @@ test('Lookup writes the found envelope into the output key (null when not found)
   const withError = await workflowRunner(withLookup, {mode: 'execution', id: 'tl2', evaluate, input: [...tickets, ...companies]});
   expect(withError.status).toBe('failed');
 });
+
+test('Lookup matches dates by their instant (a millisecond apart is another key)', async () => {
+  const wf: ExecutableWorkflow = {
+    project: 'Test', workflow: 'Lookup dates', parameters: [],
+    nodes: [
+      {id: 'start', type: 'start', label: 'Start', config: {acceptsInput: true}},
+      {id: 'l', type: 'lookup', label: 'Lookup', outputKey: 'shift', config: {keys: [{main: '$at', lookup: '$at'}]}},
+      {id: 'end', type: 'end', label: 'End', config: {}},
+    ],
+    edges: [
+      {source: 'start', sourcePort: 'out-0', target: 'l', targetPort: 'in-0'},
+      {source: 'start', sourcePort: 'out-0', target: 'l', targetPort: 'in-1'},
+      {source: 'l', sourcePort: 'out-0', target: 'end', targetPort: 'in-0'},
+    ],
+  };
+  const reached: Record<string, unknown>[] = [];
+  await workflowRunner(wf, {mode: 'execution', id: 'lookup-dates', evaluate, onReachEnd: async doc => void reached.push(doc.DATA),
+    input: [{id: 1, at: new Date('2026-10-25T18:00:00.000Z')}, {id: 2, at: new Date('2026-10-25T18:00:00.001Z')}]});
+  // each one finds itself, not the other one (String() of both dates is the same text)
+  expect(reached.map(d => [d.id, (d.shift as {id: number} | null)?.id])).toEqual([[1, 1], [2, 2]]);
+});

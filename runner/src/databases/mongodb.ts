@@ -21,13 +21,13 @@ const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
 const idText = (id: unknown) => (id === null || id === undefined ? null : String(id));
 
 /**
- * A value that fits in the envelope (JSON), like the SQL Server Query does: ObjectId as its hex text, a date as ISO,
- * Decimal128 as text (it keeps every digit), Long as a number (as text past 2^53), binary as base64. Other BSON types
- * (Timestamp, MinKey...) as their relaxed Extended JSON.
+ * A value for the envelope, like the SQL Server Query does: a date stays Date (a later Upsert writes it back as a
+ * date), ObjectId as its hex text, Decimal128 as text (it keeps every digit), Long as a number (as text past 2^53),
+ * binary as base64. Other BSON types (Timestamp, MinKey...) as their relaxed Extended JSON.
  */
 export function toEnvelopeValue(value: unknown): unknown {
   if (value === null || value === undefined) return value ?? null;
-  if (value instanceof Date) return value.toISOString();
+  if (value instanceof Date) return value;
   if (Array.isArray(value)) return value.map(toEnvelopeValue);
   if (typeof value !== 'object') return value;
   const bson = (value as {_bsontype?: string})._bsontype;

@@ -96,7 +96,7 @@ function SqlServerDocs() {
       <h4>Input</h4>
       <p>1 envelope port, usually connected to the Start. The query runs once for each incoming envelope (the Start emits one).</p>
       <h4>Output</h4>
-      <p>One envelope per row, with the <code>DATA</code> of the incoming envelope plus the columns (<code>$column</code>). Dates come as ISO text (<code>2026-10-21T18:00:00.000Z</code>), binaries as base64. Reading is streamed: the database pauses while the flow is not consuming, so millions of rows can be read.</p>
+      <p>One envelope per row, with the <code>DATA</code> of the incoming envelope plus the columns (<code>$column</code>). Dates (<code>date</code>, <code>datetime</code>, <code>datetime2</code>, <code>smalldatetime</code>, <code>datetimeoffset</code>) come as dates (a <code>Date</code>; a <code>date</code> column at midnight UTC): an expression can use them (<code>{'$created.getUTCFullYear()'}</code>), Sort orders them by time and the MongoDB Upsert writes them as dates. The Data tab shows them as ISO text (<code>2026-10-21T18:00:00.000Z</code>). Binaries come as base64. Reading is streamed: the database pauses while the flow is not consuming, so millions of rows can be read.</p>
       <h4>Connection</h4>
       <p>The name of a secret (<code>$SECRETS</code>) holding the connection string. It is never stored in the flow or in the logs. E.g.: <code>Server=srv;Database=erp;User Id=reader;Password=...;Encrypt=true;TrustServerCertificate=true</code>.</p>
       <h4>Parameters</h4>

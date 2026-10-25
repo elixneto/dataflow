@@ -104,7 +104,7 @@ function MongoPipelineDocs() {
       <h4>Read only</h4>
       <p>A pipeline with <code>$out</code> or <code>$merge</code> (they write to a collection) is refused. To write, use the MongoDB Upsert. Since it only reads, it runs in the editor&apos;s Run as well as in Run for real.</p>
       <h4>How the values come out</h4>
-      <p>As plain JSON: <code>ObjectId</code> as its hex text, dates as ISO text (<code>2026-10-21T18:00:00.000Z</code>, like the SQL Server Query), <code>Decimal128</code> as text (it keeps every digit), <code>Long</code> as a number (as text past 2^53), binaries as base64.</p>
+      <p>Dates stay dates (a <code>Date</code>, like the SQL Server Query's): an expression can use them (<code>{'$at.getUTCFullYear()'}</code>), Sort orders them by time and the MongoDB Upsert writes them back as dates. The Data tab shows them as ISO text (<code>2026-10-21T18:00:00.000Z</code>). The rest as plain JSON: <code>ObjectId</code> as its hex text, <code>Decimal128</code> as text (it keeps every digit), <code>Long</code> as a number (as text past 2^53), binaries as base64.</p>
       <h4>Connection</h4>
       <p>The name of a secret (<code>$SECRETS</code>) holding the connection string, e.g. <code>mongodb+srv://reader:password@cluster.example.net</code>. It is never stored in the flow or in the logs. Ideally the user can only read.</p>
       <h4>Timeout</h4>

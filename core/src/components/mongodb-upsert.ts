@@ -1,4 +1,5 @@
 import {withKey} from '#envelope/envelope-data';
+import {isDate} from '#envelope/dates';
 import {toError} from '#errors/normalize-error';
 import type {ComponentLogic} from '#types/component-logic.type';
 import type {DocumentUpsert} from '#types/document-upsert.type';
@@ -39,6 +40,17 @@ export function mongoUpsertConfig(config: Record<string, unknown>) {
 }
 
 const describe = (c: {inserted: number; modified: number; unchanged: number}) => `${c.inserted} inserted, ${c.modified} modified, ${c.unchanged} unchanged`;
+
+/**
+ * The value with its dates as Date of this realm, at any depth: the driver writes them as BSON dates. A Date made in
+ * an expression (node:vm, another realm) would not be recognized as one. Text stays text, whatever it looks like.
+ */
+function withDates(value: unknown): unknown {
+  if (isDate(value)) return new Date(value.getTime());
+  if (Array.isArray(value)) return value.map(withDates);
+  if (typeof value === 'object' && value !== null) return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, withDates(v)]));
+  return value;
+}
 
 const isObject = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 
@@ -88,11 +100,11 @@ export const mongodbUpsert: ComponentLogic = {
       for (const f of filter) {
         const value = ctx.fieldValue(f, doc);
         if (value === undefined) throw new Error(`The filter field "${f.field}" has no value.`);
-        match[f.field.trim()] = value;
+        match[f.field.trim()] = withDates(value);
       }
       const fields = source === 'expression' ? ctx.fieldValue(document, doc) : doc.DATA;
       if (!isObject(fields)) throw new Error('The document is not an object.');
-      const set = {...fields};
+      const set = withDates(fields) as Record<string, unknown>;
       delete set._id;
       return {filter: match, document: set};
     };

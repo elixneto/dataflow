@@ -104,6 +104,8 @@ function MongoUpsertDocs() {
       <p>The fields that find the document, each with a value (text or an expression on the envelope), e.g. <code>email</code> = <code>$email</code>, or <code>_id</code> = <code>$id</code>. When nothing matches, the inserted document gets these fields too. A value that comes out <code>undefined</code> is an error of that envelope (it would match the wrong document).</p>
       <h4>Document</h4>
       <p><b>Whole DATA</b> (default): every field of the envelope goes in the <code>$set</code>. <b>Expression</b>: an object built from the envelope, e.g. <code>{'({name: $name, email: $email})'}</code>. <code>_id</code> never goes in the <code>$set</code>: MongoDB does not change it, and an insert takes it from the filter (or generates one).</p>
+      <h4>Dates</h4>
+      <p>A value that is a date (a <code>Date</code>: a date column of the SQL Server Query, a date of the MongoDB Pipeline, <code>new Date(…)</code> in the document expression) is written as a MongoDB date, at any depth. Text stays text, even when it looks like a date: what decides is the type of the value, not its format.</p>
       <h4>Output</h4>
       <p>The incoming envelope plus <code>$mongodb</code> (the name can be changed): <code>{'{matched, modified, upsertedId}'}</code>. <code>upsertedId</code> is the id of an inserted document, as text, or <code>null</code> when it updated one. Override on: only <code>$mongodb</code>.</p>
       <h4>Test run and Run for real</h4>

@@ -1,11 +1,12 @@
 import {toError} from '#errors/normalize-error';
+import {isDate} from '#envelope/dates';
 import type {ComponentLogic} from '#types/component-logic.type';
 import type {Envelope} from '#types/envelope.type';
 
 /**
  * Sort (in Kettle, Sort rows): reads every envelope, sorts them by a list of keys (expression + ascending/descending)
  * and only then yields them, in order. The first key decides; the next ones break ties, and envelopes still tied keep
- * their arrival order (stable). Numbers compare as numbers, booleans false before true, everything else as text;
+ * their arrival order (stable). Numbers compare as numbers, booleans false before true, dates by time, everything else as text;
  * `null` and `undefined` always go last. Holds the whole input in memory.
  */
 
@@ -25,6 +26,7 @@ function compareValues(a: unknown, b: unknown): number {
   if (typeof a === 'number' && typeof b === 'number') return a - b;
   if (typeof a === 'bigint' && typeof b === 'bigint') return a < b ? -1 : a > b ? 1 : 0;
   if (typeof a === 'boolean' && typeof b === 'boolean') return Number(a) - Number(b);
+  if (isDate(a) && isDate(b)) return a.getTime() - b.getTime();
   const x = String(a);
   const y = String(b);
   return x < y ? -1 : x > y ? 1 : 0;
