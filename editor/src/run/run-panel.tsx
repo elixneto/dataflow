@@ -97,8 +97,7 @@ const METRICS_COLUMNS = 'grid-cols-[16px_minmax(0,1fr)_110px_120px_minmax(90px,2
 const componentName = (type: string) => BY_TYPE[type]?.label ?? type;
 
 /**
- * When the component was open, on the run's time axis: light from its first envelope to the "all sent" of the one
- * before; inside, how much of that it spent waiting for an outside system and, darker, working. Active and waiting
+ * When the component was open, on the run's time axis: light from its first envelope until it finished; inside, how much of that it spent waiting for an outside system and, darker, working. Active and waiting
  * are spread over the open time; the bar only shows their share.
  */
 function Timeline({c, runStart, runMs}: {c: ComponentRun; runStart: number; runMs: number}) {
@@ -125,7 +124,7 @@ function MetricsTab({record, onGoTo, portName}: {record: RunRecord; onGoTo: (nod
     <div className="flex flex-col">
       <div className={cn('grid gap-2 border-b border-border px-4 py-1.5 text-xs text-muted-foreground', METRICS_COLUMNS)}>
         <span/><span>Label</span><span>Component</span><span>Status</span><span className="text-right">In</span><span className="text-right">Out</span>
-        <span className="text-right" title="From its first envelope until the component before it sent everything (all sent), including the waiting">Open</span>
+        <span className="text-right" title="From its first envelope until it finished (the one before it sent everything and it sent its last result), including the waiting">Open</span>
         <span className="text-right" title="Time processing, without waiting for envelopes or for the next component (practically the component's CPU)">Active</span>
         <span className="text-right" title="Time waiting for an outside system (database rows, MongoDB writes, a called workflow); not waiting for envelopes or for the next component">Waiting</span>
         <span className="text-right" title="Peak of what the component held at once (e.g. the Lookup table, the Aggregate batch); size estimated from the JSON">Memory</span>
