@@ -19,6 +19,33 @@ import type {RunOptions} from '#types/run-options.type';
 import type {RunRecord} from '#types/run-record.type';
 import type {WorkflowCurrentRun} from '#types/workflow-current-run.type';
 
+async function drain(source: AsyncIterable<Envelope>) {
+  for await (const _ of source) { /* dropped */ }
+}
+
+/**
+ * Nodes that do not need to run: every edge leaving them goes to a pinned node or to another skipped node (a pinned
+ * node does not use its input). The End and pinned nodes always run.
+ */
+function skippedByPins(wf: ExecutableWorkflow): Set<string> {
+  const skipped = new Set<string>();
+  if (!wf.nodes.some(n => n.pinned)) return skipped;
+  const pinned = new Set(wf.nodes.filter(n => n.pinned).map(n => n.id));
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const node of wf.nodes) {
+      if (skipped.has(node.id) || pinned.has(node.id) || node.type === END) continue;
+      const out = wf.edges.filter(e => e.source === node.id);
+      if (out.length && out.every(e => pinned.has(e.target) || skipped.has(e.target))) {
+        skipped.add(node.id);
+        changed = true;
+      }
+    }
+  }
+  return skipped;
+}
+
 /** Copy of the sample (the envelope moves on and may be changed by another component). */
 const clone = <T>(v: T): T => JSON.parse(JSON.stringify(v)) as T;
 
@@ -42,6 +69,8 @@ export class WorkflowExecution {
   private readonly channels: (ExecutableWorkflow['edges'][number] & {channel: Channel<Envelope>})[];
   /** envelopes that went out through an unconnected port (they vanish from the flow): per node and port */
   private readonly dropped = new Map<string, Record<string, number>>();
+  /** nodes that do not run because everything they send ends in a pinned node */
+  private readonly skipped: Set<string>;
   private initialEnvelopes: EnvelopeData[] = [];
   private failure?: string;
 
@@ -58,6 +87,7 @@ export class WorkflowExecution {
     this.memories = new Map(wf.nodes.map(node => [node.id, new MemoryMeter()]));
     // one channel per edge
     this.channels = wf.edges.map(e => ({...e, channel: new Channel<Envelope>()}));
+    this.skipped = skippedByPins(wf);
   }
 
   recordOf(nodeId: string) { return this.records.get(nodeId)!; }
@@ -169,6 +199,7 @@ export class WorkflowExecution {
   }
 
   private async runNode(node: ExecutableNode) {
+    if (this.skipped.has(node.id)) return this.skip(node);
     const rec = this.recordOf(node.id);
     const log = (level: LogLevel, message: string) => rec.logs.push({at: new Date().toISOString(), level, message});
     const outputPorts = [...new Set(this.channels.filter(c => c.source === node.id).map(c => c.sourcePort))];
@@ -178,7 +209,17 @@ export class WorkflowExecution {
     try {
       const inputs = Object.fromEntries(Object.entries(this.inputsOf(node.id)).map(([port, source]) => [port, this.watchInput(node, port, source)]));
 
-      if (node.type === START) {
+      if (node.pinned) {
+        log('info', 'Pinned output: did not execute, the input was dropped and the pinned envelopes went out.');
+        const pinned = node.pinned;
+        // the ports at the same time: a component after it may read one input only after the other
+        await Promise.all([
+          ...Object.values(inputs).map(drain),
+          ...Object.entries(pinned).map(async ([port, items]) => {
+            for (const DATA of items) await this.send(node, port, {WORKFLOW_CURRENT_RUN: this.run, PARAMETERS: this.parameters, DATA: clone(DATA)});
+          }),
+        ]);
+      } else if (node.type === START) {
         rec.start = new Date().toISOString();
         stopwatch.resume();
         for (const envelope of this.initialEnvelopes) {
@@ -222,7 +263,7 @@ export class WorkflowExecution {
         }
       }
       const lost = this.reportDropped(node, log);
-      rec.status = errors > 0 ? 'with-errors' : node.disabled ? 'disabled' : lost ? 'with-warnings' : 'completed';
+      rec.status = errors > 0 ? 'with-errors' : node.pinned ? 'pinned' : node.disabled ? 'disabled' : lost ? 'with-warnings' : 'completed';
     } catch (e) {
       rec.status = 'failed';
       const message = e instanceof Error ? e.message : String(e);
@@ -238,6 +279,17 @@ export class WorkflowExecution {
       rec.durationMs = Date.now() - Date.parse(rec.start);
       for (const port of outputPorts) for (const channel of this.outputsOf(node.id, port)) channel.close();
     }
+  }
+
+  /**
+   * A node that only feeds pinned nodes: stays "not-run". Its input is still read (and dropped), so a node that also
+   * feeds a running one does not get stuck on this edge.
+   */
+  private async skip(node: ExecutableNode) {
+    try {
+      await Promise.all(Object.values(this.inputsOf(node.id)).map(drain));
+    } catch { /* the run was interrupted: nothing to record */ }
+    for (const e of this.channels.filter(c => c.source === node.id)) e.channel.close();
   }
 
   /**

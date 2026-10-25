@@ -8,9 +8,10 @@ export type ComponentRun = {
   type: string;
   /**
    * disabled = bypass (did not execute, only passed through); with-warnings = ran, but something deserves attention
-   * (e.g. envelopes dropped by an unconnected output, nothing reached the End)
+   * (e.g. envelopes dropped by an unconnected output, nothing reached the End); pinned = did not execute, replayed its
+   * pinned output; not-run also covers what was skipped because it only feeds pinned nodes
    */
-  status: 'not-run' | 'completed' | 'disabled' | 'with-warnings' | 'with-errors' | 'failed';
+  status: 'not-run' | 'completed' | 'disabled' | 'pinned' | 'with-warnings' | 'with-errors' | 'failed';
   start?: string;
   end?: string;
   durationMs?: number;
@@ -21,7 +22,7 @@ export type ComponentRun = {
   activeTimeMs?: number;
   /** workflows the component called (Workflow Invoker): a summary of each run, up to 50 */
   subRuns?: {id: string; workflow: string; status: RunStatus; durationMs: number; error?: string}[];
-  /** What the component held at once (only accumulators: Lookup, Aggregate). Bytes estimated from the DATA JSON. */
+  /** What the component held at once (only accumulators: Lookup, Aggregate, Sort...). Bytes estimated from the DATA JSON. */
   memory?: {peakEnvelopes: number; peakBytes: number};
   /** envelopes per port */
   inputs: Record<string, number>;

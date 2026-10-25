@@ -1,6 +1,6 @@
 import {useState, type ReactNode} from 'react';
-import {ChevronDown, ChevronRight, CircleAlert, CircleCheck, CircleMinus, CircleX, Clock, X} from 'lucide-react';
-import type {ComponentRun, RunRecord} from '@dataflow/core';
+import {ChevronDown, ChevronRight, CircleAlert, CircleCheck, CircleMinus, CircleX, Clock, Pin, PinOff, X} from 'lucide-react';
+import {SAMPLE_SIZE, type ComponentRun, type EnvelopeData, type RunRecord} from '@dataflow/core';
 import {cn} from '#lib/utils';
 import {BY_TYPE} from '#components/catalog';
 
@@ -17,6 +17,7 @@ const COMPONENT_STATUS_LABEL: Record<ComponentRun['status'], string> = {
   'not-run': 'Did not run',
   completed: 'Completed',
   disabled: 'Disabled (bypass)',
+  pinned: 'Pinned output',
   'with-warnings': 'With warnings',
   'with-errors': 'With errors',
   failed: 'Failed',
@@ -56,6 +57,7 @@ export function StatusIcon({status}: {status: ComponentRun['status'] | RunRecord
   if (status === 'with-warnings') return <CircleAlert className="size-4 shrink-0 text-comment" aria-label="With warnings"/>;
   if (status === 'with-errors') return <CircleAlert className="size-4 shrink-0 text-destructive" aria-label="With errors"/>;
   if (status === 'failed') return <CircleX className="size-4 shrink-0 text-destructive" aria-label="Failed"/>;
+  if (status === 'pinned') return <Pin className="size-4 shrink-0 text-primary" aria-label="Pinned output"/>;
   if (status === 'disabled') return <CircleMinus className="size-4 shrink-0 text-muted-foreground" aria-label="Disabled"/>;
   return <Clock className="size-4 shrink-0 text-muted-foreground" aria-label="Did not run"/>;
 }
@@ -134,7 +136,34 @@ function MetricsTab({record, onGoTo, portName}: {record: RunRecord; onGoTo: (nod
 
 // ---------- Data: input and output preview of each component ----------
 
-function DataTab({record}: {record: RunRecord}) {
+/** Pinning from the result: the nodes already pinned and the action (undefined unpins). */
+export type PinActions = {
+  pinned: Set<string>;
+  onPin: (nodeId: string, pinned: Record<string, EnvelopeData[]> | undefined) => void;
+};
+
+/** Pin / Unpin of a component's output, under its output preview. */
+function PinButton({c, actions}: {c: ComponentRun; actions: PinActions}) {
+  if (actions.pinned.has(c.nodeId)) {
+    return (
+      <button type="button" onClick={() => actions.onPin(c.nodeId, undefined)}
+              className="flex h-7 items-center gap-1.5 rounded-md border border-input px-2 text-xs text-muted-foreground hover:text-foreground">
+        <PinOff className="size-3.5" aria-hidden="true"/> Unpin
+      </button>
+    );
+  }
+  if (c.type === 'start' || c.type === 'end' || c.status === 'not-run' || c.status === 'failed' || Object.keys(c.outputSample).length === 0) return null;
+  const cut = Object.entries(c.outputs).some(([port, n]) => n > (c.outputSample[port]?.length ?? 0));
+  return (
+    <button type="button" onClick={() => actions.onPin(c.nodeId, structuredClone(c.outputSample))}
+            title={cut ? `Only the first ${SAMPLE_SIZE} envelopes of each output are pinned` : 'The node stops executing and replays this output'}
+            className="flex h-7 items-center gap-1.5 rounded-md border border-input px-2 text-xs text-muted-foreground hover:text-foreground">
+      <Pin className="size-3.5" aria-hidden="true"/> Pin output{cut ? ` (first ${SAMPLE_SIZE})` : ''}
+    </button>
+  );
+}
+
+function DataTab({record, pins}: {record: RunRecord; pins?: PinActions}) {
   const [open, setOpen] = useState<Set<string>>(() => new Set(record.components.slice(1, 2).map(c => c.nodeId)));
   const toggle = (id: string) => setOpen(current => {
     const next = new Set(current);
@@ -160,15 +189,16 @@ function DataTab({record}: {record: RunRecord}) {
             {isOpen && (
               <div className="grid gap-3 px-10 pb-4 pt-1 text-xs lg:grid-cols-2">
                 <div>
-                  <h4 className="mb-1 font-medium text-muted-foreground">Input (up to 20)</h4>
+                  <h4 className="mb-1 font-medium text-muted-foreground">Input (up to {SAMPLE_SIZE})</h4>
                   {c.inputSample.length ? <Json value={c.inputSample}/> : <p className="text-muted-foreground">Nothing came in.</p>}
                 </div>
                 <div>
-                  <h4 className="mb-1 font-medium text-muted-foreground">{ports.length > 1 ? 'Output by port' : 'Output'} (up to 20)</h4>
+                  <h4 className="mb-1 font-medium text-muted-foreground">{ports.length > 1 ? 'Output by port' : 'Output'} (up to {SAMPLE_SIZE})</h4>
                   {ports.length === 0 ? <p className="text-muted-foreground">Nothing went out.</p>
                     // a single port (the usual): shows the envelopes directly, without the "out-0" around them
                     : ports.length === 1 ? <Json value={c.outputSample[ports[0]]}/>
                       : <Json value={c.outputSample}/>}
+                  {pins && <div className="mt-2 flex"><PinButton c={c} actions={pins}/></div>}
                 </div>
               </div>
             )}
@@ -180,10 +210,12 @@ function DataTab({record}: {record: RunRecord}) {
 }
 
 /** A run's result in tabs: Logs (all, by time), Metrics (per component) and Data (input and output). */
-export function RunResult({record, onGoTo, portName, actions}: {
+export function RunResult({record, onGoTo, portName, actions, pins}: {
   record: RunRecord;
   onGoTo: (nodeId: string) => void;
   portName: PortName;
+  /** in the editor: pin a component's output from the Data tab */
+  pins?: PinActions;
   /** buttons to the right of the tabs (e.g. close the panel) */
   actions?: ReactNode;
 }) {
@@ -212,22 +244,22 @@ export function RunResult({record, onGoTo, portName, actions}: {
       <div role="tabpanel" className="min-h-0 overflow-y-auto">
         {tab === 'logs' && <LogsTab record={record}/>}
         {tab === 'metrics' && <MetricsTab record={record} onGoTo={onGoTo} portName={portName}/>}
-        {tab === 'data' && <DataTab record={record}/>}
+        {tab === 'data' && <DataTab record={record} pins={pins}/>}
       </div>
     </>
   );
 }
 
 /** The result in the editor's footer, right after running. */
-export function RunPanel({record, onClose, onGoTo, portName}: {
+export function RunPanel({record, onClose, onGoTo, portName, pinned, onPin}: {
   record: RunRecord;
   onClose: () => void;
   onGoTo: (nodeId: string) => void;
   portName: PortName;
-}) {
+} & PinActions) {
   return (
     <section className="absolute inset-x-0 bottom-0 z-20 flex max-h-[55%] flex-col border-t border-border bg-sidebar shadow-2xl" aria-label="Run result">
-      <RunResult record={record} onGoTo={onGoTo} portName={portName} actions={
+      <RunResult record={record} onGoTo={onGoTo} portName={portName} pins={{pinned, onPin}} actions={
         <button type="button" onClick={onClose} className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground" aria-label="Close result">
           <X className="size-4" aria-hidden="true"/>
         </button>

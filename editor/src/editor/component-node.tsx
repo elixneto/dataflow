@@ -9,14 +9,14 @@ import {
   type Node,
   type NodeProps,
 } from '@xyflow/react';
-import {Minus, Plus, Power, StickyNote, TriangleAlert} from 'lucide-react';
+import {Minus, Pin, Play, Plus, Power, StickyNote, TriangleAlert} from 'lucide-react';
 import {CATEGORIES, CATEGORY_COLOR, isFlowNode, END, START, BY_TYPE} from '#components/catalog';
 import type {Config} from '#types/config.type';
-import type {ErrorPolicy} from '@dataflow/core';
+import type {EnvelopeData, ErrorPolicy} from '@dataflow/core';
 import {cn} from '#lib/utils';
 import {useHistory} from '#editor/history';
 import {useParameters} from '#editor/parameters-context';
-import {useWarnings, useResult} from '#editor/result-context';
+import {useWarnings, useResult, useRunFrom} from '#editor/result-context';
 
 export type ComponentData = {
   type: string;
@@ -29,6 +29,8 @@ export type ComponentData = {
   override?: boolean;
   /** the user's free note (Notes tab of the window) */
   notes?: string;
+  /** pinned output: the DATA of each envelope per output port; the node does not execute and replays it */
+  pinned?: Record<string, EnvelopeData[]>;
 };
 
 export type ComponentNode = Node<ComponentData, 'component'>;
@@ -91,6 +93,7 @@ function resultColor(status: string | undefined, policy: ErrorPolicy, envelopesO
   // no envelope went out through this port (e.g. everything was diverted to the error): gray, the flow did not pass here
   if (status === 'completed') return envelopesOut > 0 ? 'success' : 'disabled';
   if (status === 'disabled') return 'disabled';
+  if (status === 'pinned') return envelopesOut > 0 ? 'success' : 'disabled';
   if (status === 'with-warnings') return 'continued';
   if (status === 'with-errors' && policy === 'continue') return 'continued';
   return 'error';
@@ -123,6 +126,7 @@ function ComponentNodeView({id, data, selected}: NodeProps<ComponentNode>) {
   const parameters = useParameters();
   const result = useResult()[id];
   const warnings = useWarnings()[id];
+  const runFrom = useRunFrom();
   const incoming = useNodeConnections({handleType: 'target'});
   const outgoing = useNodeConnections({handleType: 'source'});
   const def = BY_TYPE[data.type];
@@ -188,6 +192,11 @@ function ComponentNodeView({id, data, selected}: NodeProps<ComponentNode>) {
     updateNodeData(id, {disabled: !data.disabled});
   }
 
+  function unpin() {
+    record();
+    updateNodeData(id, {pinned: undefined});
+  }
+
   // with inputs, the divider lines start after the hole (otherwise they cross the "bitten" notch)
   const indent = inputs > 0 ? 'ml-4 pl-1' : 'pl-5';
   const cat = CATEGORIES[def.category];
@@ -249,6 +258,18 @@ function ComponentNodeView({id, data, selected}: NodeProps<ComponentNode>) {
           <span title={data.notes} className="flex shrink-0 text-comment" aria-label="Has a note">
             <StickyNote className="size-3.5" aria-hidden="true"/>
           </span>
+        )}
+        {data.pinned && (
+          <button type="button" onClick={unpin} title="Pinned output: does not execute. Click to unpin." aria-label="Unpin output"
+                  className="nodrag flex size-5 shrink-0 items-center justify-center rounded text-primary transition-colors hover:bg-accent">
+            <Pin className="size-3" aria-hidden="true"/>
+          </button>
+        )}
+        {runFrom.available.has(id) && (
+          <button type="button" onClick={() => runFrom.run(id)} title="Run from here (reuses what reached it in the last run)" aria-label="Run from here"
+                  className="nodrag flex size-5 shrink-0 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-accent hover:text-foreground">
+            <Play className="size-3" aria-hidden="true"/>
+          </button>
         )}
         {!flowNode && (
           <button type="button" onClick={toggleDisabled}

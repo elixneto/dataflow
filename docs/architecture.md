@@ -76,9 +76,14 @@ The `ctx` gives the component: `fieldValue` (text or expression), `log`, `prepar
 
 ## 8. Run record
 
-Per run: run, parameters, status (`completed`, `with-warnings`, `with-errors`, `failed`), duration and error. Per component: status, start and end, duration, **active time** (the time processing, without the waiting; since it is a single thread, it is practically its CPU), **estimated memory** (peak of envelopes held and bytes from the JSON), envelopes per port, logs, input and output samples (20 per port) and, in the Workflow Invoker, a summary of each called run.
+Per run: run, parameters, status (`completed`, `with-warnings`, `with-errors`, `failed`), duration and error. Per component: status (also `pinned` and `not-run`, see below), start and end, duration, **active time** (the time processing, without the waiting; since it is a single thread, it is practically its CPU), **estimated memory** (peak of envelopes held and bytes from the JSON), envelopes per port, logs, input and output samples (50 per port, `SAMPLE_SIZE`) and, in the Workflow Invoker, a summary of each called run.
 
 The runner stores every run in the `runs` table (the full record in `jsonb`, with the project, flow, status and start beside it to list and filter); the list returns the latest 50. The next step is each run in its own Bun Worker, which isolates it and allows measuring CPU and RAM per run.
+
+### Pinned output and "Run from here"
+
+- **Pin** (like n8n's pin data): in the result's Data tab, a component's output can be pinned. It is saved on the node (`pinned`: the DATA per output port, up to the 50 of the sample) and goes to the runner in `ExecutableNode.pinned`. A pinned node does not execute: it reads and drops its input and replays the pinned envelopes (status `pinned`, a pin on the card; clicking it unpins). Whatever only feeds pinned nodes does not run (`not-run`), so an expensive or failing query upstream can be skipped while the rest of the flow is built.
+- **Run from here** (the play button on the card, after a run): runs only that node and what comes after it. Each node outside that part with an edge into it is pinned for this run only with what it sent in the last run (`runFromWorkflow`, `editor/src/run/run-from.ts`); the other nodes are left out of the run. It shows only where every one of those nodes ran without failing, so a node that failed can be fixed and run again from itself. It replays the samples, so at most 50 envelopes per port.
 
 ## 9. Workflow Invoker
 
@@ -121,7 +126,7 @@ There are no targets yet (components that write outside: SQL insert, HTTP...), b
 - **Editor runs use `mode: 'validation'`** (the `RunMode` already exists, today nothing reads it). Triggers (endpoint, cron) always run in `execution`.
 - **What a target does in `validation`**, in this order:
   1. **SQL**: writes inside a transaction that is always rolled back. The output is real (rows affected, `OUTPUT inserted.id`) and nothing stays.
-  2. **Pinned output** (like n8n's pin data): every real run stores the target's last output per input sample; a test run replays it. The user can also pin an output by hand, but never has to.
+  2. **Pinned output** (like n8n's pin data): every real run stores the target's last output per input sample; a test run replays it. The user can also pin an output by hand (already possible, see section 8), but never has to.
   3. **Nothing to replay**: the target records what it would send (the statement with its parameters, the request) and stops the branch there; the components after it show as not run. No output is made up.
 - **Running for real** is a separate action (`mode: 'execution'`) that asks for confirmation, listing the enabled targets that are going to write. In the test dialog, one target can be marked "run for real" on its own, with the same confirmation.
 - **Optional, per target**: a test connection (a second secret used in `validation`, so it really writes, but to a staging database).

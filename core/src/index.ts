@@ -24,7 +24,7 @@ export {sqlServerConfig, sqlServerUsedParameters, sqlServerReadOnlyIssue, sqlser
 export {copy, MAX_COPY_OUTPUTS, MIN_COPY_OUTPUTS, copyOutputCount} from './components/copy';
 export {MAX_UNION_INPUTS, MIN_UNION_INPUTS, unionInputCount, union} from './components/union';
 export {workflowInvokerConfig, workflowInvoker, type InvokerParameter} from './components/workflow';
-export {MAX_WORKFLOW_DEPTH, START, END} from '#engine/constants';
+export {MAX_WORKFLOW_DEPTH, SAMPLE_SIZE, START, END} from '#engine/constants';
 export {workflowRunner} from '#engine/workflow-runner';
 export {flowOrder} from '#engine/flow-order';
 export {resolveParameters} from '#engine/workflow-parameters';

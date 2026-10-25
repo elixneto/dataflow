@@ -24,9 +24,10 @@ import {CATEGORIES, CATEGORY_COLOR, DRAG_MIME, isFlowNode, END, START, BY_TYPE} 
 import {cn} from '#lib/utils';
 import {cleanFlow, toDefinition, type Flow, type FlowNode} from '#data/flows';
 import {getProject, EXAMPLES_PROJECT} from '#data/projects';
-import {type AvailableVariable, type RunMode, type WorkflowParameter, type RunRecord} from '@dataflow/core';
+import {type AvailableVariable, type EnvelopeData, type RunMode, type WorkflowParameter, type RunRecord} from '@dataflow/core';
 import {RunPanel} from '#run/run-panel';
 import {cancelOnRunner, runOnRunner, toExecutable} from '#run/runner';
+import {runFromWorkflow} from '#run/run-from';
 import {Toolbar, type ValidationResult} from '#editor/toolbar';
 import {HistoryContext} from '#editor/history';
 import {CommentNodeMemo, COMMENT_SIZE, type CommentNode} from '#editor/comment-node';
@@ -37,7 +38,7 @@ import {arrange as arrangeNodes, type ArrangeDirection} from '#editor/layout';
 import {FloatingWindow, type WindowPosition, type WindowSize} from '#editor/window';
 import {WorkflowPanel} from '#editor/workflow-panel';
 import {ParametersContext} from '#editor/parameters-context';
-import {WarningsContext, ResultContext} from '#editor/result-context';
+import {WarningsContext, ResultContext, RunFromContext} from '#editor/result-context';
 import {PropertiesPanel} from '#editor/properties-panel';
 import {ResizeObserverGuard} from '#editor/resize-observer-guard';
 import {isComponent, receivesRows, validateFlow, type Issue} from '#editor/validation';
@@ -85,7 +86,7 @@ type Props = {
 
 function Editor({flow, onSave}: Props) {
   const wrapperRef = useRef<HTMLElement>(null);
-  const {screenToFlowPosition, getNodes, getEdges, fitView} = useReactFlow<FlowNode, Edge>();
+  const {screenToFlowPosition, getNodes, getEdges, fitView, updateNodeData} = useReactFlow<FlowNode, Edge>();
   // Start and End can't be deleted (not stored in the flow: set here)
   const [nodes, setNodes, onNodesChange] = useNodesState<FlowNode>(flow.nodes.map(n => (isFixedNode(n) ? {...n, deletable: false} : n)));
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>(flow.edges);
@@ -136,6 +137,20 @@ function Editor({flow, onSave}: Props) {
     () => Object.fromEntries((run?.components ?? []).map(c => [c.nodeId, c])),
     [run],
   );
+  // the latest execute (it reads the state of the render), for the cards' "Run from here"
+  const executeRef = useRef<(mode: RunMode, from?: string) => void>(() => undefined);
+  // "Run from here" shows on every component that can replay what reached it in the last run
+  const runFrom = useMemo(() => {
+    const available = new Set<string>();
+    if (run && !running) {
+      const whole = toExecutable(name, parameters, nodes, edges, flow.id, flow.projectId);
+      for (const node of whole.nodes) {
+        if (node.type !== 'start' && node.type !== 'end' && runFromWorkflow(whole, node.id, run)) available.add(node.id);
+      }
+    }
+    return {available, run: (nodeId: string) => executeRef.current('execution', nodeId)};
+  }, [run, running, nodes, edges, name, parameters, flow.id, flow.projectId]);
+  const pinnedIds = useMemo(() => new Set(nodes.filter(n => n.type === 'component' && n.data.pinned).map(n => n.id)), [nodes]);
   const warnings = useMemo(() => {
     const byNode: Record<string, string[]> = {};
     const add = (id: string, msg: string) => (byNode[id] ??= []).push(msg);
@@ -615,8 +630,11 @@ function Editor({flow, onSave}: Props) {
 
   // ---------- validate / clear ----------
 
-  /** Checks the assembly; if it is ok, runs it on the runner (validation = simulates, execution = for real). */
-  function execute(mode: RunMode) {
+  /**
+   * Checks the assembly; if it is ok, runs it on the runner (validation = simulates, execution = for real). With `from`,
+   * runs only that node and what comes after it, replaying what reached it in the last run (see runFromWorkflow).
+   */
+  function execute(mode: RunMode, from?: string) {
     if (validating || running) return;
     clearValidation();
     setValidating(true);
@@ -632,7 +650,10 @@ function Editor({flow, onSave}: Props) {
       setRunning(mode);
       try {
         runId.current = crypto.randomUUID();
-        const result = await runOnRunner(toExecutable(name, parameters, getNodes(), getEdges(), flow.id, flow.projectId), mode, runId.current, undefined, flow.projectId);
+        const whole = toExecutable(name, parameters, getNodes(), getEdges(), flow.id, flow.projectId);
+        const workflow = from && run ? runFromWorkflow(whole, from, run) : whole;
+        if (!workflow) throw new Error('Nothing to replay: run the whole flow first.');
+        const result = await runOnRunner(workflow, mode, runId.current, undefined, flow.projectId);
         setRun(result);
         // even a failed run updates the variables of the ports that produced something
         setKnown(previous => {
@@ -652,6 +673,14 @@ function Editor({flow, onSave}: Props) {
     }, VALIDATION_DELAY_MS);
   }
 
+  executeRef.current = execute;
+
+  /** Pins the output of the last run on the node (or unpins, with undefined): it stops executing and replays it. */
+  function pin(nodeId: string, pinned: Record<string, EnvelopeData[]> | undefined) {
+    record();
+    updateNodeData(nodeId, {pinned});
+  }
+
   /** Arranges the flow left to right or top to bottom (Dagre) and frames it; undone with Ctrl+Z. */
   function arrange(direction: ArrangeDirection) {
     record();
@@ -669,6 +698,7 @@ function Editor({flow, onSave}: Props) {
     <HistoryContext.Provider value={history}>
     <ParametersContext.Provider value={parameters}>
     <ResultContext.Provider value={lastRunStatus}>
+    <RunFromContext.Provider value={runFrom}>
     <WarningsContext.Provider value={warnings}>
     <VariablesContext.Provider value={variables}>
       <div className="flex h-dvh flex-col">
@@ -837,13 +867,15 @@ function Editor({flow, onSave}: Props) {
               })}
             </div>
             {run && (
-              <RunPanel key={run.run.id} record={run} onClose={() => setRun(null)} onGoTo={goTo} portName={portName}/>
+              <RunPanel key={run.run.id} record={run} onClose={() => setRun(null)} onGoTo={goTo} portName={portName}
+                        pinned={pinnedIds} onPin={pin}/>
             )}
           </main>
         </div>
       </div>
     </VariablesContext.Provider>
     </WarningsContext.Provider>
+    </RunFromContext.Provider>
     </ResultContext.Provider>
     </ParametersContext.Provider>
     </HistoryContext.Provider>

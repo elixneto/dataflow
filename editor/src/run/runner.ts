@@ -13,7 +13,7 @@ export function toExecutable(name: string, parameters: WorkflowParameter[], node
     parameters,
     nodes: nodes.filter(isComponent).map(n => ({
       id: n.id, type: n.data.type, label: n.data.label, config: n.data.config,
-      outputKey: n.data.outputKey, override: n.data.override, disabled: n.data.disabled,
+      outputKey: n.data.outputKey, override: n.data.override, disabled: n.data.disabled, pinned: n.data.pinned,
     })),
     edges: edges.map(e => ({
       source: e.source, sourcePort: e.sourceHandle ?? 'out-0', target: e.target, targetPort: e.targetHandle ?? 'in-0',
