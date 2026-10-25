@@ -21,8 +21,9 @@ Overview, concepts and how to run: [README.md](README.md). Engine architecture: 
 
 1. Logic in `core/src/components/<name>.ts` (`validate` and `execute`) and registration in `core/src/components/index.ts`.
    - If the component accumulates envelopes, report it with `ctx.holding(count, envelope)` (it becomes the Memory in the Metrics). An internal wait that is not an input (its own promise, an internal queue) goes through `ctx.wait` / `ctx.waitEach`, so it does not count as active time.
-2. Visual part in `editor/src/components/<name>.tsx` (`Card`, `Panel`, `Docs`) and an entry in the `PALETTE` (`editor/src/components/catalog.ts`).
-3. The runner does not need to change, except for a component that talks to the outside. A new database: add its name to `DatabaseKind` (`core/src/types/database-kind.type.ts`), write the driver in `runner/src/databases/<name>.ts` and register it in `databases` (`runner/src/index.ts`); the component calls `ctx.queryDatabase('<kind>', ...)` and keeps its SQL-flavor rules. `npm run start` runs Bun from the root, so `--watch` also reloads the runner when `core` changes.
+2. Tests in `core/tests/components/<name>.test.ts` (they run the component inside a workflow, with `evaluate` and `mapperFlow` from `core/tests/helpers.ts`); engine behavior that is not a component's (errors, flow order, metrics) goes in `core/tests/engine/`.
+3. Visual part in `editor/src/components/<name>.tsx` (`Card`, `Panel`, `Docs`) and an entry in the `PALETTE` (`editor/src/components/catalog.ts`).
+4. The runner does not need to change, except for a component that talks to the outside. A new database: add its name to `DatabaseKind` (`core/src/types/database-kind.type.ts`), write the driver in `runner/src/databases/<name>.ts` and register it in `databases` (`runner/src/index.ts`); the component calls `ctx.queryDatabase('<kind>', ...)` and keeps its SQL-flavor rules. `npm run start` runs Bun from the root, so `--watch` also reloads the runner when `core` changes.
 
 ## Database
 

@@ -115,7 +115,7 @@ The runner executes code written in the editor (expressions and the TypeScript c
 
 1. The logic in `core/src/components/<name>.ts` (`validate` and `execute`), registered in `core/src/components/index.ts`.
 2. The visual part in `editor/src/components/<name>.tsx` (card, window and Notes), in the `PALETTE` of `editor/src/components/catalog.ts`.
-3. A test in `core/src/engine/engine.test.ts` and an example flow in `editor/src/data/flows.ts`.
+3. A test in `core/tests/components/<name>.test.ts` (engine behavior that is not a component's goes in `core/tests/engine/`) and an example flow in `editor/src/data/flows.ts`.
 
 The contract details are in the [architecture](docs/architecture.md#7-component-contract-core).
 
