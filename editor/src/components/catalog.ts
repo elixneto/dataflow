@@ -26,6 +26,9 @@ export const CATEGORIES: Record<Category, {label: string; textColor: string; bgC
   flow: {label: 'Flow', textColor: 'text-flow', bgColor: 'bg-flow/15', borderColor: 'border-flow'},
 };
 
+/** Order of the categories wherever they are listed (the palette, its search): within each one, by component label. */
+export const CATEGORY_ORDER: Category[] = ['source', 'entity', 'code', 'transformation', 'flow'];
+
 /** CSS variable with the category color (the theme variables still use the v0 names). */
 export const CATEGORY_COLOR: Record<Category, string> = {
   source: 'var(--file)',
@@ -44,11 +47,11 @@ const FLOW: ComponentDef[] = [
 ];
 
 /**
- * Components shown in the palette, in alphabetical order within each section. Each new component is designed
+ * Components shown in the palette, ordered by category (CATEGORY_ORDER) and then by label. Each new component is designed
  * (inputs, outputs, card, panel, validation) and added here.
  */
 export const PALETTE: ComponentDef[] = [MAPPER, DATA_GRID, FILTER, ROUTER, LOOKUP, UNION, COPY, AGGREGATE, SPLIT, DISTINCT, SORT, LIMIT, TYPESCRIPT, SQL_SERVER, MONGODB_UPSERT, WORKFLOW_INVOKER]
-  .sort((a, b) => a.label.localeCompare(b.label, 'en'));
+  .sort((a, b) => CATEGORY_ORDER.indexOf(a.category) - CATEGORY_ORDER.indexOf(b.category) || a.label.localeCompare(b.label, 'en'));
 
 export const BY_TYPE: Record<string, ComponentDef> = Object.fromEntries([...PALETTE, ...FLOW].map(c => [c.type, c]));
 

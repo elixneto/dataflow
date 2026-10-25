@@ -1,10 +1,9 @@
 import {useMemo, useState, type DragEvent} from 'react';
 import {GripVertical, PanelLeftClose, PanelLeftOpen, Search} from 'lucide-react';
-import {CATEGORIES, DRAG_MIME, PALETTE} from '#components/catalog';
-import type {Category} from '#types/category.type';
+import {CATEGORIES, CATEGORY_ORDER, DRAG_MIME, PALETTE} from '#components/catalog';
 import {cn} from '#lib/utils';
 
-const ORDER: Category[] = ['source', 'code', 'transformation', 'flow', 'entity'];
+const ORDER = CATEGORY_ORDER;
 const COLLAPSED_KEY = 'dataflow-flows-palette-collapsed';
 
 function readCollapsed() {
