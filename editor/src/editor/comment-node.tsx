@@ -55,13 +55,13 @@ function CommentNodeView({id, data, selected, height}: NodeProps<CommentNode>) {
           </label>
         </header>
         {data.collapsed ? (
-          preview && <p className="truncate border-t border-dashed border-comment/40 px-3 py-1.5 text-xs text-muted-foreground">{preview}</p>
+          preview && <p className="truncate border-t border-dashed border-comment/40 px-3 py-1.5 text-[13px] text-muted-foreground">{preview}</p>
         ) : (
           <label className="flex min-h-0 flex-1 border-t border-dashed border-comment/40">
             <span className="sr-only">Comment text</span>
             <textarea value={data.text} onChange={e => setField('text', e.target.value)}
                       placeholder="Write a note about this part of the flow..."
-                      className="nodrag nowheel h-full w-full resize-none bg-transparent px-3 py-2 text-xs leading-relaxed outline-none placeholder:text-muted-foreground"/>
+                      className="nodrag nowheel h-full w-full resize-none bg-transparent px-3 py-2 text-[13px] leading-relaxed outline-none placeholder:text-muted-foreground"/>
           </label>
         )}
       </div>
