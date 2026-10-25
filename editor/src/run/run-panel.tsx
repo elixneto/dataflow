@@ -91,21 +91,46 @@ function LogsTab({record}: {record: RunRecord}) {
 
 // ---------- Metrics: one row per component ----------
 
-const METRICS_COLUMNS = 'grid-cols-[16px_minmax(0,1fr)_110px_120px_minmax(90px,200px)_minmax(90px,200px)_80px_80px_80px_100px_110px]';
+const METRICS_COLUMNS = 'grid-cols-[16px_minmax(0,1fr)_110px_120px_minmax(90px,200px)_minmax(90px,200px)_80px_80px_80px_100px_110px_minmax(160px,1.2fr)]';
 
 /** Component name (Mapper, Filter...); the label is what the user gave the node. */
 const componentName = (type: string) => BY_TYPE[type]?.label ?? type;
 
+/**
+ * When the component was open, on the run's time axis: light from its first envelope to the "all sent" of the one
+ * before; inside, how much of that it spent waiting for an outside system and, darker, working. Active and waiting
+ * are spread over the open time; the bar only shows their share.
+ */
+function Timeline({c, runStart, runMs}: {c: ComponentRun; runStart: number; runMs: number}) {
+  if (!c.start || c.durationMs === undefined || runMs <= 0) return <span className="text-right font-mono text-xs text-muted-foreground">—</span>;
+  const pct = (value: number) => `${Math.min(100, Math.max(0, (value / runMs) * 100))}%`;
+  const open = Math.max(c.durationMs, 0);
+  const active = Math.min(c.activeTimeMs ?? 0, open);
+  const waiting = Math.min(c.waitingMs ?? 0, open - active);
+  const title = `Open ${ms(open)} (from ${time(c.start)}) · active ${activeMs(active)}${c.waitingMs !== undefined ? ` · waiting ${activeMs(waiting)}` : ''}`;
+  return (
+    <span className="relative block h-3 w-full rounded-sm bg-muted/60" title={title} aria-label={title}>
+      <span className="absolute inset-y-0 flex min-w-0.5 overflow-hidden rounded-sm bg-primary/25"
+            style={{left: pct(Date.parse(c.start) - runStart), width: pct(open)}}>
+        <span className="h-full bg-primary" style={{width: open ? `${(active / open) * 100}%` : 0}}/>
+        <span className="h-full bg-primary/55" style={{width: open ? `${(waiting / open) * 100}%` : 0}}/>
+      </span>
+    </span>
+  );
+}
+
 function MetricsTab({record, onGoTo, portName}: {record: RunRecord; onGoTo: (nodeId: string) => void; portName: PortName}) {
+  const runStart = Date.parse(record.run.startedAt);
   return (
     <div className="flex flex-col">
       <div className={cn('grid gap-2 border-b border-border px-4 py-1.5 text-xs text-muted-foreground', METRICS_COLUMNS)}>
         <span/><span>Label</span><span>Component</span><span>Status</span><span className="text-right">In</span><span className="text-right">Out</span>
-        <span className="text-right" title="From the first to the last envelope, including the waiting">Duration</span>
+        <span className="text-right" title="From its first envelope until the component before it sent everything (all sent), including the waiting">Open</span>
         <span className="text-right" title="Time processing, without waiting for envelopes or for the next component (practically the component's CPU)">Active</span>
         <span className="text-right" title="Time waiting for an outside system (database rows, MongoDB writes, a called workflow); not waiting for envelopes or for the next component">Waiting</span>
         <span className="text-right" title="Peak of what the component held at once (e.g. the Lookup table, the Aggregate batch); size estimated from the JSON">Memory</span>
         <span className="text-right">Start</span>
+        <span title="When each component was open in the run: light = open, darker = waiting for an outside system, darkest = working">Timeline</span>
       </div>
       <ul>
         {record.components.map((c, i) => (
@@ -128,6 +153,7 @@ function MetricsTab({record, onGoTo, portName}: {record: RunRecord; onGoTo: (nod
                   </span>
                 : <span className="text-right font-mono text-xs text-muted-foreground">—</span>}
               <span className="text-right font-mono text-xs text-muted-foreground">{time(c.start)}</span>
+              <Timeline c={c} runStart={runStart} runMs={record.durationMs}/>
             </button>
           </li>
         ))}
