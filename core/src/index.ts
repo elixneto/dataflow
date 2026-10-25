@@ -21,6 +21,7 @@ export {limit, limitConfig, MAX_LIMIT, type LimitMode} from './components/limit'
 export {dataGridConfig, datagrid, cellValue, type DataGridColumn} from './components/datagrid';
 export {routerCases, routerElsePort, router, type RouterCase} from './components/router';
 export {sqlServerConfig, sqlServerUsedParameters, sqlServerReadOnlyIssue, sqlserver, DEFAULT_SQL_SERVER_TIMEOUT_S, type SqlServerParameter} from './components/sqlserver';
+export {mongoPipelineConfig, mongoPipelineIssue, mongoPipelineTextIssue, mongodbPipeline, pipelineExpression, DEFAULT_PIPELINE, DEFAULT_MONGODB_TIMEOUT_S} from './components/mongodb-pipeline';
 export {mongoUpsertConfig, mongodbUpsert, DEFAULT_MONGODB_BATCH_SIZE, MAX_MONGODB_BATCH_SIZE, type MongoFilterKey, type MongoDocumentSource} from './components/mongodb-upsert';
 export {copy, MAX_COPY_OUTPUTS, MIN_COPY_OUTPUTS, copyOutputCount} from './components/copy';
 export {MAX_UNION_INPUTS, MIN_UNION_INPUTS, unionInputCount, union} from './components/union';

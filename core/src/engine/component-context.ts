@@ -48,6 +48,14 @@ export function componentContext(execution: WorkflowExecution, node: ExecutableN
       // only the pull of the next row: while the component is held by the next one (backpressure), it is not waiting here
       return timedRequests(driver({...query, connection, signal: execution.control.signal}), waiting);
     },
+    aggregateDocuments: (kind, {secret, ...query}) => {
+      const driver = options.documentQueries?.[kind];
+      if (!driver) throw new Error(`This runner does not read from ${kind}.`);
+      const connection = options.secrets?.[secret];
+      if (!connection) throw new Error(`The secret "${secret}" does not exist in this runner.`);
+      // like queryDatabase: only the pull of the next document is waiting
+      return timedRequests(driver({...query, connection, signal: execution.control.signal}), waiting);
+    },
     upsertDocuments: async (kind, {secret, ...batch}) => {
       const driver = options.documentStores?.[kind];
       if (!driver) throw new Error(`This runner does not write to ${kind}.`);

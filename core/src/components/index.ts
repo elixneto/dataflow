@@ -8,6 +8,7 @@ import {limit} from './limit';
 import {log} from './log';
 import {lookup} from './lookup';
 import {mapper} from './mapper';
+import {mongodbPipeline} from './mongodb-pipeline';
 import {mongodbUpsert} from './mongodb-upsert';
 import {router} from './router';
 import {split} from './split';
@@ -33,6 +34,7 @@ export const COMPONENTS: Record<string, ComponentLogic> = {
   [datagrid.type]: datagrid,
   [copy.type]: copy,
   [sqlserver.type]: sqlserver,
+  [mongodbPipeline.type]: mongodbPipeline,
   [mongodbUpsert.type]: mongodbUpsert,
   [workflowInvoker.type]: workflowInvoker,
   [log.type]: log,

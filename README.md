@@ -12,6 +12,7 @@ Inspired by SnapLogic and Pentaho Kettle, all in JavaScript: the editor in React
 |---|---|---|
 | Data Sources | **Data Grid** | A typed table (or pasted from Excel) that emits one envelope per row |
 | | **SQL Server Query** | Read-only, streamed query, with `@name` parameters |
+| | **MongoDB Pipeline** | Read-only, streamed aggregation pipeline, written as in Compass, with expression values |
 | Scripting | **TypeScript** | `async function process($input)` per envelope, in a sandbox |
 | Transformation | **Mapper** | Writes fields into the envelope (text or expression) |
 | | **Filter** | Splits into `true` and `false` by a condition |

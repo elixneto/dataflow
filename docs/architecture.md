@@ -33,7 +33,7 @@ How the engine works inside. To run and use it, see the [README](../README.md).
 1. **The Start always emits one envelope**, with `WORKFLOW_CURRENT_RUN`, `PARAMETERS` and an empty `DATA`. With "Accepts input", the call's input becomes the `DATA` (a list: one envelope per item).
 2. **Each component adds to `DATA`**: under its own key (e.g. `$result` of the TypeScript, `$lookup` of the Lookup) or directly in the fields (Mapper, Data Grid, SQL Server Query).
 3. **Override** (on each component that produces data): the output carries only what it produced and drops the rest of `DATA`.
-4. **One makes many**: a component that emits N envelopes from 1 (Data Grid, SQL Server Query) copies the incoming envelope into each one.
+4. **One makes many**: a component that emits N envelopes from 1 (Data Grid, SQL Server Query, MongoDB Pipeline) copies the incoming envelope into each one.
 5. An envelope that goes out through the **error port** gets `DATA.errors`: a list of `{error, message, component}`, which grows if it fails in more than one component.
 
 ## 4. Expressions
@@ -73,7 +73,7 @@ type ComponentLogic = {
 }
 ```
 
-The `ctx` gives the component: `fieldValue` (text or expression), `log`, `prepareScript` (TypeScript), `queryDatabase(kind, ...)` (through the driver the runner registered for that database, e.g. `sqlserver`), `upsertDocuments(kind, ...)` (writes a batch through a document database driver, e.g. `mongodb`; one result per document; in a test run it sends nothing and answers null), `invokeWorkflow`, `wait`/`waitEach` (waits that do not count as active time) and `holding` (memory). Whatever talks to the outside (sandbox, database) is injected by the runner; the core only receives the function.
+The `ctx` gives the component: `fieldValue` (text or expression), `log`, `prepareScript` (TypeScript), `queryDatabase(kind, ...)` (through the driver the runner registered for that database, e.g. `sqlserver`), `aggregateDocuments(kind, ...)` (runs a read-only aggregation pipeline through a document database driver, e.g. `mongodb`, and yields the documents with backpressure), `upsertDocuments(kind, ...)` (writes a batch through a document database driver, e.g. `mongodb`; one result per document; in a test run it sends nothing and answers null), `invokeWorkflow`, `wait`/`waitEach` (waits that do not count as active time) and `holding` (memory). Whatever talks to the outside (sandbox, database) is injected by the runner; the core only receives the function.
 
 ## 8. Run record
 
@@ -93,6 +93,10 @@ Runs another flow per envelope, with the parameters of its Start. Whatever reach
 ## 10. Read only in the SQL Server Query
 
 Three layers: the query must be a single statement, starting with `SELECT` or `WITH`, without words that write, execute or change the session (read left to right, like SQL Server: comments and strings do not fool it); it runs inside a transaction that is always rolled back; and the connection uses `ApplicationIntent=ReadOnly`. Even so, use a read-only login.
+
+## 10b. Read only in the MongoDB Pipeline
+
+The pipeline is a JS expression (the text as Compass shows it) evaluated on the incoming envelope, with the mongosh helpers (ObjectId, ISODate, NumberLong, NumberInt, NumberDecimal) defined inside the expression: they return Extended JSON, which the runner turns into BSON (`EJSON.deserialize`), so the core has no MongoDB code. A stage with `$out` or `$merge` is refused three times: in the text (validate), in the evaluated pipeline (the component) and in the driver (`runner/src/databases/mongodb.ts`). The documents come out as plain JSON (ObjectId as hex text, dates as ISO, Decimal128 as text, Long as a number or text past 2^53, binary as base64).
 
 ## 11. Runner API
 

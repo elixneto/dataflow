@@ -2,6 +2,7 @@ import {toError} from '#errors/normalize-error';
 import {mergeFields} from '#envelope/envelope-data';
 import type {ExpressionField} from '#types/expression-field.type';
 import type {ComponentLogic} from '#types/component-logic.type';
+import {serverTimed} from './server-timed';
 
 /**
  * SQL Server Query (in Kettle, Table input): runs a read-only query and yields one envelope per row, with the
@@ -96,22 +97,6 @@ export function sqlServerUsedParameters(sql: string): string[] {
 }
 
 const IDENTIFIER = /^[A-Za-z_][A-Za-z0-9_]*$/;
-
-/** The rows of the query, adding up the time spent waiting for the server (not the time the flow takes to consume them). */
-async function* serverTimed<T>(rows: AsyncIterable<T>, add: (ms: number) => void): AsyncIterable<T> {
-  const it = rows[Symbol.asyncIterator]();
-  try {
-    while (true) {
-      const t0 = performance.now();
-      const r = await it.next();
-      add(performance.now() - t0);
-      if (r.done) return;
-      yield r.value;
-    }
-  } finally {
-    await it.return?.();
-  }
-}
 
 export const sqlserver: ComponentLogic = {
   type: 'sqlserver',

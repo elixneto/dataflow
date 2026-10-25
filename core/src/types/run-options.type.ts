@@ -7,6 +7,7 @@ import type {QueryDatabase} from '#types/query-database.type';
 import type {RunMode} from '#types/run-mode.type';
 import type {DocumentStoreKind} from '#types/document-store-kind.type';
 import type {UpsertDocuments} from '#types/upsert-documents.type';
+import type {AggregateDocuments} from '#types/aggregate-documents.type';
 
 export type RunOptions = {
   mode: RunMode;
@@ -25,6 +26,8 @@ export type RunOptions = {
   databases?: Partial<Record<DatabaseKind, QueryDatabase>>;
   /** document database drivers that write (upserts), by kind; a component writing to a kind without a driver fails */
   documentStores?: Partial<Record<DocumentStoreKind, UpsertDocuments>>;
+  /** document database drivers that read (aggregation pipelines), by kind */
+  documentQueries?: Partial<Record<DocumentStoreKind, AggregateDocuments>>;
   /** workflows the Workflow Invoker can call, by id */
   workflows?: Record<string, ExecutableWorkflow>;
   /** run that called this one (filled in by the Workflow Invoker) */

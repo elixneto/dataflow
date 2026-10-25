@@ -3,6 +3,7 @@
  * This package depends on neither React nor Node: the editor uses it to validate and the runner (Bun) to execute.
  */
 
+export type * from './aggregate-documents.type';
 export type * from './available-variable.type';
 export type * from './component-context.type';
 export type * from './component-logic.type';
@@ -11,6 +12,7 @@ export type * from './component-run.type';
 export type * from './database-kind.type';
 export type * from './database-query.type';
 export type * from './document-batch.type';
+export type * from './document-query.type';
 export type * from './document-store-kind.type';
 export type * from './document-upsert.type';
 export type * from './envelope.type';

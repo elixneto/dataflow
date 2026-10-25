@@ -1,6 +1,7 @@
 import {expect, test} from 'bun:test';
 import type {DocumentUpsert, UpsertResult} from '@dataflow/core';
-import {upsertInOrder} from '../../src/databases/mongodb';
+import {BSON} from 'mongodb';
+import {toEnvelopeValue, upsertInOrder} from '../../src/databases/mongodb';
 
 // a fake updateOne: no MongoDB, only the order and the overlap of the calls
 
@@ -61,4 +62,32 @@ test('an upsert that fails does not stop the next ones of its filter', async () 
     {matched: 0, modified: 0, upsertedId: '2'},
   ]);
   expect(fake.events.indexOf('start a2')).toBeGreaterThan(fake.events.indexOf('fail fail-a1'));
+});
+
+test('documents from MongoDB become plain JSON values', () => {
+  const {ObjectId, Decimal128, Long, Binary, Int32, Timestamp} = BSON;
+  const doc = {
+    _id: new ObjectId('64f1a2b3c4d5e6f708091a2b'),
+    at: new Date('2026-10-25T18:00:00.000Z'),
+    price: Decimal128.fromString('12.3400000000000000001'),
+    small: Long.fromNumber(42),
+    huge: Long.fromString('9223372036854775807'),
+    count: new Int32(7),
+    file: new Binary(Buffer.from('hi')),
+    items: [{when: new Date('2026-01-01T00:00:00.000Z'), ref: new ObjectId('64f1a2b3c4d5e6f708091a2c')}],
+    stamp: new Timestamp({t: 1, i: 2}),
+    plain: {text: 'x', n: 1.5, yes: true, none: null},
+  };
+  expect(toEnvelopeValue(doc)).toEqual({
+    _id: '64f1a2b3c4d5e6f708091a2b',
+    at: '2026-10-25T18:00:00.000Z',
+    price: '12.3400000000000000001',
+    small: 42,
+    huge: '9223372036854775807',
+    count: 7,
+    file: 'aGk=',
+    items: [{when: '2026-01-01T00:00:00.000Z', ref: '64f1a2b3c4d5e6f708091a2c'}],
+    stamp: {$timestamp: {t: 1, i: 2}},
+    plain: {text: 'x', n: 1.5, yes: true, none: null},
+  });
 });

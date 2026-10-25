@@ -110,6 +110,7 @@ app.post('/runs', async c => {
       prepareScript,
       databases: {sqlserver: querySqlServer},
       documentStores: {mongodb: mongo.upsert},
+      documentQueries: {mongodb: mongo.aggregate},
       secrets: await projectSecrets(request.projectId),
       signal: control.signal,
       timeoutMs: TIMEOUT_MS,

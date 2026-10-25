@@ -38,7 +38,8 @@ function currentTheme() {
 }
 
 /**
- * Code editor (Monaco): TypeScript with the runner's globals, or SQL; follows the light/dark theme.
+ * Code editor (Monaco): TypeScript with the runner's globals, SQL, or JavaScript (e.g. a MongoDB pipeline, an expression with
+ * the envelope's $variables: plain JS, so they are not flagged); follows the light/dark theme.
  * Fills the whole parent (which must be `relative` and have a height).
  */
 export function CodeEditor({value, onValue, path, label, language = 'typescript'}: {
@@ -47,7 +48,7 @@ export function CodeEditor({value, onValue, path, label, language = 'typescript'
   /** one per component (e.g. the node id), so Monaco does not mix the models */
   path: string;
   label: string;
-  language?: 'typescript' | 'sql';
+  language?: 'typescript' | 'sql' | 'javascript';
 }) {
   const [theme, setTheme] = useState(currentTheme);
   useEffect(() => {
@@ -60,7 +61,7 @@ export function CodeEditor({value, onValue, path, label, language = 'typescript'
     <div className="nodrag nowheel absolute inset-0 overflow-hidden rounded-md border border-input" aria-label={label}>
       <Editor
         language={language}
-        path={`file:///components/${path}.${language === 'sql' ? 'sql' : 'ts'}`}
+        path={`file:///components/${path}.${{typescript: 'ts', sql: 'sql', javascript: 'js'}[language]}`}
         value={value}
         onChange={v => onValue(v ?? '')}
         theme={theme}

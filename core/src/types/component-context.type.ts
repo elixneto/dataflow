@@ -11,6 +11,7 @@ import type {EnvelopeData} from '#types/envelope-data.type';
 import type {DocumentStoreKind} from '#types/document-store-kind.type';
 import type {DocumentBatch} from '#types/document-batch.type';
 import type {UpsertResult} from '#types/upsert-result.type';
+import type {DocumentQuery} from '#types/document-query.type';
 
 export type ComponentContext = {
   run: WorkflowCurrentRun;
@@ -47,6 +48,11 @@ export type ComponentContext = {
    * connection string becomes the connection string here; the run's signal cancels the query.
    */
   queryDatabase: (kind: DatabaseKind, query: Omit<DatabaseQuery, 'connection' | 'signal'> & {secret: string}) => AsyncIterable<Record<string, unknown>>;
+  /**
+   * Runs an aggregation pipeline (read only) through the document database driver the runner registered for that kind,
+   * and yields the documents one by one. The name of the secret becomes the connection string; the run's signal stops it.
+   */
+  aggregateDocuments: (kind: DocumentStoreKind, query: Omit<DocumentQuery, 'connection' | 'signal'> & {secret: string}) => AsyncIterable<Record<string, unknown>>;
   /**
    * Writes a batch of upserts through the document database driver the runner registered for that kind; one result per
    * upsert, in order. In a test run of a component with side effects it writes nothing: it logs what it would send and
