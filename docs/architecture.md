@@ -54,7 +54,7 @@ Every port receives and sends **envelopes**, in sequence: there is no port type,
 
 - Each edge becomes an async queue (`Channel`) with limited capacity; all components run at the same time. Envelope 1 is already in the Filter while the query is still reading envelope 2.
 - **Backpressure**: the writer waits when the queue is full, so memory stays constant whatever the volume. The SQL Server Query even pauses the database.
-- **Accumulators** (Lookup, Aggregate, Sort) hold envelopes by nature and report how much they hold (it becomes the Memory in the Metrics); Distinct reports only the keys it has seen.
+- **Accumulators** (Lookup, Aggregate, Sort, Limit in bottom mode) hold envelopes by nature and report how much they hold (it becomes the Memory in the Metrics); Distinct reports only the keys it has seen.
 
 ## 7. Component contract (core)
 
@@ -136,12 +136,11 @@ There are no targets yet (components that write outside: SQL insert, HTTP...), b
 
 ## 14. Suggested components
 
-Ideas taken from n8n, not built yet (its Split Out, Remove Duplicates and Sort are our Split, Distinct and Sort; its Loop Over Items is our Aggregate).
+Ideas taken from n8n, not built yet (its Split Out, Remove Duplicates, Sort and Limit are our Split, Distinct, Sort and Limit; its Loop Over Items is our Aggregate).
 
 | Component | What it does |
 |---|---|
 | **HTTP Request** | Calls an API per envelope (method, URL, headers, body as expressions, connection secret). Source with GET/HEAD; target with POST, PUT, PATCH and DELETE (follows section 12 in test runs). |
-| **Limit** | Lets only the first N envelopes through and drops the rest; handy to test a flow on a sample. |
 | **Compare Datasets** | Two inputs compared by key; outputs: only in A (new), only in B (removed), different, equal. For syncing two systems. |
 | **Wait / Rate limit** | Waits a fixed time per envelope, or caps how many envelopes per second go through (APIs with quotas). |
 | **Files (CSV, Excel, JSON)** | Reads a project file into one envelope per row (source) and writes the envelopes into a file (target). |

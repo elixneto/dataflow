@@ -4,6 +4,7 @@ import {copy} from './copy';
 import {datagrid} from './datagrid';
 import {distinct} from './distinct';
 import {filter} from './filter';
+import {limit} from './limit';
 import {lookup} from './lookup';
 import {mapper} from './mapper';
 import {router} from './router';
@@ -26,6 +27,7 @@ export const COMPONENTS: Record<string, ComponentLogic> = {
   [split.type]: split,
   [distinct.type]: distinct,
   [sort.type]: sort,
+  [limit.type]: limit,
   [datagrid.type]: datagrid,
   [copy.type]: copy,
   [sqlserver.type]: sqlserver,

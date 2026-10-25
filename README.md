@@ -21,6 +21,7 @@ Inspired by SnapLogic and Pentaho Kettle, all in JavaScript: the editor in React
 | | **Aggregate** / **Split** | Groups envelopes into batches / yields one envelope per item of a list |
 | | **Distinct** | Lets through only the first envelope of each key |
 | | **Sort** | Sorts the envelopes by keys |
+| | **Limit** | Lets only the first (top) or last (bottom) N envelopes through |
 | Flow | **Workflow Invoker** | Calls another flow, passing the parameters of its Start |
 
 Each component has its full explanation in the **Notes** tab of its window, inside the editor.

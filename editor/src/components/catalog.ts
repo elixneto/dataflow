@@ -1,5 +1,6 @@
 import {Flag, Play} from 'lucide-react';
 import {FILTER} from '#components/filter';
+import {LIMIT} from '#components/limit';
 import {LOOKUP} from '#components/lookup';
 import {AGGREGATE} from '#components/aggregate';
 import {COPY} from '#components/copy';
@@ -45,7 +46,7 @@ const FLOW: ComponentDef[] = [
  * Components shown in the palette, in alphabetical order within each section. Each new component is designed
  * (inputs, outputs, card, panel, validation) and added here.
  */
-export const PALETTE: ComponentDef[] = [MAPPER, DATA_GRID, FILTER, ROUTER, LOOKUP, UNION, COPY, AGGREGATE, SPLIT, DISTINCT, SORT, TYPESCRIPT, SQL_SERVER, WORKFLOW_INVOKER]
+export const PALETTE: ComponentDef[] = [MAPPER, DATA_GRID, FILTER, ROUTER, LOOKUP, UNION, COPY, AGGREGATE, SPLIT, DISTINCT, SORT, LIMIT, TYPESCRIPT, SQL_SERVER, WORKFLOW_INVOKER]
   .sort((a, b) => a.label.localeCompare(b.label, 'en'));
 
 export const BY_TYPE: Record<string, ComponentDef> = Object.fromEntries([...PALETTE, ...FLOW].map(c => [c.type, c]));
