@@ -1,4 +1,4 @@
-import {readFileSync, unlinkSync, writeFileSync} from 'node:fs';
+import {existsSync, readFileSync, unlinkSync, writeFileSync} from 'node:fs';
 
 /*
  * One process at a time on the local database folder (PGlite): two of them writing the same files corrupt it.
@@ -41,8 +41,11 @@ export function lockFolder(folder: string, log: (message: string) => void = cons
         + `if that process is not a runner, delete ${file}.`);
     }
     if (held && held.pid !== process.pid) log(`Taking over the lock of ${folder} left by PID ${held.pid} (no longer running).`);
+    // a file that cannot be read (cut in the middle of writing) is a lock nobody holds
+    const unreadable = !held && existsSync(file);
+    if (unreadable) log(`Taking over the unreadable lock of ${folder}.`);
     try {
-      if (held) unlinkSync(file);
+      if (held || unreadable) unlinkSync(file);
       // wx: if another process took it between the read and here, this fails and the loop reads again
       writeFileSync(file, JSON.stringify(mine), {flag: 'wx'});
       return () => {
