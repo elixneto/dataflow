@@ -268,7 +268,7 @@ export function RunPanel({record, busy, minimized, onMinimize, onGoTo, portName,
   portName: PortName;
 } & PinActions) {
   return (
-    <section className="absolute inset-x-0 bottom-0 z-20 flex max-h-[55%] flex-col border-t border-border bg-sidebar shadow-2xl" aria-label="Run result">
+    <section className="relative z-20 flex max-h-[55%] shrink-0 flex-col border-t border-border bg-sidebar shadow-2xl" aria-label="Run result">
       <RunResult record={record} busy={busy} collapsed={minimized} onGoTo={onGoTo} portName={portName} pins={{pinned, onPin}} actions={
         <>
           {busy && (

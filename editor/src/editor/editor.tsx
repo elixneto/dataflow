@@ -776,9 +776,11 @@ function Editor({flow, onSave}: Props) {
         />
         <div className="flex min-h-0 flex-1">
           <Palette onAdd={addFromPalette}/>
-          <main ref={wrapperRef} className="relative min-w-0 flex-1" onDragOver={onDragOver} onDrop={onDrop}
+          <main ref={wrapperRef} className="relative flex min-w-0 flex-1 flex-col" onDragOver={onDragOver} onDrop={onDrop}
                 onDragLeave={e => !e.currentTarget.contains(e.relatedTarget as Node | null) && setSpliceEdge(null)}>
             <h1 className="sr-only">Flow canvas</h1>
+            {/* the canvas ends where the result panel starts, so its controls, minimap and the issues stay above it */}
+            <div className="relative min-h-0 flex-1">
             <ReactFlow
               nodes={shownNodes}
               edges={shownEdges}
@@ -866,6 +868,7 @@ function Editor({flow, onSave}: Props) {
                 </ul>
               </section>
             )}
+            </div>
             <div data-windows className="pointer-events-none absolute inset-0 z-30 overflow-hidden">
               {windows.map((j, i) => {
                 const node = nodes.find(n => n.id === j.id);
