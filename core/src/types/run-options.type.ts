@@ -8,6 +8,7 @@ import type {RunMode} from '#types/run-mode.type';
 import type {DocumentStoreKind} from '#types/document-store-kind.type';
 import type {UpsertDocuments} from '#types/upsert-documents.type';
 import type {AggregateDocuments} from '#types/aggregate-documents.type';
+import type {DeleteDocuments} from '#types/delete-documents.type';
 
 export type RunOptions = {
   mode: RunMode;
@@ -28,6 +29,8 @@ export type RunOptions = {
   documentStores?: Partial<Record<DocumentStoreKind, UpsertDocuments>>;
   /** document database drivers that read (aggregation pipelines), by kind */
   documentQueries?: Partial<Record<DocumentStoreKind, AggregateDocuments>>;
+  /** document database drivers that delete, by kind */
+  documentDeletes?: Partial<Record<DocumentStoreKind, DeleteDocuments>>;
   /** workflows the Workflow Invoker can call, by id */
   workflows?: Record<string, ExecutableWorkflow>;
   /** run that called this one (filled in by the Workflow Invoker) */

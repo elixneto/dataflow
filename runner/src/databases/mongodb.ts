@@ -1,5 +1,5 @@
 import {BSON, MongoBulkWriteError, MongoClient, type Document} from 'mongodb';
-import {mongoPipelineIssue, type AggregateDocuments, type DocumentUpsert, type UpsertAnswer, type UpsertDocuments, type UpsertResult} from '@dataflow/core';
+import {mongoPipelineIssue, type AggregateDocuments, type DeleteDocuments, type DocumentUpsert, type UpsertAnswer, type UpsertDocuments, type UpsertResult} from '@dataflow/core';
 
 /*
  * MongoDB Upsert: each batch is one unordered `bulkWrite` of `updateOne(filter, {$set: document}, {upsert: true})`
@@ -174,6 +174,24 @@ export function mongoDriver() {
     }
   };
 
+  /** MongoDB Delete: deleteMany with the filter (Extended JSON → BSON); with countOnly (a test run) it only counts */
+  const remove: DeleteDocuments = async ({connection, database, collection, filter, countOnly, signal}) => {
+    if (signal.aborted) throw new Error('Run interrupted.');
+    let connected: MongoClient;
+    try {
+      connected = await client(connection);
+    } catch (e) {
+      throw Object.assign(new Error(`Could not connect to MongoDB: ${message(e)}`), {name: 'ConnectionError'});
+    }
+    const target = connected.db(database).collection(collection);
+    const match = EJSON.deserialize(filter, {relaxed: true}) as Document;
+    try {
+      return countOnly ? await target.countDocuments(match) : (await target.deleteMany(match)).deletedCount;
+    } catch (e) {
+      throw new Error(message(e));
+    }
+  };
+
   /** closes the run's clients (the ones that connected) */
   async function close() {
     const open = [...clients.values()];
@@ -181,5 +199,5 @@ export function mongoDriver() {
     await Promise.all(open.map(c => c.then(x => x.close()).catch(() => undefined)));
   }
 
-  return {upsert, aggregate, close};
+  return {upsert, aggregate, remove, close};
 }

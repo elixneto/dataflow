@@ -79,6 +79,25 @@ export function componentContext(execution: WorkflowExecution, node: ExecutableN
         stopwatch.resume();
       }
     },
+    deleteDocuments: async (kind, {secret, ...request}) => {
+      const driver = options.documentDeletes?.[kind];
+      if (!driver) throw new Error(`This runner does not delete from ${kind}.`);
+      const connection = options.secrets?.[secret];
+      if (!connection) throw new Error(`The secret "${secret}" does not exist in this runner.`);
+      const target = `${request.database}.${request.collection}`;
+      stopwatch.stop();
+      waiting.resume();
+      try {
+        // a test run deletes nothing: it only counts what the filter matches (a read)
+        const n = await driver({...request, connection, countOnly: dryRun, signal: execution.control.signal});
+        if (!dryRun) return n;
+        log('info', `Test run: ${n} document(s) of ${target} match the filter ${JSON.stringify(request.filter)}; none deleted.`);
+        return null;
+      } finally {
+        waiting.stop();
+        stopwatch.resume();
+      }
+    },
     holding: (envelopes, held) => execution.memoryOf(node.id).holding(envelopes, held),
   };
 }

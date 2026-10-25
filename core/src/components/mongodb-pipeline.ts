@@ -2,6 +2,7 @@ import {toError} from '#errors/normalize-error';
 import {mergeFields} from '#envelope/envelope-data';
 import type {ComponentLogic} from '#types/component-logic.type';
 import {serverTimed} from './server-timed';
+import {evaluateMongo, mongoExpression} from './mongo-expression';
 
 /**
  * MongoDB Pipeline (a source): runs an aggregation pipeline on a collection and yields one envelope per document, with
@@ -57,41 +58,8 @@ export function mongoPipelineIssue(pipeline: unknown): string | null {
   return null;
 }
 
-/**
- * The mongosh helpers, defined inside the expression (they run where it runs, in the runner's sandbox), returning
- * Extended JSON. `new Date()` is a Date, which `toExtendedJson` turns into {$date}.
- */
-const HELPERS = [
-  'const ObjectId = id => { if (id === undefined) throw new Error("ObjectId() needs the id, e.g. ObjectId(\\"64f1…\\")."); return {$oid: String(id)}; };',
-  'const ISODate = d => ({$date: (d === undefined ? new Date() : new Date(d)).toISOString()});',
-  'const NumberLong = n => ({$numberLong: String(n)});',
-  'const NumberInt = n => Number(n);',
-  'const NumberDecimal = n => ({$numberDecimal: String(n)});',
-].join(' ');
-
-/** The pipeline text as an expression with the helpers in scope. */
-export const pipelineExpression = (text: string) => `(() => { ${HELPERS} return (\n${text}\n); })()`;
-
-/** Evaluates the pipeline; an error says what failed without repeating the whole expression and its helpers. */
-function evaluatePipeline(text: string, evaluate: (expression: string) => unknown): unknown {
-  try {
-    return evaluate(pipelineExpression(text));
-  } catch (e) {
-    const error = toError(e);
-    const end = error.message.indexOf('})()": ');
-    const cleaned = new Error(`The pipeline could not be evaluated: ${end >= 0 ? error.message.slice(end + 7) : error.message}`);
-    cleaned.name = error.name;
-    throw cleaned;
-  }
-}
-
-/** Dates (also from another realm, the sandbox) as {$date}; the rest as it is. */
-function toExtendedJson(value: unknown): unknown {
-  if (Object.prototype.toString.call(value) === '[object Date]') return {$date: (value as Date).toISOString()};
-  if (Array.isArray(value)) return value.map(toExtendedJson);
-  if (typeof value === 'object' && value !== null) return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, toExtendedJson(v)]));
-  return value;
-}
+/** The pipeline text as an expression with the mongosh helpers in scope (mongo-expression.ts). */
+export const pipelineExpression = mongoExpression;
 
 export const mongodbPipeline: ComponentLogic = {
   type: 'mongodb-pipeline',
@@ -120,7 +88,7 @@ export const mongodbPipeline: ComponentLogic = {
       let thisQuery = 0;
       let server = 0;
       try {
-        const stages = toExtendedJson(evaluatePipeline(pipeline, value => ctx.fieldValue({value, expression: true}, doc)));
+        const stages = evaluateMongo(pipeline, 'pipeline', value => ctx.fieldValue({value, expression: true}, doc));
         const issue = mongoPipelineIssue(stages);
         if (issue) throw new Error(`The pipeline ${issue}.`);
         const cursor = ctx.aggregateDocuments('mongodb', {

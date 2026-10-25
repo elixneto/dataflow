@@ -111,6 +111,7 @@ app.post('/runs', async c => {
       databases: {sqlserver: querySqlServer},
       documentStores: {mongodb: mongo.upsert},
       documentQueries: {mongodb: mongo.aggregate},
+      documentDeletes: {mongodb: mongo.remove},
       secrets: await projectSecrets(request.projectId),
       signal: control.signal,
       timeoutMs: TIMEOUT_MS,

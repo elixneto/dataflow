@@ -12,6 +12,7 @@ import type {DocumentStoreKind} from '#types/document-store-kind.type';
 import type {DocumentBatch} from '#types/document-batch.type';
 import type {UpsertAnswer} from '#types/upsert-answer.type';
 import type {DocumentQuery} from '#types/document-query.type';
+import type {DocumentDelete} from '#types/document-delete.type';
 
 export type ComponentContext = {
   run: WorkflowCurrentRun;
@@ -59,4 +60,10 @@ export type ComponentContext = {
    * nothing: it logs what it would send and answers null.
    */
   upsertDocuments: (kind: DocumentStoreKind, batch: Omit<DocumentBatch, 'connection' | 'signal'> & {secret: string}) => Promise<UpsertAnswer | null>;
+  /**
+   * Deletes the documents the filter matches, through the driver the runner registered for that kind, and answers how
+   * many. In a test run of a component with side effects it deletes nothing: it counts what the filter matches, logs it
+   * and answers null.
+   */
+  deleteDocuments: (kind: DocumentStoreKind, request: Omit<DocumentDelete, 'connection' | 'signal' | 'countOnly'> & {secret: string}) => Promise<number | null>;
 };

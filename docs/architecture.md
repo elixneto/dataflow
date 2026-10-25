@@ -127,7 +127,7 @@ Environment variables: `DATABASE_URL` (Postgres; without it, PGlite in `runner/d
 
 ## 12. Targets in test runs
 
-Targets are components that write outside the flow (today the **MongoDB Upsert**; later SQL insert, HTTP...). The rule exists so nobody writes half-baked data by running a flow "just to see if it works" and forgetting to disable the target. The user should not have to write a fake output either: what comes after a target usually needs its real answer (a generated id, a response body).
+Targets are components that write outside the flow (today the **MongoDB Upsert** and the **MongoDB Delete**, which in a test run only counts what its filter matches; later SQL insert, HTTP...). The rule exists so nobody writes half-baked data by running a flow "just to see if it works" and forgetting to disable the target. The user should not have to write a fake output either: what comes after a target usually needs its real answer (a generated id, a response body).
 
 - **A target declares itself**: `sideEffects: true` on its `ComponentLogic` (later possibly a function of the config, e.g. an HTTP request is a target only for POST, PUT, PATCH and DELETE). Reading components (SQL Server Query, HTTP GET/HEAD) run normally in any mode.
 - **Editor runs use `mode: 'validation'`** (the editor's Run). Triggers (endpoint, cron) will always run in `execution`.

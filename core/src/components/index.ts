@@ -8,6 +8,7 @@ import {limit} from './limit';
 import {log} from './log';
 import {lookup} from './lookup';
 import {mapper} from './mapper';
+import {mongodbDelete} from './mongodb-delete';
 import {mongodbPipeline} from './mongodb-pipeline';
 import {mongodbUpsert} from './mongodb-upsert';
 import {router} from './router';
@@ -36,6 +37,7 @@ export const COMPONENTS: Record<string, ComponentLogic> = {
   [sqlserver.type]: sqlserver,
   [mongodbPipeline.type]: mongodbPipeline,
   [mongodbUpsert.type]: mongodbUpsert,
+  [mongodbDelete.type]: mongodbDelete,
   [workflowInvoker.type]: workflowInvoker,
   [log.type]: log,
 };
