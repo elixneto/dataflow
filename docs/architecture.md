@@ -133,3 +133,15 @@ There are no targets yet (components that write outside: SQL insert, HTTP...), b
 - Triggers: an endpoint per flow and scheduling (cron).
 - Authentication in the runner.
 - Sources and targets beyond SQL Server (CSV, HTTP, other databases).
+
+## 14. Suggested components
+
+Ideas taken from n8n, not built yet (Split, Remove Duplicates and Sort are already being done; n8n's Loop Over Items is our Aggregate).
+
+| Component | What it does |
+|---|---|
+| **HTTP Request** | Calls an API per envelope (method, URL, headers, body as expressions, connection secret). Source with GET/HEAD; target with POST, PUT, PATCH and DELETE (follows section 12 in test runs). |
+| **Limit** | Lets only the first N envelopes through and drops the rest; handy to test a flow on a sample. |
+| **Compare Datasets** | Two inputs compared by key; outputs: only in A (new), only in B (removed), different, equal. For syncing two systems. |
+| **Wait / Rate limit** | Waits a fixed time per envelope, or caps how many envelopes per second go through (APIs with quotas). |
+| **Files (CSV, Excel, JSON)** | Reads a project file into one envelope per row (source) and writes the envelopes into a file (target). |
