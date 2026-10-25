@@ -21,7 +21,8 @@ export function EditorPage() {
   // key: switching flows recreates the editor from scratch (React Flow state and history)
   return <FlowEditor key={flow.id} flow={flow} onSave={f => {
     const saved = saveFlow(f);
-    if (flowId === 'new') window.history.replaceState(null, '', `/projects/${saved.projectId}/flows/${saved.id}`);
+    // only while still on the new flow's page (a save when leaving must not change the next page's address)
+    if (flowId === 'new' && window.location.pathname.endsWith('/flows/new')) window.history.replaceState(null, '', `/projects/${saved.projectId}/flows/${saved.id}`);
     return saved;
   }}/>;
 }

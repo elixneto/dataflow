@@ -99,8 +99,8 @@ export function Toolbar(p: Props) {
         <Button variant="ghost" size="icon-sm" onClick={p.onDownload} aria-label="Download YAML" title="Download YAML">
           <Download className="size-4" aria-hidden="true"/>
         </Button>
-        <Button variant="outline" size="sm" onClick={p.onSave} disabled={!p.changed} title={p.changed ? 'Save (Ctrl+S)' : 'Nothing to save'}>
-          <Save className="size-4" aria-hidden="true"/> {p.changed ? 'Save' : 'Saved'}
+        <Button variant="outline" size="sm" onClick={p.onSave} disabled={!p.changed} title={p.changed ? 'Save now (Ctrl+S)' : 'Saved'}>
+          <Save className="size-4" aria-hidden="true"/> {p.changed ? 'Saving…' : 'Saved'}
         </Button>
         {p.running ? (
           <Button size="sm" variant="destructive" onClick={p.onStop} title="Stop the run">

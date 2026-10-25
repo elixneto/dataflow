@@ -24,6 +24,7 @@ import {CATEGORIES, CATEGORY_COLOR, DRAG_MIME, isFlowNode, END, START, BY_TYPE} 
 import {cn} from '#lib/utils';
 import {cleanFlow, toDefinition, type Flow, type FlowNode} from '#data/flows';
 import {getProject, EXAMPLES_PROJECT} from '#data/projects';
+import {onSaveError} from '#data/api';
 import {type AvailableVariable, type EnvelopeData, type RunMode, type WorkflowParameter, type RunRecord, type ComponentRun} from '@dataflow/core';
 import {RunPanel} from '#run/run-panel';
 import {cancelOnRunner, runOnRunner, toExecutable} from '#run/runner';
@@ -56,6 +57,11 @@ const HISTORY_LIMIT = 100;
 const EDIT_WINDOW_MS = 1000;
 const PASTE_OFFSET = 40;
 const VALIDATION_DELAY_MS = 900;
+/** autosave: this long after the last change (a drag saves once, when it stops) */
+const AUTOSAVE_DELAY_MS = 1000;
+
+/** What a save would store, to skip saving when nothing changed (the save time does not count). */
+const fingerprint = (flow: Flow) => JSON.stringify({...toDefinition(flow), updatedAt: undefined});
 /** How close to the pointer tip (flow px) an edge must pass for a dragged component to go into it. */
 const SPLICE_REACH = 16;
 
@@ -216,14 +222,6 @@ function Editor({flow, onSave}: Props) {
     requestAnimationFrame(() => fitView({padding: 0.12, maxZoom: 1}));
   }, [nodesMeasured, fitView]);
 
-  // warns before leaving with unsaved changes
-  useEffect(() => {
-    if (!changed) return;
-    const warn = (e: BeforeUnloadEvent) => e.preventDefault();
-    window.addEventListener('beforeunload', warn);
-    return () => window.removeEventListener('beforeunload', warn);
-  }, [changed]);
-
   const invalid = useMemo(() => new Set(issues.map(p => p.nodeId)), [issues]);
 
   // The red highlight is only visual, but the card's updateNodeData returns the node with the className into the state.
@@ -361,11 +359,55 @@ function Editor({flow, onSave}: Props) {
     [base, name, parameters, getNodes, getEdges],
   );
 
+  const savedFingerprint = useRef(fingerprint(flow));
+  // the editor's own state, not the React Flow store: when leaving, the store may already be empty
+  const latest = useRef({base, name, parameters, nodes, edges});
+  latest.current = {base, name, parameters, nodes, edges};
   const save = useCallback(() => {
-    const saved = onSave(currentFlow());
-    setBase(saved);
+    const current = cleanFlow({...latest.current.base, name: latest.current.name, parameters: latest.current.parameters,
+      nodes: latest.current.nodes, edges: latest.current.edges});
+    const print = fingerprint(current);
     setChanged(false);
-  }, [currentFlow, onSave]);
+    if (print === savedFingerprint.current) return;
+    savedFingerprint.current = print;
+    setBase(onSave(current));
+  }, [onSave]);
+
+  // autosave: every change (undo and redo included) is saved a moment after the last one, as a draft of the version
+  const saveRef = useRef(save);
+  saveRef.current = save;
+  const autosave = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const flush = useCallback(() => {
+    if (!autosave.current) return;
+    clearTimeout(autosave.current);
+    autosave.current = null;
+    saveRef.current();
+  }, []);
+  useEffect(() => {
+    if (autosave.current) clearTimeout(autosave.current);
+    autosave.current = setTimeout(() => {
+      autosave.current = null;
+      saveRef.current();
+    }, AUTOSAVE_DELAY_MS);
+  }, [nodes, edges, name, parameters]);
+  const [saveFailed, setSaveFailed] = useState(false);
+  useEffect(() => onSaveError(error => setSaveFailed(error !== null)), []);
+  // leaving the editor saves what is pending; closing the page saves it too and warns while a save is pending or failed
+  useEffect(() => {
+    const leave = (e: BeforeUnloadEvent) => {
+      const pending = autosave.current !== null;
+      flush();
+      if (pending || saveFailed) e.preventDefault();
+    };
+    const hide = () => document.visibilityState === 'hidden' && flush();
+    window.addEventListener('beforeunload', leave);
+    document.addEventListener('visibilitychange', hide);
+    return () => {
+      window.removeEventListener('beforeunload', leave);
+      document.removeEventListener('visibilitychange', hide);
+    };
+  }, [flush, saveFailed]);
+  useEffect(() => flush, [flush]);
 
   /**
    * Downloads the flow's definition as YAML (unsaved changes included): multi-line code (TypeScript, SQL, conditions)
