@@ -32,6 +32,7 @@ import {mergeLastRuns, runFromWorkflow} from '#run/run-from';
 import {loadValidationRuns, saveValidationRuns} from '#data/validation-runs';
 import {Toolbar, type ValidationResult} from '#editor/toolbar';
 import {HistoryContext} from '#editor/history';
+import {parseComponents, pastedComponents, serializeComponents} from '#editor/clipboard';
 import {CommentNodeMemo, COMMENT_SIZE, type CommentNode} from '#editor/comment-node';
 import {GROUP_COLORS, GroupNodeMemo, GROUP_SIZE, GROUP_Z, type GroupNode} from '#editor/group-node';
 import {ComponentNodeMemo, ERROR_PORT, inputCount, outputCount, outputLabel, type ComponentNode} from '#editor/component-node';
@@ -325,38 +326,40 @@ function Editor({flow, onSave}: Props) {
 
   // ---------- copy / paste ----------
 
-  const clipboard = useRef<{nodes: FlowNode[]; edges: Edge[]; pastes: number} | null>(null);
+  // the same copy pasted again lands a bit further each time (in another flow, the first one keeps the positions)
+  const lastPaste = useRef<{text: string; count: number}>({text: '', count: 0});
 
-  const copy = useCallback(() => {
+  /**
+   * Copy / cut: the selected components (not Start or End) go to the system clipboard as text, so they can be pasted
+   * into another flow. A field being edited, or text selected anywhere, is the browser's: it copies the text.
+   */
+  const copy = useCallback((event: ClipboardEvent) => {
+    if (isEditableField(event.target) || (window.getSelection()?.toString() ?? '') !== '') return false;
     const chosen = getNodes().filter(n => n.selected && !isFixedNode(n));
-    if (chosen.length === 0) return false;
-    const ids = new Set(chosen.map(n => n.id));
-    clipboard.current = {
-      nodes: structuredClone(chosen),
-      edges: structuredClone(getEdges().filter(e => ids.has(e.source) && ids.has(e.target))),
-      pastes: 0,
-    };
+    if (chosen.length === 0 || !event.clipboardData) return false;
+    const text = serializeComponents(flow.id, chosen, getEdges());
+    event.clipboardData.setData('text/plain', text);
+    event.preventDefault();
+    lastPaste.current = {text, count: 0};
     return true;
-  }, [getNodes, getEdges]);
+  }, [getNodes, getEdges, flow.id]);
 
-  const paste = useCallback(() => {
-    const copied = clipboard.current;
-    if (!copied || copied.nodes.length === 0) return;
-    copied.pastes += 1;
-    const offset = PASTE_OFFSET * copied.pastes;
-    const ids = new Map<string, string>();
-    const added = copied.nodes.map(n => {
-      const id = newId(isComponent(n) ? n.data.type : n.type ?? 'node');
-      ids.set(n.id, id);
-      return {...structuredClone(n), id, selected: true, dragging: false, position: {x: n.position.x + offset, y: n.position.y + offset}} as FlowNode;
-    });
-    const addedEdges = copied.edges.map(e => ({
-      ...structuredClone(e), id: newId('edge'), source: ids.get(e.source)!, target: ids.get(e.target)!, selected: false,
-    }));
+  /** Paste: components copied from any flow; any other text is the browser's. */
+  const paste = useCallback((event: ClipboardEvent) => {
+    if (isEditableField(event.target)) return;
+    const text = event.clipboardData?.getData('text/plain') ?? '';
+    const payload = parseComponents(text);
+    if (!payload || payload.nodes.length === 0) return;
+    event.preventDefault();
+    const fromHere = payload.flowId === flow.id;
+    const count = lastPaste.current.text === text ? lastPaste.current.count + 1 : fromHere ? 1 : 0;
+    lastPaste.current = {text, count};
+    const {nodes: added, edges: addedEdges} = pastedComponents(payload, PASTE_OFFSET * count,
+      n => newId(isComponent(n) ? n.data.type : n.type ?? 'node'), () => newId('edge'));
     record();
     setNodes(current => [...current.map(n => ({...n, selected: false})), ...added]);
     setEdges(current => [...current.map(e => ({...e, selected: false})), ...addedEdges]);
-  }, [record, setNodes, setEdges]);
+  }, [record, setNodes, setEdges, flow.id]);
 
   // ---------- save ----------
 
@@ -444,21 +447,8 @@ function Editor({flow, onSave}: Props) {
         return;
       }
       if (isEditableField(event.target)) return;
-      if (keyName === 'c') {
-        if (copy()) event.preventDefault();
-      } else if (keyName === 'x') {
-        if (!copy()) return;
-        event.preventDefault();
-        const ids = new Set(getNodes().filter(n => n.selected && !isFixedNode(n)).map(n => n.id));
-        record();
-        setNodes(current => current.filter(n => !ids.has(n.id)));
-        setEdges(current => current.filter(e => !ids.has(e.source) && !ids.has(e.target)));
-        if (clipboard.current) clipboard.current.pastes = -1;
-      } else if (keyName === 'v') {
-        if (!clipboard.current) return;
-        event.preventDefault();
-        paste();
-      } else if (keyName === 'z' && !event.shiftKey) {
+      // Ctrl+C / X / V are the browser's copy, cut and paste events (below)
+      if (keyName === 'z' && !event.shiftKey) {
         event.preventDefault();
         undo();
       } else if ((keyName === 'z' && event.shiftKey) || keyName === 'y') {
@@ -468,7 +458,28 @@ function Editor({flow, onSave}: Props) {
     }
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [undo, redo, copy, paste, save, getNodes, record, setNodes, setEdges]);
+  }, [undo, redo, save]);
+
+  useEffect(() => {
+    function onCopy(event: ClipboardEvent) {
+      if (!copy(event)) return;
+      if (event.type !== 'cut') return;
+      const ids = new Set(getNodes().filter(n => n.selected && !isFixedNode(n)).map(n => n.id));
+      record();
+      setNodes(current => current.filter(n => !ids.has(n.id)));
+      setEdges(current => current.filter(e => !ids.has(e.source) && !ids.has(e.target)));
+      // the first paste of a cut lands where the components were
+      lastPaste.current = {text: event.clipboardData?.getData('text/plain') ?? '', count: -1};
+    }
+    document.addEventListener('copy', onCopy);
+    document.addEventListener('cut', onCopy);
+    document.addEventListener('paste', paste);
+    return () => {
+      document.removeEventListener('copy', onCopy);
+      document.removeEventListener('cut', onCopy);
+      document.removeEventListener('paste', paste);
+    };
+  }, [copy, paste, getNodes, record, setNodes, setEdges]);
 
   const history = useMemo(() => ({record, recordEdit}), [record, recordEdit]);
 
