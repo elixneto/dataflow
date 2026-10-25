@@ -9,7 +9,7 @@
   "scripts": {
     "check": "node scripts/check-env.mjs",
     "prestart": "node scripts/check-env.mjs",
-    "start": "concurrently -k -n runner,editor -c magenta,cyan \"npm:start:runner\" \"npm:start:editor\"",
+    "start": "node scripts/dev-runner.mjs --with-editor",
     "start:runner": "node scripts/dev-runner.mjs",
     "start:editor": "npm --prefix editor run start",
     "setup": "node scripts/check-env.mjs && npm --prefix editor install && bun install --cwd=runner && bun install --cwd=core && npm install",
@@ -20,7 +20,6 @@
   },
   "devDependencies": {
     "@stylistic/eslint-plugin": "^5.10.0",
-    "concurrently": "^10.0.6",
     "eslint": "^10.13.0",
     "typescript-eslint": "^8.72.0"
   }

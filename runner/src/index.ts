@@ -45,9 +45,14 @@ let stopping: Promise<void> | null = null;
  */
 function stop(reason: string) {
   stopping ??= (async () => {
-    console.log(`Stopping the runner (${reason}): closing the database.`);
     for (const control of inProgress.values()) control.abort();
-    await database.close().catch(error => console.error('Could not close the database:', error));
+    // the database first: whoever reads the log may already be gone (a closed pipe must not stop the close)
+    const closed = await database.close().then(() => null, (error: unknown) => error);
+    try {
+      console.log(`Runner stopped (${reason}): ${closed ? `could not close the database: ${String(closed)}` : 'database closed'}.`);
+    } catch {
+      // nobody reading
+    }
     process.exit(0);
   })();
   return stopping;
@@ -57,7 +62,7 @@ process.on('SIGINT', () => void stop('SIGINT'));
 process.on('SIGTERM', () => void stop('SIGTERM'));
 // the dev watcher (scripts/dev-runner.mjs) asks for the stop through stdin: Windows has no signals between processes
 if (process.env.RUNNER_STOP_ON_STDIN) {
-  process.stdin.on('data', chunk => String(chunk).includes('stop') && void stop('restart'));
+  process.stdin.on('data', chunk => String(chunk).includes('stop') && void stop('stop requested'));
   // the watcher went away (killed): the runner does not stay behind with the database open
   process.stdin.on('end', () => void stop('watcher gone'));
 }
