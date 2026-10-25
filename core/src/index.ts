@@ -16,6 +16,7 @@ export {DEFAULT_CODE, typescriptConfig, typescript} from './components/typescrip
 export {aggregate, aggregateConfig, MAX_BATCH_SIZE} from './components/aggregate';
 export {split, splitList} from './components/split';
 export {distinct, distinctKeys} from './components/distinct';
+export {sort, sortKeys, type SortKey, type SortDirection} from './components/sort';
 export {dataGridConfig, datagrid, cellValue, type DataGridColumn} from './components/datagrid';
 export {routerCases, routerElsePort, router, type RouterCase} from './components/router';
 export {sqlServerConfig, sqlServerUsedParameters, sqlServerReadOnlyIssue, sqlserver, DEFAULT_SQL_SERVER_TIMEOUT_S, type SqlServerParameter} from './components/sqlserver';

@@ -8,6 +8,7 @@ import {lookup} from './lookup';
 import {mapper} from './mapper';
 import {router} from './router';
 import {split} from './split';
+import {sort} from './sort';
 import {sqlserver} from './sqlserver';
 import {typescript} from './typescript';
 import {union} from './union';
@@ -24,6 +25,7 @@ export const COMPONENTS: Record<string, ComponentLogic> = {
   [aggregate.type]: aggregate,
   [split.type]: split,
   [distinct.type]: distinct,
+  [sort.type]: sort,
   [datagrid.type]: datagrid,
   [copy.type]: copy,
   [sqlserver.type]: sqlserver,
