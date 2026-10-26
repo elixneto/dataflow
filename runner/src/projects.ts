@@ -5,7 +5,7 @@ import {Hono} from 'hono';
  * What belongs to each project and lives in the runner while there is no database: secrets and files.
  * Secrets: runner/secrets.local.json (outside git). A text value at the top level applies to every project (shared);
  * a project's own ones live in "projects": {"<projectId>": {"NAME": "value"}} and win over a shared one with the same name.
- * The API never returns a secret value, only the names.
+ * The list returns only the names; a value comes back only when asked for by name (the Secrets tab's show switch).
  * Files: runner/files.local/<projectId>/ (outside git).
  */
 
@@ -54,6 +54,14 @@ projectRoutes.get('/projects/:projectId/secrets', async c => {
     ...ofProject.map(name => ({name, source: 'project'})),
     ...all.filter(name => !ofProject.includes(name)).map(name => ({name, source: 'shared'})),
   ].sort((a, b) => a.name.localeCompare(b.name)));
+});
+
+/** one value, only when the Secrets tab asks to show it (the project's own, else the shared one) */
+projectRoutes.get('/projects/:projectId/secrets/:name', async c => {
+  const {projectId, name} = c.req.param();
+  const value = (await projectSecrets(projectId))[name];
+  if (value === undefined) return c.json({error: 'Secret not found.'}, 404);
+  return c.json({value});
 });
 
 projectRoutes.put('/projects/:projectId/secrets/:name', async c => {

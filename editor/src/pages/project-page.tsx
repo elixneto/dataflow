@@ -1,6 +1,6 @@
-import {useCallback, useEffect, useRef, useState, type FormEvent} from 'react';
+import {useCallback, useEffect, useRef, useState, type FormEvent, type InputHTMLAttributes} from 'react';
 import {Link, useParams, useSearchParams} from 'react-router';
-import {Download, KeyRound, Pencil, RefreshCw, Trash2, Upload} from 'lucide-react';
+import {Download, Eye, EyeOff, KeyRound, Pencil, RefreshCw, Trash2, Upload} from 'lucide-react';
 import type {RunRecord} from '@dataflow/core';
 import {StatusIcon, ms, STATUS_LABEL} from '#run/run-panel';
 import {getProject} from '#data/projects';
@@ -116,9 +116,30 @@ function RunsTab({projectId}: {projectId: string}) {
   );
 }
 
-// ---------- Secrets: only the names; the value goes to the runner and does not come back ----------
+// ---------- Secrets: the list has only the names; a value comes from the runner only when shown ----------
 
 type Secret = {name: string; source: 'project' | 'shared'};
+
+function ShowToggle({shown, onToggle, label}: {shown: boolean; onToggle: () => void; label: string}) {
+  return (
+    <Button type="button" variant="ghost" size="icon-sm" role="switch" aria-checked={shown} onClick={onToggle}
+            aria-label={`${shown ? 'Mask' : 'Show'} ${label}`} title={shown ? 'Mask' : 'Show'}>
+      {shown ? <EyeOff className="size-4"/> : <Eye className="size-4"/>}
+    </Button>
+  );
+}
+
+/** value field masked by default, with a switch to show what was typed */
+function SecretInput({value, onChange, label, ...rest}: {value: string; onChange: (value: string) => void; label: string} & Omit<InputHTMLAttributes<HTMLInputElement>, 'value' | 'onChange'>) {
+  const [shown, setShown] = useState(false);
+  return (
+    <div className="flex flex-1 items-center gap-1">
+      <input {...rest} type={shown ? 'text' : 'password'} value={value} onChange={e => onChange(e.target.value)} autoComplete="new-password" spellCheck={false}
+             aria-label={label} className={cn(fieldInput, 'min-w-0 flex-1 font-mono')}/>
+      <ShowToggle shown={shown} onToggle={() => setShown(!shown)} label={label}/>
+    </div>
+  );
+}
 
 function SecretsTab({projectId}: {projectId: string}) {
   const [list, setList] = useState<Secret[] | null>(null);
@@ -127,10 +148,27 @@ function SecretsTab({projectId}: {projectId: string}) {
   const [value, setValue] = useState('');
   const [editing, setEditing] = useState<string | null>(null);
   const [newValue, setNewValue] = useState('');
+  /** values the user chose to show, by name (masked again on a reload) */
+  const [revealed, setRevealed] = useState<Record<string, string>>({});
   const base = `/projects/${encodeURIComponent(projectId)}/secrets`;
   const load = useCallback(() => {
+    setRevealed({});
     request<Secret[]>(base).then(setList).catch(e => setError(e.message));
   }, [base]);
+
+  async function toggleShown(s: Secret) {
+    if (s.name in revealed) {
+      setRevealed(r => Object.fromEntries(Object.entries(r).filter(([name]) => name !== s.name)));
+      return;
+    }
+    setError(null);
+    try {
+      const {value} = await request<{value: string}>(`${base}/${encodeURIComponent(s.name)}`);
+      setRevealed(r => ({...r, [s.name]: value}));
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  }
   useEffect(load, [load]);
 
   async function save(e: FormEvent) {
@@ -146,7 +184,7 @@ function SecretsTab({projectId}: {projectId: string}) {
     }
   }
 
-  /** a new value for an existing secret: the current one is never shown; on a shared one it becomes this project's own */
+  /** a new value for an existing secret; on a shared one it becomes this project's own */
   async function replace(e: FormEvent) {
     e.preventDefault();
     if (!editing || !newValue) return;
@@ -183,10 +221,10 @@ function SecretsTab({projectId}: {projectId: string}) {
           <span className="text-sm text-muted-foreground">Name</span>
           <input value={name} onChange={e => setName(e.target.value)} placeholder="MY_SQL_DATABASE" spellCheck={false} className={cn(fieldInput, 'font-mono')}/>
         </label>
-        <label className="flex flex-[2] flex-col gap-1">
-          <span className="text-sm text-muted-foreground">Value</span>
-          <input type="password" value={value} onChange={e => setValue(e.target.value)} autoComplete="new-password" className={cn(fieldInput, 'font-mono')}/>
-        </label>
+        <div className="flex flex-[2] flex-col gap-1">
+          <span className="text-sm text-muted-foreground" aria-hidden="true">Value</span>
+          <SecretInput value={value} onChange={setValue} label="Value"/>
+        </div>
         <Button type="submit" size="sm" disabled={!name.trim() || !value}>Save</Button>
       </form>
       <ErrorMessage message={error}/>
@@ -199,15 +237,17 @@ function SecretsTab({projectId}: {projectId: string}) {
               <span className="font-mono">{s.name}</span>
               {editing === s.name ? (
                 <form onSubmit={replace} className="flex flex-1 items-center gap-2">
-                  <input type="password" value={newValue} onChange={e => setNewValue(e.target.value)} autoComplete="new-password" autoFocus
-                         placeholder="New value" aria-label={`New value of ${s.name}`}
-                         onKeyDown={e => e.key === 'Escape' && setEditing(null)} className={cn(fieldInput, 'flex-1 font-mono')}/>
+                  <SecretInput value={newValue} onChange={setNewValue} label={`New value of ${s.name}`} placeholder="New value" autoFocus
+                               onKeyDown={e => e.key === 'Escape' && setEditing(null)}/>
                   <Button type="submit" size="sm" disabled={!newValue}>Save</Button>
                   <Button type="button" variant="ghost" size="sm" onClick={() => setEditing(null)}>Cancel</Button>
                 </form>
               ) : (
                 <>
-                  <span className="font-mono text-muted-foreground">••••••••</span>
+                  {s.name in revealed
+                    ? <span className="min-w-0 truncate select-all font-mono" title={revealed[s.name]}>{revealed[s.name]}</span>
+                    : <span className="font-mono text-muted-foreground">••••••••</span>}
+                  <ShowToggle shown={s.name in revealed} onToggle={() => toggleShown(s)} label={s.name}/>
                   <span className={cn('rounded-full px-2 py-0.5 text-sm', s.source === 'project' ? 'bg-primary/15 text-primary' : 'bg-muted text-muted-foreground')}
                         title={s.source === 'shared' ? 'Applies to every project (top level of secrets.local.json)' : undefined}>
                     {s.source === 'project' ? 'this project' : 'shared'}

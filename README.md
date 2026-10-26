@@ -93,7 +93,7 @@ The first time the editor opens, whatever this browser had saved before the data
 
 ### Secrets and files
 
-Each project has the **Secrets** and **Files** tabs. Secrets live in `runner/secrets.local.json` and files in `runner/files.local/`, both outside git. The screen saves the secret through the runner and never reads the value back. In the components, use `$SECRETS.NAME`.
+Each project has the **Secrets** and **Files** tabs. Secrets live in `runner/secrets.local.json` and files in `runner/files.local/`, both outside git. The screen saves or replaces a secret through the runner; values stay masked, and the eye switch on a row shows that one value. In the components, use `$SECRETS.NAME`.
 
 A secret shared by every project can go directly at the top of the file:
 

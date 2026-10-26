@@ -35,7 +35,7 @@ Overview, concepts and how to run: [README.md](README.md). Engine architecture: 
 
 ## Secrets (`$SECRETS`) and files
 
-For now they live in the runner, outside git: `runner/secrets.local.json` (text at the top level = shared by every project; a project's own in `"projects": {"<id>": {"NAME": "value"}}`, read on each run) and `runner/files.local/<projectId>/`. The project's Secrets tab writes to the file through the runner and never reads the values back. They are available as `$SECRETS` in expressions, in the TypeScript component and in the SQL Server Query connection.
+For now they live in the runner, outside git: `runner/secrets.local.json` (text at the top level = shared by every project; a project's own in `"projects": {"<id>": {"NAME": "value"}}`, read on each run) and `runner/files.local/<projectId>/`. The project's Secrets tab writes to the file through the runner (adding or replacing a value); its list has only the names, and a value is read back one at a time, only when its show switch is turned on. They are available as `$SECRETS` in expressions, in the TypeScript component and in the SQL Server Query connection.
 
 ## Conventions
 
