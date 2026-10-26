@@ -84,7 +84,7 @@ export const MONGODB_DELETE: ComponentDef = {
   type: mongodbDelete.type,
   label: 'MongoDB Delete',
   description: 'Deletes the documents that match a filter',
-  category: 'entity',
+  category: 'database',
   icon: Trash2,
   inputs: mongodbDelete.inputs,
   outputs: mongodbDelete.outputs,

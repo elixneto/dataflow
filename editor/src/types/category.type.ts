@@ -1,1 +1,1 @@
-export type Category = 'source' | 'transformation' | 'code' | 'entity' | 'flow';
+export type Category = 'database' | 'api' | 'transformation' | 'code' | 'flow';

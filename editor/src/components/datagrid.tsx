@@ -170,7 +170,7 @@ export const DATA_GRID: ComponentDef = {
   type: datagrid.type,
   label: 'Data Grid',
   description: 'A typed table that emits one envelope per row',
-  category: 'source',
+  category: 'transformation',
   icon: Table,
   inputs: datagrid.inputs,
   outputs: datagrid.outputs,

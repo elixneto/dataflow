@@ -23,22 +23,26 @@ import type {Category} from '#types/category.type';
 import type {ComponentDef} from '#types/component-def.type';
 
 export const CATEGORIES: Record<Category, {label: string; textColor: string; bgColor: string; borderColor: string}> = {
-  source: {label: 'Data Sources', textColor: 'text-file', bgColor: 'bg-file/15', borderColor: 'border-file'},
+  database: {label: 'Databases', textColor: 'text-file', bgColor: 'bg-file/15', borderColor: 'border-file'},
+  api: {label: 'APIs', textColor: 'text-entity', bgColor: 'bg-entity/15', borderColor: 'border-entity'},
   transformation: {label: 'Transformation', textColor: 'text-transform', bgColor: 'bg-transform/15', borderColor: 'border-transform'},
   code: {label: 'Scripting', textColor: 'text-code', bgColor: 'bg-code/15', borderColor: 'border-code'},
-  entity: {label: 'Destinations', textColor: 'text-entity', bgColor: 'bg-entity/15', borderColor: 'border-entity'},
   flow: {label: 'Flow', textColor: 'text-flow', bgColor: 'bg-flow/15', borderColor: 'border-flow'},
 };
 
-/** Order of the categories wherever they are listed (the palette, its search): within each one, by component label. */
-export const CATEGORY_ORDER: Category[] = ['source', 'entity', 'code', 'transformation', 'flow'];
+/**
+ * Order of the categories wherever they are listed (the palette, its search): within each one, by component label.
+ * Grouped by the system a component talks to, not by direction: the same component can read or write depending on its
+ * config (whether it writes is `writesOutside`, from the core).
+ */
+export const CATEGORY_ORDER: Category[] = ['database', 'api', 'code', 'transformation', 'flow'];
 
 /** CSS variable with the category color (the theme variables still use the v0 names). */
 export const CATEGORY_COLOR: Record<Category, string> = {
-  source: 'var(--file)',
+  database: 'var(--file)',
+  api: 'var(--entity)',
   transformation: 'var(--transform)',
   code: 'var(--code)',
-  entity: 'var(--entity)',
   flow: 'var(--flow)',
 };
 

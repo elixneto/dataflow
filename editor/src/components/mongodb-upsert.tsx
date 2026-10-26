@@ -124,7 +124,7 @@ export const MONGODB_UPSERT: ComponentDef = {
   type: mongodbUpsert.type,
   label: 'MongoDB Upsert',
   description: 'Writes each envelope into a collection',
-  category: 'entity',
+  category: 'database',
   icon: Leaf,
   inputs: mongodbUpsert.inputs,
   outputs: mongodbUpsert.outputs,

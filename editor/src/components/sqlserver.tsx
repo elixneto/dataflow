@@ -120,7 +120,7 @@ export const SQL_SERVER: ComponentDef = {
   type: sqlserver.type,
   label: 'SQL Server Query',
   description: 'Reads rows from SQL Server (read only)',
-  category: 'source',
+  category: 'database',
   icon: Database,
   inputs: sqlserver.inputs,
   outputs: sqlserver.outputs,

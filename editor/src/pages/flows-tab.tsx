@@ -1,7 +1,8 @@
 import {useState, type DragEvent, type FormEvent, type ReactNode} from 'react';
 import {Link, useNavigate, useSearchParams} from 'react-router';
 import {ChevronDown, ChevronRight, Copy, Folder, FolderInput, FolderOpen, FolderPlus, GitFork, LayoutGrid, ListTree, Pencil, Plus, Trash2, Workflow, X} from 'lucide-react';
-import {CATEGORIES, isFlowNode, BY_TYPE} from '#components/catalog';
+import {COMPONENTS, writesOutside} from '@dataflow/core';
+import {isFlowNode, BY_TYPE} from '#components/catalog';
 import {isComponent} from '#editor/validation';
 import {isInside, duplicateFlow, deleteFlow, projectFlows, moveFlow, renameFlowsFolder, type Flow} from '#data/flows';
 import {createFolder, getProject, replaceFolders} from '#data/projects';
@@ -14,7 +15,7 @@ import {DependencyGraph} from '#pages/dependency-graph';
 function entitiesOf(flow: Flow) {
   const names = flow.nodes
     .filter(isComponent)
-    .filter(n => BY_TYPE[n.data.type]?.category === 'entity')
+    .filter(n => writesOutside(COMPONENTS[n.data.type], n.data.config))
     .map(n => BY_TYPE[n.data.type].label.replace('Create ', ''));
   return [...new Set(names)];
 }
@@ -141,7 +142,6 @@ export function FlowsTab({projectId}: {projectId: string}) {
     reload();
   }
 
-  const entityColor = CATEGORIES.entity;
   const breadcrumb = current ? current.split('/') : [];
 
   return (
@@ -233,7 +233,7 @@ export function FlowsTab({projectId}: {projectId: string}) {
               </div>
               <div className="flex flex-wrap gap-1.5">
                 {entitiesOf(f).map(e => (
-                  <span key={e} className={cn('rounded-md px-2 py-0.5 text-sm', entityColor.bgColor, entityColor.textColor)}>{e}</span>
+                  <span key={e} className={'rounded-md bg-entity/15 px-2 py-0.5 text-sm text-entity'}>{e}</span>
                 ))}
                 {entitiesOf(f).length === 0 && <span className="text-sm text-muted-foreground">No target yet</span>}
               </div>

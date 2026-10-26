@@ -126,7 +126,7 @@ export const HTTP_REQUEST: ComponentDef = {
   type: httpRequest.type,
   label: 'HTTP Request',
   description: 'Sends one HTTP request per envelope',
-  category: 'entity',
+  category: 'api',
   icon: Globe,
   inputs: httpRequest.inputs,
   outputs: httpRequest.outputs,

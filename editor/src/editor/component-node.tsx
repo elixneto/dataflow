@@ -12,7 +12,7 @@ import {
 import {Minus, Pin, Play, Plus, Power, StickyNote, TriangleAlert} from 'lucide-react';
 import {CATEGORIES, CATEGORY_COLOR, isFlowNode, END, START, BY_TYPE} from '#components/catalog';
 import type {Config} from '#types/config.type';
-import type {EnvelopeData, ErrorPolicy} from '@dataflow/core';
+import {COMPONENTS, writesOutside, type EnvelopeData, type ErrorPolicy} from '@dataflow/core';
 import {cn} from '#lib/utils';
 import {useHistory} from '#editor/history';
 import {useParameters} from '#editor/parameters-context';
@@ -249,6 +249,9 @@ function ComponentNodeView({id, data, selected}: NodeProps<ComponentNode>) {
       <header className="flex items-center gap-2 py-2.5 pl-5 pr-3">
         <Icon className={cn('size-3.5 shrink-0', cat.textColor)} aria-hidden="true"/>
         <span className={cn('min-w-0 flex-1 truncate text-sm font-semibold', data.disabled && 'line-through')}>{data.label}</span>
+        {writesOutside(COMPONENTS[data.type], data.config) && (
+          <span title="Writes outside the flow: in a test run it sends nothing" className="shrink-0 rounded bg-entity/15 px-1.5 font-mono text-sm text-entity">writes</span>
+        )}
         {warnings?.length ? (
           <span title={[...new Set(warnings)].join('\n')} className="flex shrink-0 text-destructive" aria-label="Has errors">
             <TriangleAlert className="size-4" aria-hidden="true"/>

@@ -121,7 +121,7 @@ export const MONGODB_PIPELINE: ComponentDef = {
   type: mongodbPipeline.type,
   label: 'MongoDB Pipeline',
   description: 'Reads documents with an aggregation pipeline',
-  category: 'source',
+  category: 'database',
   icon: Leaf,
   inputs: mongodbPipeline.inputs,
   outputs: mongodbPipeline.outputs,
