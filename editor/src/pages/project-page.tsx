@@ -1,6 +1,6 @@
 import {useCallback, useEffect, useRef, useState, type FormEvent} from 'react';
 import {Link, useParams, useSearchParams} from 'react-router';
-import {Download, KeyRound, RefreshCw, Trash2, Upload} from 'lucide-react';
+import {Download, KeyRound, Pencil, RefreshCw, Trash2, Upload} from 'lucide-react';
 import type {RunRecord} from '@dataflow/core';
 import {StatusIcon, ms, STATUS_LABEL} from '#run/run-panel';
 import {getProject} from '#data/projects';
@@ -125,6 +125,8 @@ function SecretsTab({projectId}: {projectId: string}) {
   const [error, setError] = useState<string | null>(null);
   const [name, setName] = useState('');
   const [value, setValue] = useState('');
+  const [editing, setEditing] = useState<string | null>(null);
+  const [newValue, setNewValue] = useState('');
   const base = `/projects/${encodeURIComponent(projectId)}/secrets`;
   const load = useCallback(() => {
     request<Secret[]>(base).then(setList).catch(e => setError(e.message));
@@ -142,6 +144,26 @@ function SecretsTab({projectId}: {projectId: string}) {
     } catch (e) {
       setError((e as Error).message);
     }
+  }
+
+  /** a new value for an existing secret: the current one is never shown; on a shared one it becomes this project's own */
+  async function replace(e: FormEvent) {
+    e.preventDefault();
+    if (!editing || !newValue) return;
+    setError(null);
+    try {
+      await request(`${base}/${encodeURIComponent(editing)}`, {method: 'PUT', headers: {'content-type': 'application/json'}, body: JSON.stringify({value: newValue})});
+      setEditing(null);
+      setNewValue('');
+      load();
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  }
+
+  function startEditing(s: Secret) {
+    setEditing(s.name);
+    setNewValue('');
   }
 
   async function remove(s: Secret) {
@@ -175,13 +197,27 @@ function SecretsTab({projectId}: {projectId: string}) {
             <li key={s.name} className="flex items-center gap-3 border-b border-border px-4 py-2.5 text-sm last:border-b-0">
               <KeyRound className="size-4 text-muted-foreground" aria-hidden="true"/>
               <span className="font-mono">{s.name}</span>
-              <span className="font-mono text-muted-foreground">••••••••</span>
-              <span className={cn('rounded-full px-2 py-0.5 text-sm', s.source === 'project' ? 'bg-primary/15 text-primary' : 'bg-muted text-muted-foreground')}
-                    title={s.source === 'shared' ? 'Applies to every project (top level of secrets.local.json)' : undefined}>
-                {s.source === 'project' ? 'this project' : 'shared'}
-              </span>
-              {s.source === 'project' && (
-                <Button variant="ghost" size="icon-sm" className="ml-auto" onClick={() => remove(s)} aria-label={`Delete ${s.name}`}><Trash2 className="size-4"/></Button>
+              {editing === s.name ? (
+                <form onSubmit={replace} className="flex flex-1 items-center gap-2">
+                  <input type="password" value={newValue} onChange={e => setNewValue(e.target.value)} autoComplete="new-password" autoFocus
+                         placeholder="New value" aria-label={`New value of ${s.name}`}
+                         onKeyDown={e => e.key === 'Escape' && setEditing(null)} className={cn(fieldInput, 'flex-1 font-mono')}/>
+                  <Button type="submit" size="sm" disabled={!newValue}>Save</Button>
+                  <Button type="button" variant="ghost" size="sm" onClick={() => setEditing(null)}>Cancel</Button>
+                </form>
+              ) : (
+                <>
+                  <span className="font-mono text-muted-foreground">••••••••</span>
+                  <span className={cn('rounded-full px-2 py-0.5 text-sm', s.source === 'project' ? 'bg-primary/15 text-primary' : 'bg-muted text-muted-foreground')}
+                        title={s.source === 'shared' ? 'Applies to every project (top level of secrets.local.json)' : undefined}>
+                    {s.source === 'project' ? 'this project' : 'shared'}
+                  </span>
+                  <Button variant="ghost" size="icon-sm" className="ml-auto" onClick={() => startEditing(s)} aria-label={`Change the value of ${s.name}`}
+                          title={s.source === 'shared' ? 'Set a value for this project' : 'Change value'}><Pencil className="size-4"/></Button>
+                  {s.source === 'project' && (
+                    <Button variant="ghost" size="icon-sm" onClick={() => remove(s)} aria-label={`Delete ${s.name}`} title="Delete"><Trash2 className="size-4"/></Button>
+                  )}
+                </>
               )}
             </li>
           ))}
