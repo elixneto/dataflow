@@ -25,19 +25,12 @@ function SplitPanel({id, nodeId, config, setConfig}: FieldsProps) {
 function SplitDocs() {
   return (
     <>
-      <p>The opposite of Aggregate: takes a list from each envelope and yields one envelope per item, with the item as the whole <code>DATA</code>.</p>
-      <pre>{`{items: [{id: 1, ...}, {id: 2, ...}]}  →  {id: 1, ...}, {id: 2, ...}`}</pre>
-      <h4>Input</h4>
-      <p>1 envelope port.</p>
-      <h4>Output</h4>
-      <p>1 envelope per item of the list, in order. An empty list yields nothing. The other fields of the incoming envelope are not carried over: to keep one, put it inside each item first (e.g. a TypeScript or a Mapper before).</p>
-      <h4>List</h4>
-      <p>A JS expression that must give a list of objects. <code>$PARAMETERS</code>, <code>$WORKFLOW_CURRENT_RUN</code> and each envelope field (<code>$field</code>) are available.</p>
-      <p>E.g.: <code>$items</code> (what an Aggregate produces), <code>$order.lines</code>, <code>{'$rows.filter(r => r.active)'}</code>.</p>
-      <h4>Disabled</h4>
-      <p>The envelopes pass through without being split.</p>
-      <h4>Errors</h4>
-      <p>A value that is not a list, or a list with an item that is not an object, is an error of the envelope and follows the card's "On error" policy.</p>
+      <p>Takes a list from each envelope and yields one envelope per item: the opposite of Aggregate.</p>
+      <ul>
+        <li>List: an expression that gives a list of objects, e.g. <code>$items</code>, <code>$response.body.data</code>.</li>
+        <li>Each item becomes the whole <code>DATA</code>: the other fields are not carried over.</li>
+        <li>Not a list (or an item that is not an object): an error of the envelope.</li>
+      </ul>
     </>
   );
 }

@@ -99,25 +99,14 @@ function HttpPanel({id, nodeId, config, setConfig}: FieldsProps) {
 function HttpDocs() {
   return (
     <>
-      <p>Sends one HTTP request per envelope and puts the answer on it. E.g.: reading or creating records in a REST API.</p>
-      <h4>Input</h4>
-      <p>1 envelope port. The URL, the query params, the headers and the body are evaluated on each envelope (text or an expression with <code>=</code>): <code>$field</code>, <code>$PARAMETERS</code>, <code>$SECRETS</code>, <code>$WORKFLOW_CURRENT_RUN</code>.</p>
-      <h4>URL, query params and headers</h4>
-      <p>The URL starts with <code>http://</code> or <code>https://</code>; it can come from a secret, e.g. <code>$SECRETS.API_URL + &quot;/companies&quot;</code>. Query params are encoded and added to it. A token goes in a header, e.g. <code>Authorization</code> = <code>{"'Bearer ' + $SECRETS.API_TOKEN"}</code>.</p>
-      <h4>Body</h4>
-      <p>For POST, PUT, PATCH and DELETE. An object (e.g. <code>{'({groupId: $PARAMETERS.groupId, name: $name})'}</code>) goes as JSON, with <code>content-type: application/json</code> unless a header says otherwise; text goes as is. A GET sends no body.</p>
-      <pre>{`GET  $SECRETS.API_URL + "/groups/" + $PARAMETERS.groupId + "/companies"
-POST $SECRETS.API_URL + "/sectors"   body ({groupId: $PARAMETERS.groupId, name: $name})`}</pre>
-      <h4>Output</h4>
-      <p>The incoming envelope plus <code>$response</code> (the name can be changed): <code>{'{status, headers, body}'}</code>. The header names are in lower case; a JSON answer comes parsed, anything else as text. Override on: only <code>$response</code>.</p>
-      <h4>Fail on non-2xx</h4>
-      <p>On (default), a status outside 200–299 is an error of the envelope, with the status and the start of the answer, and follows the card&apos;s &quot;On error&quot; policy. Off, it goes on to the output like any other answer, so a Router can look at <code>$response.status</code>.</p>
-      <h4>Test run and Run for real</h4>
-      <p>A GET only reads, so it is sent in the editor&apos;s <b>Run</b> too. POST, PUT, PATCH and DELETE write: <b>Run</b> does not send them, it logs what it would send, and the envelope goes on with <code></code> = <code>{'{notSent: true}'}</code>, so the rest of the flow is tested too. <b>Run for real</b> sends them. A pinned output is replayed in test runs, so what comes after can be tested with a real answer.</p>
-      <h4>Timeout and concurrency</h4>
-      <p>A request with no answer in the timeout (default {DEFAULT_HTTP_TIMEOUT_S} s) is an error of its envelope, as is a network failure. Concurrency (1 to {MAX_HTTP_CONCURRENCY}) is how many requests are in flight at once; the envelopes still go out in the order they came in.</p>
-      <h4>Logs</h4>
-      <p>Each request at debug level (method, URL, status, time) and a summary at the end: how many 2xx, 4xx, 5xx and errors. The values of secrets are shown as <code>***</code>, and the values of the headers are never logged.</p>
+      <p>One HTTP request per envelope; the answer goes into <code>$response</code>: <code>{'{status, headers, body}'}</code>.</p>
+      <ul>
+        <li>URL, query params, headers and body can be expressions; a token comes from a secret: <code>{"'Bearer ' + $SECRETS.API_TOKEN"}</code>.</li>
+        <li>An object body goes as JSON; a JSON answer comes parsed.</li>
+        <li><b>Fail on non-2xx</b> (on by default): an error status is an error of the envelope.</li>
+        <li>Test run: a GET is sent; POST, PUT, PATCH and DELETE are not (<code>{'{notSent: true}'}</code>). Run for real sends them.</li>
+        <li>Up to {MAX_HTTP_CONCURRENCY} requests at once, output in arrival order. Secrets show as <code>***</code> in the logs.</li>
+      </ul>
     </>
   );
 }

@@ -81,7 +81,7 @@ export function PropertiesPanel({node, receivesRows, onLabel, onData, onConfig}:
                       placeholder="Notes"
                       className="min-h-24 w-full resize-y rounded-md border border-input bg-background px-3 py-2 text-sm leading-relaxed outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30"/>
           </div>
-          <div className="flex flex-col gap-2 border-t border-border pt-4 text-sm leading-relaxed text-muted-foreground [&_code]:font-mono [&_code]:text-foreground [&_h4]:mt-2 [&_h4]:text-xs [&_h4]:font-medium [&_h4]:uppercase [&_h4]:tracking-wider">
+          <div className="flex flex-col gap-2 border-t border-border pt-4 text-sm leading-relaxed text-muted-foreground [&_code]:font-mono [&_code]:text-foreground [&_ul]:flex [&_ul]:list-disc [&_ul]:flex-col [&_ul]:gap-1.5 [&_ul]:pl-4 [&_h4]:mt-2 [&_h4]:text-xs [&_h4]:font-medium [&_h4]:uppercase [&_h4]:tracking-wider">
             {Docs ? <Docs/> : <p>{def.description}</p>}
           </div>
         </div>

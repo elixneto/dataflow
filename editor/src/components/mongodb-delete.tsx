@@ -59,23 +59,14 @@ function MongoDeletePanel({id, nodeId, config, setConfig}: FieldsProps) {
 function MongoDeleteDocs() {
   return (
     <>
-      <p>Deletes the documents of a MongoDB collection that match a filter. E.g.: cleaning a staging collection before importing again.</p>
-      <h4>Input</h4>
-      <p>1 envelope port. Each envelope runs one <code>deleteMany(filter)</code>, with the filter evaluated on it. To delete only once, put it after the Start (one envelope) or after an Aggregate that gathers everything.</p>
-      <h4>Filter</h4>
-      <p>Written as Compass or mongosh show it, and evaluated on the envelope like the MongoDB Pipeline: <code>$PARAMETERS</code>, <code>$WORKFLOW_CURRENT_RUN</code>, each field (<code>$field</code>) and the helpers <code>ObjectId(&quot;…&quot;)</code>, <code>ISODate(&quot;…&quot;)</code>, <code>new Date(…)</code>.</p>
-      <pre>{`{ empresaIdInfofisio: $PARAMETERS.empresaId }
-{ status: "pendente", criadoEm: { $lt: ISODate("2026-01-01") } }`}</pre>
-      <h4>Delete all</h4>
-      <p>An empty filter (<code>{'{}'}</code>) deletes the whole collection, so it is refused, when the flow is checked and when it runs, unless <b>Delete all</b> is on.</p>
-      <h4>Output</h4>
-      <p>The incoming envelope plus <code>$mongodb</code> (the name can be changed): <code>{'{deleted}'}</code>, how many documents were deleted. Override on: only <code>$mongodb</code>.</p>
-      <h4>Test run and Run for real</h4>
-      <p>It writes to the database, so the editor&apos;s <b>Run</b> deletes nothing: it counts the documents the filter matches and writes it in the log (&quot;12 document(s) match the filter …; none deleted&quot;), and the envelope goes on with <code></code> = <code>{'{notSent: true, matched}'}</code>, so the rest of the flow is tested too. <b>Run for real</b> deletes.</p>
-      <h4>Connection</h4>
-      <p>The name of a secret (<code>$SECRETS</code>) holding the connection string. It is never stored in the flow or in the logs.</p>
-      <h4>Errors</h4>
-      <p>A filter that does not evaluate, is not an object, comes out empty without Delete all, or fails on the server is an error of the envelope and follows the card&apos;s &quot;On error&quot; policy.</p>
+      <p>Deletes the documents of a collection that match a filter (<code>deleteMany</code>), once per envelope.</p>
+      <ul>
+        <li>Filter as Compass shows it, with expressions: <code>{'{ sku: $sku }'}</code>, <code>ISODate(…)</code>, <code>ObjectId(…)</code>.</li>
+        <li>An empty filter (<code>{'{}'}</code>) is refused unless <b>Delete all</b> is on.</li>
+        <li>Output: <code>{'$mongodb: {deleted}'}</code>.</li>
+        <li>Test run: deletes nothing, only counts the matches. Run for real deletes.</li>
+        <li>Connection: the name of a secret, never stored in the flow or the logs.</li>
+      </ul>
     </>
   );
 }

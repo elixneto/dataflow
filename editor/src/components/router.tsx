@@ -84,18 +84,11 @@ function RouterPanel({nodeId: id, config, setConfig}: FieldsProps) {
 function RouterDocs() {
   return (
     <>
-      <p>Sends each envelope to the output of the first case whose condition is true, in list order. Does not touch <code>DATA</code>.</p>
-      <h4>Input</h4>
-      <p>1 envelope port.</p>
-      <h4>Outputs</h4>
-      <p>One per case, in list order, with the case name next to the port, and <code>else</code> last, for the envelope where no case was true. The case outputs must be connected; <code>else</code> may stay unconnected, and what goes out through it is dropped.</p>
-      <h4>Condition</h4>
-      <p>A JS expression, as in the Filter: <code>$PARAMETERS</code>, <code>$WORKFLOW_CURRENT_RUN</code> and each envelope field are available. E.g.: <code>{'$state === "CA"'}</code>, <code>{'["WA", "OR", "CA"].includes($state)'}</code>.</p>
-      <p>An envelope goes out through a single output: if two cases are true, the top one wins.</p>
-      <h4>Disabled</h4>
-      <p>Every envelope goes out through the first output.</p>
-      <h4>Errors</h4>
-      <p>A condition that fails is an error of the envelope and follows the card's "On error" policy.</p>
+      <p>Sends each envelope to the first case whose condition is true; <code>else</code> takes the rest.</p>
+      <ul>
+        <li>Conditions are JS expressions, checked top to bottom: <code>{'$state === "CA"'}</code>.</li>
+        <li>One output per envelope. Case outputs must be connected; <code>else</code> may stay unconnected.</li>
+      </ul>
     </>
   );
 }

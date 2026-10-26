@@ -97,25 +97,14 @@ function MongoUpsertPanel({id, nodeId, config, setConfig}: FieldsProps) {
 function MongoUpsertDocs() {
   return (
     <>
-      <p>Writes each envelope into a MongoDB collection: updates the document that matches the filter or, when none matches, inserts it (an upsert). E.g.: keeping a customers collection in sync with an ERP.</p>
-      <h4>Input</h4>
-      <p>1 envelope port. Each envelope becomes one <code>updateOne(filter, {'{$set: document}'}, {'{upsert: true}'})</code>.</p>
-      <h4>Filter</h4>
-      <p>The fields that find the document, each with a value (text or an expression on the envelope), e.g. <code>email</code> = <code>$email</code>, or <code>_id</code> = <code>$id</code>. When nothing matches, the inserted document gets these fields too. A value that comes out <code>undefined</code> is an error of that envelope (it would match the wrong document).</p>
-      <h4>Document</h4>
-      <p><b>Whole DATA</b> (default): every field of the envelope goes in the <code>$set</code>. <b>Expression</b>: an object built from the envelope, e.g. <code>{'({name: $name, email: $email})'}</code>. <code>_id</code> never goes in the <code>$set</code>: MongoDB does not change it, and an insert takes it from the filter (or generates one).</p>
-      <h4>Dates</h4>
-      <p>A value that is a date (a <code>Date</code>: a date column of the SQL Server Query, a date of the MongoDB Pipeline, <code>new Date(…)</code> in the document expression) is written as a MongoDB date, at any depth. Text stays text, even when it looks like a date: what decides is the type of the value, not its format.</p>
-      <h4>Output</h4>
-      <p>The incoming envelope plus <code>$mongodb</code> (the name can be changed): <code>{'{matched, upsertedId}'}</code>. <code>upsertedId</code> is the id of an inserted document, as text, or <code>null</code> when it found one (<code>matched: 1</code>). Whether that one changed is known per batch, in the log; with a batch size of 1 the output also has <code>modified</code>. Override on: only <code>$mongodb</code>.</p>
-      <h4>Test run and Run for real</h4>
-      <p>This component writes outside the flow, so the editor&apos;s <b>Run</b> (a test run) does not write: it logs the first upserts it would send, and each envelope goes on with <code></code> = <code>{'{notSent: true}'}</code>, so the rest of the flow (and the End of a called flow) is tested too. <b>Run for real</b> (next to Run, with a confirmation listing what will write) writes. A pinned output is replayed in test runs as usual, so what comes after it can be tested with a real answer.</p>
-      <h4>Connection</h4>
-      <p>The name of a secret (<code>$SECRETS</code>) holding the connection string, e.g. <code>mongodb+srv://user:password@cluster.example.net</code>. It is never stored in the flow or in the logs. Ideally the user can only write to this collection.</p>
-      <h4>Batch size</h4>
-      <p>How many envelopes are sent together (default {DEFAULT_MONGODB_BATCH_SIZE}): each batch is one write to MongoDB (a <code>bulkWrite</code>), so its documents land together; a batch of 1 is an <code>updateOne</code>. Each envelope still gets its own answer, and one that fails does not stop the others. Envelopes with the same filter (e.g. the same <code>_id</code> twice) are written one after the other, in the order they arrived, so the last one wins. The log counts, per batch and in all, the documents <b>inserted</b>, <b>modified</b> and <b>unchanged</b> (it found the document and it already had those values).</p>
-      <h4>Errors</h4>
-      <p>A document that fails (e.g. a duplicate key in a unique index) is an error of its envelope and follows the card&apos;s &quot;On error&quot; policy; the others of the batch are written. A connection or login failure fails every envelope of the batch.</p>
+      <p>Updates the document that matches the filter or, if none does, inserts it (an upsert), one per envelope.</p>
+      <ul>
+        <li>Filter: field = value pairs, e.g. <code>email</code> = <code>$email</code>.</li>
+        <li>Document: the whole <code>DATA</code> or an expression; <code>_id</code> never goes in the <code>$set</code>.</li>
+        <li>Written in batches (default {DEFAULT_MONGODB_BATCH_SIZE}); output <code>{'$mongodb: {matched, upsertedId}'}</code>.</li>
+        <li>Test run: writes nothing (<code>{'{notSent: true}'}</code>). Run for real writes.</li>
+        <li>Connection: the name of a secret, never stored in the flow or the logs.</li>
+      </ul>
     </>
   );
 }

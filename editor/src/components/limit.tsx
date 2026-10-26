@@ -42,15 +42,12 @@ function LimitPanel({id, config, setConfig}: FieldsProps) {
 function LimitDocs() {
   return (
     <>
-      <p>Lets only N envelopes through and drops the rest. Does not touch <code>DATA</code>. Handy to test a flow on a sample.</p>
-      <h4>Input</h4>
-      <p>1 envelope port.</p>
-      <h4>Output</h4>
-      <p><b>Top</b>: the first N envelopes, as soon as they arrive. The rest of the input is still read (and dropped), so the components before it run to the end.</p>
-      <p><b>Bottom</b>: the last N envelopes, in arrival order, only when the input ends. It holds the last N in memory meanwhile.</p>
-      <p>With fewer than N envelopes, all of them pass.</p>
-      <h4>Disabled</h4>
-      <p>Every envelope passes.</p>
+      <p>Lets only N envelopes through. Does not touch <code>DATA</code>.</p>
+      <ul>
+        <li><b>Top</b>: the first N, as they arrive (the rest is read and dropped).</li>
+        <li><b>Bottom</b>: the last N, when the input ends.</li>
+        <li>Handy to test a flow on a sample.</li>
+      </ul>
     </>
   );
 }

@@ -92,26 +92,13 @@ function SqlServerPanel({id, nodeId, config, setConfig}: FieldsProps) {
 function SqlServerDocs() {
   return (
     <>
-      <p>Runs a query on SQL Server and emits one envelope per row, with the columns written into the envelope. E.g.: reading the orders of an ERP.</p>
-      <h4>Input</h4>
-      <p>1 envelope port, usually connected to the Start. The query runs once for each incoming envelope (the Start emits one).</p>
-      <h4>Output</h4>
-      <p>One envelope per row, with the <code>DATA</code> of the incoming envelope plus the columns (<code>$column</code>). Dates (<code>date</code>, <code>datetime</code>, <code>datetime2</code>, <code>smalldatetime</code>, <code>datetimeoffset</code>) come as dates (a <code>Date</code>; a <code>date</code> column at midnight UTC): an expression can use them (<code>{'$created.getUTCFullYear()'}</code>), Sort orders them by time and the MongoDB Upsert writes them as dates. The Data tab shows them as ISO text (<code>2026-10-21T18:00:00.000Z</code>). Binaries come as base64. Reading is streamed: the database pauses while the flow is not consuming, so millions of rows can be read.</p>
-      <h4>Connection</h4>
-      <p>The name of a secret (<code>$SECRETS</code>) holding the connection string. It is never stored in the flow or in the logs. E.g.: <code>Server=srv;Database=erp;User Id=reader;Password=...;Encrypt=true;TrustServerCertificate=true</code>.</p>
-      <h4>Parameters</h4>
-      <p>Use <code>@name</code> in the query and give the value below (text or an expression on the incoming envelope, e.g. <code>$PARAMETERS.since</code>). The value goes to the database as a parameter, never pasted into the text: it cannot turn into SQL injection.</p>
-      <pre>{`SELECT id, name, companyCode
-FROM Ticket
-WHERE date >= @since`}</pre>
-      <h4>Read only</h4>
-      <p>Only a single statement is accepted, starting with <code>SELECT</code> or <code>WITH</code>, with no <code>INSERT</code>, <code>UPDATE</code>, <code>DELETE</code>, <code>SELECT INTO</code>, <code>EXEC</code>, procedures etc. Even so, the query runs inside a transaction that is always rolled back, and the connection uses <code>ApplicationIntent=ReadOnly</code>. Ideally the secret's login has only <code>db_datareader</code>.</p>
-      <h4>Timeout</h4>
-      <p>Past the timeout, the query is cancelled on the database and becomes an error. The Stop button also cancels it.</p>
-      <h4>Errors</h4>
-      <p>A connection, login or query failure is an error of the envelope that triggered the query and follows the card's "On error" policy. If the failure happens mid-read, the rows that already went out move on.</p>
-      <h4>Override</h4>
-      <p>On, the output envelope carries only the query's columns.</p>
+      <p>Runs a read-only query on SQL Server and yields one envelope per row.</p>
+      <ul>
+        <li>Parameters: <code>@name</code> in the query, its value from the envelope (<code>$PARAMETERS.since</code>), sent as a parameter: no SQL injection.</li>
+        <li>Read only: a single <code>SELECT</code> or <code>WITH</code>, in a transaction that always rolls back.</li>
+        <li>Streamed: millions of rows are fine. Dates come as dates.</li>
+        <li>Connection: the name of a secret, never stored in the flow or the logs.</li>
+      </ul>
     </>
   );
 }

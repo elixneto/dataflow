@@ -95,19 +95,13 @@ function LookupPanel({id, nodeId, config, setConfig}: FieldsProps) {
 function LookupDocs() {
   return (
     <>
-      <p>For each envelope of the <code>input</code> input, looks in the <code>lookup</code> input for the envelope with the same key and writes its whole <code>DATA</code> into this node's output key (default <code>$lookup</code>). E.g.: the company code in the source system → the company in the target.</p>
-      <h4>Inputs</h4>
-      <p><code>input</code> (top): the envelopes that will get the found envelope. <code>lookup</code> (bottom): the table to search in.</p>
-      <p>The <code>lookup</code> is read entirely before the first envelope goes out and stays in memory; it is meant for support tables (companies, departments, mappings), not for millions of rows.</p>
-      <h4>Output</h4>
-      <p>The <code>input</code> envelopes, with the found envelope in the output key. To pick fields or give a default value, put a Mapper after it: <code>{'$company?.id'}</code> → <code>companyId</code>, <code>{'$company?.name ?? "(no company)"'}</code> → <code>companyName</code>.</p>
-      <h4>Comparison</h4>
-      <p>An expression on each side: the left one is evaluated on the <code>input</code> envelope, the right one on the <code>lookup</code> one. E.g.: <code>$companyCode</code> = <code>$code</code>. With more than one line, all of them must match. Values are compared as text: <code>1</code> matches <code>"1"</code>.</p>
-      <p>If the <code>lookup</code> has the same key more than once, the first envelope wins (and a warning shows up in the log).</p>
-      <h4>If not found</h4>
-      <p><b>Write null</b>: the output key becomes <code>null</code> and the envelope moves on. <b>Error</b>: it is an error of the envelope and follows the card's "On error" policy (with Divert, it goes out through the error port).</p>
-      <h4>Override</h4>
-      <p>On, the output <code>DATA</code> becomes only the found envelope (empty if not found).</p>
+      <p>For each envelope of <code>input</code>, finds the one in <code>lookup</code> with the same key and writes it into <code>$lookup</code> (the name can be changed).</p>
+      <ul>
+        <li>Key: an expression per side, e.g. <code>$companyCode</code> = <code>$code</code>; compared as text (<code>1</code> matches <code>{'"1"'}</code>).</li>
+        <li><code>lookup</code> is read whole and held in memory: for support tables, not millions of rows.</li>
+        <li>Not found: <b>Write null</b> or <b>Error</b>. A repeated key: the first wins.</li>
+        <li>Pick fields with a Mapper after it: <code>{'$company?.name ?? "(none)"'}</code>.</li>
+      </ul>
     </>
   );
 }

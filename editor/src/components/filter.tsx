@@ -25,19 +25,12 @@ function FilterPanel({id, nodeId, config, setConfig}: FieldsProps) {
 function FilterDocs() {
   return (
     <>
-      <p>Evaluates a condition for each envelope and sends the envelope to the <code>true</code> or <code>false</code> output. Does not touch <code>DATA</code>.</p>
-      <h4>Input</h4>
-      <p>1 envelope port.</p>
-      <h4>Outputs</h4>
-      <p><code>true</code> (top): envelopes where the condition was true. <code>false</code> (bottom): the rest. The <code>false</code> one may stay unconnected: what goes out through it is dropped.</p>
-      <h4>Condition</h4>
-      <p>A JS expression. <code>$PARAMETERS</code>, <code>$WORKFLOW_CURRENT_RUN</code> and each envelope field (<code>$field</code>) are available.</p>
-      <p>E.g.: <code>{'$price > 10'}</code>, <code>{'$status === "ACTIVE" && $email'}</code>, <code>{'$name.startsWith("A")'}</code>.</p>
-      <p>JS rules apply: <code>0</code>, <code>{'""'}</code>, <code>null</code> and <code>undefined</code> count as false.</p>
-      <h4>Disabled</h4>
-      <p>Every envelope goes out through <code>true</code>.</p>
-      <h4>Errors</h4>
-      <p>A condition that fails (e.g. <code>$doesNotExist.field</code>) is an error of the envelope and follows the card's "On error" policy.</p>
+      <p>Sends each envelope to <code>true</code> or <code>false</code> by a condition. Does not touch <code>DATA</code>.</p>
+      <ul>
+        <li>Condition: a JS expression, e.g. <code>{'$price > 10 && $status === "ACTIVE"'}</code>.</li>
+        <li>JS rules: <code>0</code>, <code>{'""'}</code> and <code>null</code> are false.</li>
+        <li><code>false</code> may stay unconnected: its envelopes are dropped.</li>
+      </ul>
     </>
   );
 }

@@ -63,20 +63,12 @@ function SortPanel({nodeId, config, setConfig}: FieldsProps) {
 function SortDocs() {
   return (
     <>
-      <p>Reads every envelope, sorts them by the keys and only then sends them on, in order. Does not touch <code>DATA</code>.</p>
-      <h4>Input</h4>
-      <p>1 envelope port.</p>
-      <h4>Output</h4>
-      <p>The same envelopes, in order. Nothing goes out before the input ends.</p>
-      <h4>Keys</h4>
-      <p>A JS expression each, ascending or descending (the arrow next to it). The first key decides; the next ones break ties, and envelopes still tied keep their arrival order. E.g.: <code>$city</code> ascending, then <code>$total</code> descending.</p>
-      <p>Numbers compare as numbers, booleans <code>false</code> before <code>true</code>, dates (a SQL Server or MongoDB date column) by time, everything else as text (dates kept as ISO text also sort correctly). <code>null</code> and <code>undefined</code> always go last.</p>
-      <h4>Memory</h4>
-      <p>Holds the whole input until it ends: meant for thousands of envelopes, not millions. To sort a database query, prefer its <code>ORDER BY</code>.</p>
-      <h4>Disabled</h4>
-      <p>The envelopes pass through in arrival order.</p>
-      <h4>Errors</h4>
-      <p>A key that fails is an error of the envelope and follows the card's "On error" policy.</p>
+      <p>Reads every envelope, then sends them on in the order of the keys.</p>
+      <ul>
+        <li>Keys: expressions, each ascending or descending; the next ones break ties (stable).</li>
+        <li>Numbers, dates and booleans by value, the rest as text; <code>null</code> last.</li>
+        <li>Holds the whole input: for a big query, prefer its <code>ORDER BY</code>.</li>
+      </ul>
     </>
   );
 }

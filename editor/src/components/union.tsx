@@ -7,13 +7,11 @@ import type {ComponentDef} from '#types/component-def.type';
 function UnionDocs() {
   return (
     <>
-      <p>Brings together paths that split (e.g. the normal output and the error handling) into a single output, so they continue together through the rest of the flow. Does not touch <code>DATA</code>. To simply end, it is not needed: the End accepts several edges.</p>
-      <h4>Inputs</h4>
-      <p>From 2 to 100 envelope ports (−/+ on the card). Every input must be connected; decreasing removes the bottom ports.</p>
-      <h4>Output</h4>
-      <p>1 envelope port: everything that comes in through any port goes out through it, as it came in.</p>
-      <p>Each envelope goes out as soon as it arrives, from any input.</p>
-      <p>Unlike a Join, which combines two envelopes into one by a key: the Union only stacks.</p>
+      <p>Joins several paths (2 to 100) into one output, as the envelopes arrive. Does not touch <code>DATA</code>.</p>
+      <ul>
+        <li>Every input must be connected.</li>
+        <li>Not needed just to end: the End takes many edges.</li>
+      </ul>
     </>
   );
 }

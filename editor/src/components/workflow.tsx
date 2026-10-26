@@ -98,20 +98,13 @@ function WorkflowPanel({id, nodeId, config, setConfig}: FieldsProps) {
 function WorkflowDocs() {
   return (
     <>
-      <p>Runs another workflow for each incoming envelope, passing the parameters of its Start. This way a flow calls another, which calls another, and error handling can be a separate workflow.</p>
-      <h4>Input</h4>
-      <p>1 envelope port. Each envelope is one call (connected to the Start, which emits one envelope, it is a single call).</p>
-      <h4>Parameters</h4>
-      <p>The parameters of the chosen workflow's Start show up. The value can be text or an expression on the incoming envelope (e.g. <code>$companyCode</code>, <code>$PARAMETERS.since</code>). Empty uses the parameter's default; a required one (<code>*</code>) without a value makes the call fail.</p>
-      <h4>Send the envelope as input</h4>
-      <p>Only for a workflow with "Accepts input" on the Start: the envelope's <code>DATA</code> becomes its input.</p>
-      <h4>Output</h4>
-      <p>Each envelope that reaches the other workflow's End goes out here, with its <code>DATA</code> merged into the caller envelope's. With Override, only its <code>DATA</code>. If nothing reaches its End, nothing goes out.</p>
-      <h4>Errors</h4>
-      <p>If the other workflow fails, it is an error of the caller envelope and follows the card's "On error" policy. With Divert, connect the error port to another Workflow Invoker to call the error-handling workflow.</p>
-      <p>A workflow that calls itself (directly or through others) is blocked, and the chain stops at {MAX_WORKFLOW_DEPTH} levels. Stopping the run stops the called workflows too.</p>
-      <h4>Result</h4>
-      <p>Each call shows up in the component's log, and the record keeps the id, status and time of each called run.</p>
+      <p>Runs another workflow per envelope, passing the parameters of its Start (text or expression).</p>
+      <ul>
+        <li><b>Send the envelope as input</b>: its <code>DATA</code> becomes the other flow&apos;s input.</li>
+        <li>What reaches the other End comes back merged into the envelope (Override: only it).</li>
+        <li>A failure is an error of the envelope: with Divert, the error port can call a handling workflow.</li>
+        <li>A flow that calls itself is blocked; at most {MAX_WORKFLOW_DEPTH} levels.</li>
+      </ul>
     </>
   );
 }

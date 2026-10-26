@@ -105,19 +105,12 @@ function MapperPanel({nodeId, config, setConfig}: FieldsProps) {
 function MapperDocs() {
   return (
     <>
-      <p>Writes fields directly into the envelope: each row takes a value (source) to a field (target), adding the field or replacing the value if it already exists.</p>
-      <h4>Input</h4>
-      <p>1 envelope port. Each incoming envelope goes through the Mapper once.</p>
-      <h4>Output</h4>
-      <p>The same envelopes, with the fields written into the envelope. The next components read each field as <code>$target</code>.</p>
-      <h4>Source</h4>
-      <p>Plain text, or a JS expression with the <code>=</code> on. In the expression, <code>$PARAMETERS</code>, <code>$WORKFLOW_CURRENT_RUN</code> and each field of the incoming envelope (<code>$field</code>) are available.</p>
-      <p>E.g.: <code>{'"PINEAPPLE"'}</code> → <code>field</code> and, in a following Mapper, <code>{'$field + " 123"'}</code> → <code>otherField</code> give <code>{'{field: "PINEAPPLE", otherField: "PINEAPPLE 123"}'}</code>.</p>
-      <p>The rows are evaluated on the incoming envelope: a row does not see what another row of the same Mapper writes.</p>
-      <h4>Override</h4>
-      <p>On, the output envelope carries only this Mapper's fields.</p>
-      <h4>Errors</h4>
-      <p>An expression that fails (e.g. a field that does not exist) is an error of the envelope and follows the card's "On error" policy. With Divert, the envelope goes out through the error port with <code>{'$errors: [{error, message, component}]'}</code>.</p>
+      <p>Writes fields into the envelope: each row takes a value to a field, adding or replacing it.</p>
+      <ul>
+        <li>Value: text, or a JS expression with <code>=</code> on (<code>$field</code>, <code>$PARAMETERS</code>, <code>$WORKFLOW_CURRENT_RUN</code>).</li>
+        <li>Every row reads the incoming envelope: a row does not see what another one writes.</li>
+        <li>Override: the output carries only these fields.</li>
+      </ul>
     </>
   );
 }

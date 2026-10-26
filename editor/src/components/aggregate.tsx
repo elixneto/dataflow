@@ -29,15 +29,12 @@ function AggregatePanel({id, config, setConfig}: FieldsProps) {
 function AggregateDocs() {
   return (
     <>
-      <p>Groups the envelopes into batches and yields one envelope per batch, with the list of <code>DATA</code> in a field.</p>
-      <pre>{`{items: [{id: 1, ...}, {id: 2, ...}, ...]}`}</pre>
-      <p>Useful to send many records at once to an API or a database: Aggregate of 500 → TypeScript that makes one call per batch with <code>$input.items</code>.</p>
-      <h4>Input</h4>
-      <p>1 envelope port.</p>
-      <h4>Output</h4>
-      <p>1 envelope for every N that come in; the last batch may be smaller. To go back to one envelope per record, use a Split (or a TypeScript that returns a list).</p>
-      <h4>Disabled</h4>
-      <p>The envelopes pass through without being grouped.</p>
+      <p>Groups the envelopes into batches: one envelope per N, with the list of <code>DATA</code> in a field (<code>{'{items: [...]}'}</code>).</p>
+      <ul>
+        <li>The last batch may be smaller.</li>
+        <li>Sends many records in one call: an HTTP Request, or a TypeScript reading <code>$input.items</code>.</li>
+        <li>Split does the opposite.</li>
+      </ul>
     </>
   );
 }

@@ -48,20 +48,12 @@ function DistinctPanel({nodeId, config, setConfig}: FieldsProps) {
 function DistinctDocs() {
   return (
     <>
-      <p>Lets through only the first envelope of each key; the repeated ones go to the <code>duplicates</code> output. Does not touch <code>DATA</code>.</p>
-      <h4>Input</h4>
-      <p>1 envelope port.</p>
-      <h4>Outputs</h4>
-      <p><code>unique</code> (top): the first envelope of each key, as soon as it arrives. <code>duplicates</code> (bottom): the others. The <code>duplicates</code> one may stay unconnected: what goes out through it is dropped.</p>
-      <h4>Key</h4>
-      <p>One or more JS expressions, e.g. <code>$email</code>, <code>$customer.id</code>, <code>{'$email.toLowerCase()'}</code>. With more than one, the combination is the key. Without any, the whole <code>DATA</code> is the key.</p>
-      <p>Values are compared as JSON: <code>1</code> does not match <code>{'"1"'}</code>, and objects match by content.</p>
-      <h4>Memory</h4>
-      <p>The envelopes are not held, only the keys already seen; the Memory in the Metrics shows how many distinct keys there were.</p>
-      <h4>Disabled</h4>
-      <p>Every envelope goes out through <code>unique</code>.</p>
-      <h4>Errors</h4>
-      <p>A key that fails is an error of the envelope and follows the card's "On error" policy.</p>
+      <p>Lets through the first envelope of each key; the repeated ones go to <code>duplicates</code>.</p>
+      <ul>
+        <li>Key: one or more expressions (<code>$email</code>, <code>$customer.id</code>); none = the whole <code>DATA</code>.</li>
+        <li>Compared as JSON: <code>1</code> does not match <code>{'"1"'}</code>.</li>
+        <li>Streams and keeps only the keys in memory. <code>duplicates</code> may stay unconnected.</li>
+      </ul>
     </>
   );
 }

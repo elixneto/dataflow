@@ -51,25 +51,13 @@ function TypescriptPanel({nodeId, config, setConfig}: FieldsProps) {
 function TypescriptDocs() {
   return (
     <>
-      <p>TypeScript code that processes the envelopes. The code must have the <code>process</code> function; other functions and types may live in the same code and be called by it.</p>
-      <pre>{`async function process($input: Data): Promise<Data | Data[] | null> {
-  return {...$input, total: sum($input.items)}
-}
-
-function sum(items: {value: number}[]) {
-  return items.reduce((s, i) => s + i.value, 0)
-}`}</pre>
-      <h4>Input</h4>
-      <p>1 envelope port. process is called once per envelope and <code>$input</code> is its <code>DATA</code>. To process many at once (e.g. one API call every 500), put an Aggregate before it: then <code>$input.items</code> is the list.</p>
-      <h4>Return</h4>
-      <p><b>Override off</b> (default): the return value, whatever it is (object, list, text, number), goes to the key in the envelope (<code>$result</code>, the name can be changed) and the envelope moves on with the rest of <code>DATA</code>.</p>
-      <p><b>Override on</b>: the return value becomes the whole <code>DATA</code>. An object = 1 envelope; a list of objects = 1 envelope per item; <code>null</code> = no envelope.</p>
-      <h4>Globals</h4>
-      <p><code>$PARAMETERS</code>, <code>$SECRETS</code>, <code>$WORKFLOW_CURRENT_RUN</code> and <code>log(...)</code>, which writes to the Logs tab. <code>fetch</code>, <code>URL</code>, <code>setTimeout</code> and similar are also available. There is no <code>require</code>, <code>import</code>, disk or <code>process.env</code>.</p>
-      <h4>Time</h4>
-      <p>Each process call has up to 30 s (5 s of continuous processing); past that, it is an error.</p>
-      <h4>Errors</h4>
-      <p>An exception in process is an error of the envelope and follows the card's "On error" policy. Code that does not compile or has no <code>process</code> function makes the component fail.</p>
+      <p>Your code processes each envelope: <code>async function process($input)</code>, with the envelope&apos;s <code>DATA</code> as <code>$input</code>.</p>
+      <ul>
+        <li>The return goes to <code>$result</code> (the name can be changed). Override: it becomes the <code>DATA</code> (an object = 1 envelope, a list = 1 per item, <code>null</code> = none).</li>
+        <li>Many at once: an Aggregate before it gives <code>$input.items</code>.</li>
+        <li>Globals: <code>$PARAMETERS</code>, <code>$SECRETS</code>, <code>$WORKFLOW_CURRENT_RUN</code>, <code>log()</code>, <code>fetch</code>. No <code>require</code>, disk or environment.</li>
+        <li>Up to 30 s per call; an exception is an error of the envelope.</li>
+      </ul>
     </>
   );
 }

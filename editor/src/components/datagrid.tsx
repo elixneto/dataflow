@@ -150,18 +150,13 @@ function DataGridPanel({config, setConfig}: FieldsProps) {
 function DataGridDocs() {
   return (
     <>
-      <p>A table typed into the component itself: emits one envelope per row, with each column written into the envelope (like the Mapper).</p>
-      <p>Useful for mappings (e.g. source system code → target value, connected to the Lookup's <code>lookup</code> input) and for testing a flow without needing input.</p>
-      <h4>Input</h4>
-      <p>1 envelope port, usually connected to the Start. For each incoming envelope, the whole grid goes out again: the Start emits one envelope, so as many envelopes go out as there are rows.</p>
-      <h4>Output</h4>
-      <p>One envelope per row, with the DATA of the incoming envelope plus the columns. The next components read each column as <code>$column</code>.</p>
-      <h4>Types</h4>
-      <p>Text goes as is. Number accepts a decimal comma (<code>1,5</code>). Boolean accepts <code>true</code>/<code>false</code>, <code>yes</code>/<code>no</code> and <code>1</code>/<code>0</code>. An empty cell becomes <code>null</code>. A cell that does not convert turns red and blocks the run.</p>
-      <h4>Paste from Excel</h4>
-      <p>Copy the cells in the spreadsheet and paste them into a grid cell: it fills from there and creates the missing rows and columns. Pasting into a column name, the first row becomes the column names and the rest, the rows.</p>
-      <h4>Override</h4>
-      <p>On, the output envelope carries only the grid's columns.</p>
+      <p>A table typed into the component: one envelope per row, each column a field (<code>$column</code>).</p>
+      <ul>
+        <li>For mappings (into a Lookup&apos;s <code>lookup</code> input) and to test a flow without a source.</li>
+        <li>Types: text, number (accepts <code>1,5</code>), boolean (<code>yes</code>/<code>no</code>, <code>1</code>/<code>0</code>); an empty cell is <code>null</code>.</li>
+        <li>Cells copied from Excel can be pasted straight into the grid.</li>
+        <li>The whole grid goes out once per incoming envelope. Override: only the columns.</li>
+      </ul>
     </>
   );
 }

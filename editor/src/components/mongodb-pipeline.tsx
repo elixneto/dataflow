@@ -85,34 +85,13 @@ function MongoPipelinePanel({id, nodeId, config, setConfig}: FieldsProps) {
 function MongoPipelineDocs() {
   return (
     <>
-      <p>Runs an aggregation pipeline on a MongoDB collection and emits one envelope per resulting document, with its fields written into the envelope. E.g.: reading the appointments of a period.</p>
-      <h4>Input</h4>
-      <p>1 envelope port, usually connected to the Start. The pipeline runs once for each incoming envelope (the Start emits one).</p>
-      <h4>Output</h4>
-      <p>One envelope per document, with the <code>DATA</code> of the incoming envelope plus the document&apos;s fields (<code>$_id</code>, <code>$field</code>). Reading is streamed: the cursor fetches the next documents only when the flow asks, so large collections can be read.</p>
-      <h4>Pipeline</h4>
-      <p>Paste it as Compass or mongosh show it: keys without quotes, single or double quotes, trailing commas.</p>
-      <pre>{`[
-  { $match: { status: "ACTIVE" } },
-  { $sort: { createdAt: -1 } },
-  { $skip: 15 },
-  { $limit: 100 }
-]`}</pre>
-      <p>It is a JS expression evaluated on the incoming envelope, so values can come from it: <code>$PARAMETERS</code>, <code>$WORKFLOW_CURRENT_RUN</code>, <code>$SECRETS</code> and each field (<code>$field</code>). Stage names like <code>$match</code> are keys, so they do not get mixed up with the variables; a field path in MongoDB goes in quotes, as usual (<code>{'"$total"'}</code>).</p>
-      <pre>{`[{ $match: { cpf: $CPF, date: { $gte: ISODate($PARAMETERS.since) } } }]`}</pre>
-      <p>The mongosh helpers work: <code>ObjectId(&quot;…&quot;)</code>, <code>ISODate(&quot;…&quot;)</code>, <code>new Date(…)</code>, <code>NumberLong</code>, <code>NumberInt</code>, <code>NumberDecimal</code>. Extended JSON also works (<code>{'{$oid: "…"}'}</code>, <code>{'{$date: "…"}'}</code>).</p>
-      <h4>Read only</h4>
-      <p>A pipeline with <code>$out</code> or <code>$merge</code> (they write to a collection) is refused. To write, use the MongoDB Upsert. Since it only reads, it runs in the editor&apos;s Run as well as in Run for real.</p>
-      <h4>How the values come out</h4>
-      <p>Dates stay dates (a <code>Date</code>, like the SQL Server Query's): an expression can use them (<code>{'$at.getUTCFullYear()'}</code>), Sort orders them by time and the MongoDB Upsert writes them back as dates. The Data tab shows them as ISO text (<code>2026-10-21T18:00:00.000Z</code>). The rest as plain JSON: <code>ObjectId</code> as its hex text, <code>Decimal128</code> as text (it keeps every digit), <code>Long</code> as a number (as text past 2^53), binaries as base64.</p>
-      <h4>Connection</h4>
-      <p>The name of a secret (<code>$SECRETS</code>) holding the connection string, e.g. <code>mongodb+srv://reader:password@cluster.example.net</code>. It is never stored in the flow or in the logs. Ideally the user can only read.</p>
-      <h4>Timeout</h4>
-      <p>Past the timeout (MongoDB&apos;s <code>maxTimeMS</code>), the pipeline stops on the server and becomes an error. The Stop button also stops it.</p>
-      <h4>Errors</h4>
-      <p>A pipeline that does not evaluate, is not a list of stages, or fails on the server (connection, login, a wrong stage) is an error of the envelope that triggered it and follows the card&apos;s &quot;On error&quot; policy. If it fails mid-read, the documents that already went out move on.</p>
-      <h4>Override</h4>
-      <p>On, the output envelope carries only the document&apos;s fields.</p>
+      <p>Runs an aggregation pipeline on a collection and yields one envelope per document.</p>
+      <ul>
+        <li>Paste the pipeline as Compass shows it; values can come from the envelope: <code>{'{ $match: { cpf: $cpf } }'}</code>.</li>
+        <li>Read only: <code>$out</code> and <code>$merge</code> are refused, so it runs in test runs too.</li>
+        <li>Streamed from the cursor: large collections are fine. Dates stay dates.</li>
+        <li>Connection: the name of a secret, never stored in the flow or the logs.</li>
+      </ul>
     </>
   );
 }
