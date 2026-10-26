@@ -18,8 +18,9 @@ export const SHOWCASE_APPROVE_ID = 'showcase-prices-approve-product';
 
 // grid of the layout: a card is w-72 (288 px) wide
 const COLUMN = 380;
-const ROW = 220;
-const CARD = {width: 288, height: 130};
+const ROW = 280;
+// the tallest cards (a Mapper with several fields, a pinned node) are about 240 px
+const CARD = {width: 288, height: 240};
 
 type Options = {pinned?: Record<string, EnvelopeData[]>; outputKey?: string; override?: boolean};
 
@@ -78,7 +79,7 @@ const PRODUCTS: EnvelopeData[] = [
 
 const BUILD_ORDERS = `type Line = {orderId: number; sku: string; qty: number; lineTotal: number; discountPct: number; crmId: string; customerName: string}
 
-async function process($input: {lines: Line[]}) {
+async function process($input: {lines: Line[]}): Promise<Data[]> {
   const orders = new Map<number, Line[]>()
   for (const line of $input.lines) orders.set(line.orderId, [...(orders.get(line.orderId) ?? []), line])
   log(\`\${$input.lines.length} line(s) in \${orders.size} order(s)\`)
@@ -102,11 +103,11 @@ function ordersShowcase(): Flow {
   const nodes = {
     start: node('start', 'start', 'Start', 0, 1.5),
     copy: node('copy', 'copy', 'Fan out', 1, 1.5, {outputCount: 4}),
-    clean: node('clean', 'mongodb-delete', 'Clear picked queue', 2, 0, {
+    clean: node('clean', 'mongodb-delete', 'Clear picked queue', 2, -1.9, {
       connection: 'WAREHOUSE_MONGO', database: 'warehouse', collection: 'pickQueue',
       filter: '{\n  status: "PICKED",\n  pickedAt: { $lt: ISODate($PARAMETERS.since) }\n}',
     }, {outputKey: 'cleanup', pinned: {'out-0': [{cleanup: {deleted: 42}}]}}),
-    cleaned: node('cleaned', 'log', 'Queue cleared', 3, 0, {level: 'info', message: '`Pick queue: ${$cleanup.deleted} old document(s) removed`'}),
+    cleaned: node('cleaned', 'log', 'Queue cleared', 3, -1.9, {level: 'info', message: '`Pick queue: ${$cleanup.deleted} old document(s) removed`'}),
     erp: node('erp', 'sqlserver', 'ERP order lines', 2, 1.5, {
       connection: 'ERP_SQL',
       sql: 'SELECT o.id AS orderId, o.customerCode, l.sku, l.qty, l.unitPrice, o.status, o.createdAt\nFROM Orders o\nJOIN OrderLines l ON l.orderId = o.id\nWHERE o.createdAt >= @since\nORDER BY o.id',
@@ -117,13 +118,13 @@ function ordersShowcase(): Flow {
       columns: [{name: 'customerCode', type: 'text'}, {name: 'crmId', type: 'text'}, {name: 'name', type: 'text'}, {name: 'tier', type: 'text'}],
       rows: [['C10', 'CRM-0010', 'Alpha Inc.', 'VIP'], ['C20', 'CRM-0020', 'Beta LLC', 'Standard'], ['C30', 'CRM-0030', 'Gamma Co.', 'Standard'], ['C40', 'CRM-0040', 'Delta Ltd.', 'VIP']],
     }),
-    catalog: node('catalog', 'mongodb-pipeline', 'Product catalog', 2, 4.5, {
+    catalog: node('catalog', 'mongodb-pipeline', 'Product catalog', 2, 4, {
       connection: 'WAREHOUSE_MONGO', database: 'warehouse', collection: 'products',
       pipeline: '[\n  { $match: { active: true } },\n  { $project: { sku: 1, name: 1, warehouse: 1, bin: 1, weightKg: 1 } },\n]',
       timeoutS: 60,
     }, {pinned: {'out-0': PRODUCTS}}),
     unique: node('unique', 'distinct', 'One per order line', 3, 1.5, {keys: ['$orderId', '$sku']}),
-    duplicate: node('duplicate', 'log', 'Duplicate line', 4, 2.5, {level: 'warn', message: '`Duplicate line ignored: order ${$orderId}, ${$sku}`'}),
+    duplicate: node('duplicate', 'log', 'Duplicate line', 4, -0.9, {level: 'warn', message: '`Duplicate line ignored: order ${$orderId}, ${$sku}`'}),
     open: node('open', 'filter', 'Not cancelled', 4, 1.5, {condition: '$status !== "CANCELLED"'}),
     customer: node('customer', 'lookup', 'Find customer', 5, 1.5, {keys: [{main: '$customerCode', lookup: '$customerCode'}], ifNotFound: 'null'}, {outputKey: 'customer'}),
     line: node('line', 'mapper', 'Order line', 6, 1.5, {fields: [
@@ -157,9 +158,9 @@ function ordersShowcase(): Flow {
       filter: [{field: 'orderId', value: '$orderId', expression: true}], source: 'data', batchSize: 500,
     }, {outputKey: 'crmWrite', pinned: {'out-0': [1006, 1005, 1001, 1007, 1004, 1002].map((orderId, i) =>
       ({orderId, crmWrite: {matched: i % 2, upsertedId: i % 2 ? null : `671b2f0a9c3e4d0001c0f${orderId}`}}))}}),
-    split: node('split', 'split', 'One per line', 15, 1.5, {list: '$lines'}),
-    product: node('product', 'lookup', 'Find product', 16, 1.5, {keys: [{main: '$sku', lookup: '$sku'}], ifNotFound: 'null'}, {outputKey: 'product'}),
-    pick: node('pick', 'mapper', 'Pick line', 17, 1.5, {fields: [
+    split: node('split', 'split', 'One per line', 15, 3.5, {list: '$lines'}),
+    product: node('product', 'lookup', 'Find product', 16, 3.5, {keys: [{main: '$sku', lookup: '$sku'}], ifNotFound: 'null'}, {outputKey: 'product'}),
+    pick: node('pick', 'mapper', 'Pick line', 17, 3.5, {fields: [
       {target: 'orderId', value: '$orderId', expression: true},
       {target: 'sku', value: '$sku', expression: true},
       {target: 'qty', value: '$qty', expression: true},
@@ -167,16 +168,16 @@ function ordersShowcase(): Flow {
       {target: 'bin', value: '$product?.bin ?? null', expression: true},
       {target: 'weightKg', value: '$qty * ($product?.weightKg ?? 0)', expression: true},
     ]}, {override: true}),
-    picks: node('picks', 'aggregate', 'Batches of 50', 18, 1.5, {size: 50, field: 'picks'}),
-    warehouse: node('warehouse', 'http-request', 'Send to warehouse', 19, 1.5, {
+    picks: node('picks', 'aggregate', 'Batches of 50', 18, 3.5, {size: 50, field: 'picks'}),
+    warehouse: node('warehouse', 'http-request', 'Send to warehouse', 19, 3.5, {
       method: 'POST', url: {value: 'https://warehouse.example.com/api/pick-batches', expression: false},
       headers: [{name: 'Authorization', value: "'Bearer ' + $SECRETS.WAREHOUSE_TOKEN", expression: true}],
       body: {value: '({source: "erp-sync", count: $picks.length, picks: $picks})', expression: true},
       failOnError: true, timeoutS: 30, concurrency: 1,
     }, {outputKey: 'warehouseAnswer'}),
-    top: node('top', 'limit', 'Top 3', 15, 2.5, {mode: 'top', count: 3}),
-    report: node('report', 'log', 'Top orders', 16, 2.5, {level: 'info', message: '`#${$orderId} ${$customerName}: $ ${$total.toFixed(2)}`'}),
-    end: node('end', 'end', 'End', 20, 1.5),
+    top: node('top', 'limit', 'Top 3', 15, 1.5, {mode: 'top', count: 3}),
+    report: node('report', 'log', 'Top orders', 16, 1.5, {level: 'info', message: '`#${$orderId} ${$customerName}: $ ${$total.toFixed(2)}`'}),
+    end: node('end', 'end', 'End', 20, -0.5),
   };
   const n = nodes;
   return flow(SHOWCASE_ORDERS_ID, 'Showcase: daily order sync',
@@ -184,7 +185,7 @@ function ordersShowcase(): Flow {
     [{name: 'since', type: 'text', default: '2026-10-25'}],
     [
       group('g-extract', 'Extract', '#3b82f6', [n.clean, n.erp, n.customers, n.catalog]),
-      group('g-clean', 'Clean', '#64748b', [n.unique, n.open, n.duplicate]),
+      group('g-clean', 'Clean', '#64748b', [n.cleaned, n.unique, n.open, n.duplicate]),
       group('g-enrich', 'Enrich and route', '#22c55e', [n.customer, n.line, n.tier, n.vip, n.standard, n.crm, n.register, n.union]),
       group('g-orders', 'Build orders', '#a855f7', [n.batch, n.orders, n.sort]),
       group('g-load', 'Load', '#f59e0b', [n.upsert, n.split, n.product, n.pick, n.picks, n.warehouse, n.top, n.report]),
@@ -201,9 +202,9 @@ function ordersShowcase(): Flow {
       connect('vip', 'union', 'out-0', 'in-0'), connect('standard', 'union', 'out-0', 'in-1'), connect('register', 'union', 'out-0', 'in-2'),
       connect('union', 'batch'), connect('batch', 'orders'), connect('orders', 'sort'), connect('sort', 'copy2'),
       connect('copy2', 'upsert', 'out-0'), connect('upsert', 'end'),
-      connect('copy2', 'split', 'out-1'), connect('split', 'product', 'out-0', 'in-0'), connect('catalog', 'product', 'out-0', 'in-1'),
+      connect('copy2', 'split', 'out-2'), connect('split', 'product', 'out-0', 'in-0'), connect('catalog', 'product', 'out-0', 'in-1'),
       connect('product', 'pick'), connect('pick', 'picks'), connect('picks', 'warehouse'), connect('warehouse', 'end'),
-      connect('copy2', 'top', 'out-2'), connect('top', 'report'), connect('report', 'end'),
+      connect('copy2', 'top', 'out-1'), connect('top', 'report'), connect('report', 'end'),
     ],
   );
 }
@@ -266,7 +267,7 @@ const PRICE_RULES = `type Product = {
   stock: {onHand: number; reserved: number} | null
 }
 
-async function process($input: Product) {
+async function process($input: Product): Promise<Data> {
   const marginPct = $input.margin?.marginPct ?? 30
   const price = charm($input.cost * (1 + marginPct / 100))
   const old = $input.current?.price
@@ -311,36 +312,37 @@ function pricesShowcase(): Flow {
     }, {pinned: {'out-0': STOCK}}),
     split: node('split', 'split', 'One per item', 3, 0, {list: '$priceList.body.items'}),
     unique: node('unique', 'distinct', 'One per SKU', 4, 0, {keys: ['$sku']}),
-    duplicate: node('duplicate', 'log', 'Repeated SKU', 5, -1, {level: 'warn', message: '`${$sku} came more than once in the price list`'}),
+    duplicate: node('duplicate', 'log', 'Repeated SKU', 5, -1.9, {level: 'warn', message: '`${$sku} came more than once in the price list`'}),
     sellable: node('sellable', 'filter', 'Active with a cost', 5, 0, {condition: '$active && $cost > 0'}),
-    remove: node('remove', 'mongodb-delete', 'Remove from the shop', 6, -1, {
+    remove: node('remove', 'mongodb-delete', 'Remove from the shop', 6, -0.9, {
       connection: 'SHOP_MONGO', database: 'shop', collection: 'products', filter: '{\n  sku: $sku\n}',
     }, {outputKey: 'removed', pinned: {'out-0': [{sku: 'ACM-006', removed: {deleted: 1}}, {sku: 'ACM-008', removed: {deleted: 0}}]}}),
-    current: node('current', 'lookup', 'Current listing', 6, 1.25, {keys: [{main: '$sku', lookup: '$sku'}], ifNotFound: 'null'}, {outputKey: 'current'}),
-    margin: node('margin', 'lookup', 'Margin', 7, 1.25, {keys: [{main: '$category', lookup: '$category'}], ifNotFound: 'null'}, {outputKey: 'margin'}),
-    onHand: node('onHand', 'lookup', 'Stock', 8, 1.25, {keys: [{main: '$sku', lookup: '$sku'}], ifNotFound: 'null'}, {outputKey: 'stock'}),
-    rules: node('rules', 'typescript', 'Price rules', 9, 1.25, {code: PRICE_RULES}, {outputKey: 'pricing'}),
-    listing: node('listing', 'mapper', 'Listing', 10, 1.25, {fields: [
+    current: node('current', 'lookup', 'Current listing', 6, 1.5, {keys: [{main: '$sku', lookup: '$sku'}], ifNotFound: 'null'}, {outputKey: 'current'}),
+    margin: node('margin', 'lookup', 'Margin', 7, 3, {keys: [{main: '$category', lookup: '$category'}], ifNotFound: 'null'}, {outputKey: 'margin'}),
+    onHand: node('onHand', 'lookup', 'Stock', 8, 4.5, {keys: [{main: '$sku', lookup: '$sku'}], ifNotFound: 'null'}, {outputKey: 'stock'}),
+    rules: node('rules', 'typescript', 'Price rules', 9, 3, {code: PRICE_RULES}, {outputKey: 'pricing'}),
+    listing: node('listing', 'mapper', 'Listing', 10, 3, {fields: [
       {target: 'price', value: '$pricing.price', expression: true},
       {target: 'changePct', value: '$pricing.changePct', expression: true},
       {target: 'available', value: '$pricing.available', expression: true},
       {target: 'isNew', value: '$current === null', expression: true},
     ]}),
-    change: node('change', 'router', 'Price change', 11, 1.25, {cases: [
+    change: node('change', 'router', 'Price change', 11, 3, {cases: [
       {label: 'New', condition: '$isNew'},
       {label: 'Big', condition: 'Math.abs($changePct) >= 10'},
       {label: 'Small', condition: '$changePct !== 0'},
     ]}),
-    approve: node('approve', 'workflow', 'Approve new product', 12, 0.25, {
+    approve: node('approve', 'workflow', 'Approve new product', 12, 1.75, {
       workflowId: SHOWCASE_APPROVE_ID, sendEnvelope: true, onError: 'divert',
       parameters: [{name: 'maxPrice', value: '$PARAMETERS.autoApproveUpTo', expression: true}],
     }),
-    failed: node('failed', 'log', 'Approval failed', 13, -1, {level: 'error', message: '`Could not approve ${$sku}: ${$errors[0].message}`'}),
-    big: node('big', 'log', 'Big change', 12, 1.25, {level: 'warn', message: '`${$sku}: ${$current.price} → ${$price} (${$changePct}%)`'}),
-    union: node('union', 'union', 'To publish', 13, 1.25, {inputCount: 3}),
-    sort: node('sort', 'sort', 'Biggest change first', 14, 1.25, {keys: [{value: 'Math.abs($changePct)', direction: 'desc'}, {value: '$sku', direction: 'asc'}]}),
-    copy2: node('copy2', 'copy', 'Catalog, shop, report', 15, 1.25, {outputCount: 3}),
-    upsert: node('upsert', 'mongodb-upsert', 'Save to the catalog', 16, 0.25, {
+    failed: node('failed', 'log', 'Approval failed', 13, 1.25, {level: 'error', message: '`Could not approve ${$sku}: ${$errors[0].message}`'}),
+    big: node('big', 'log', 'Big change', 12, 3, {level: 'warn', message: '`${$sku}: ${$current.price} → ${$price} (${$changePct}%)`'}),
+    small: node('small', 'mapper', 'Small change', 12, 4.25, {fields: [{target: 'changeType', value: 'SMALL', expression: false}]}),
+    union: node('union', 'union', 'To publish', 13, 3, {inputCount: 3}),
+    sort: node('sort', 'sort', 'Biggest change first', 14, 3, {keys: [{value: 'Math.abs($changePct)', direction: 'desc'}, {value: '$sku', direction: 'asc'}]}),
+    copy2: node('copy2', 'copy', 'Catalog, shop, report', 15, 3, {outputCount: 3}),
+    upsert: node('upsert', 'mongodb-upsert', 'Save to the catalog', 16, 2, {
       connection: 'SHOP_MONGO', database: 'shop', collection: 'products',
       filter: [{field: 'sku', value: '$sku', expression: true}],
       source: 'expression',
@@ -348,22 +350,22 @@ function pricesShowcase(): Flow {
       batchSize: 500,
     }, {outputKey: 'saved', pinned: {'out-0': ['ACM-003', 'ACM-002', 'ACM-004', 'ACM-005', 'ACM-007'].map(sku =>
       ({sku, saved: sku === 'ACM-007' ? {matched: 0, upsertedId: '671b30c29c3e4d0001c1a007'} : {matched: 1, upsertedId: null}}))}}),
-    batches: node('batches', 'aggregate', 'Batches of 100', 16, 1.25, {size: 100, field: 'products'}),
-    publish: node('publish', 'http-request', 'Publish to the shop', 17, 1.25, {
+    batches: node('batches', 'aggregate', 'Batches of 100', 16, 4, {size: 100, field: 'products'}),
+    publish: node('publish', 'http-request', 'Publish to the shop', 17, 4, {
       method: 'POST', url: {value: 'https://shop.example.com/api/products/bulk', expression: false},
       headers: [{name: 'Authorization', value: "'Bearer ' + $SECRETS.SHOP_TOKEN", expression: true}],
       body: {value: '({products: $products.map(p => ({sku: p.sku, price: p.price, available: p.available}))})', expression: true},
       failOnError: true, timeoutS: 60, concurrency: 2,
     }, {outputKey: 'shopAnswer'}),
-    published: node('published', 'log', 'Published', 18, 1.25, {level: 'info', message: '`${$products.length} product(s) sent to the shop`'}),
-    top: node('top', 'limit', 'Top 5', 16, 2.25, {mode: 'top', count: 5}),
-    report: node('report', 'mapper', 'Change report', 17, 2.25, {fields: [
+    published: node('published', 'log', 'Published', 18, 4, {level: 'info', message: '`${$products.length} product(s) sent to the shop`'}),
+    top: node('top', 'limit', 'Top 5', 16, 3, {mode: 'top', count: 5}),
+    report: node('report', 'mapper', 'Change report', 17, 3, {fields: [
       {target: 'sku', value: '$sku', expression: true},
       {target: 'from', value: '$current?.price ?? null', expression: true},
       {target: 'to', value: '$price', expression: true},
       {target: 'changePct', value: '$changePct', expression: true},
     ]}, {override: true}),
-    end: node('end', 'end', 'End', 19, 1.25),
+    end: node('end', 'end', 'End', 19, 2.5),
   };
   const n = nodes;
   return flow(SHOWCASE_PRICES_ID, 'Showcase: supplier price sync',
@@ -373,7 +375,7 @@ function pricesShowcase(): Flow {
       group('g-extract', 'Extract', '#3b82f6', [n.supplier, n.catalog, n.margins, n.stock]),
       group('g-clean', 'Clean', '#64748b', [n.split, n.unique, n.duplicate, n.sellable, n.remove]),
       group('g-price', 'Enrich and price', '#22c55e', [n.current, n.margin, n.onHand, n.rules, n.listing]),
-      group('g-route', 'Route', '#a855f7', [n.change, n.approve, n.failed, n.big, n.union, n.sort]),
+      group('g-route', 'Route', '#a855f7', [n.change, n.approve, n.failed, n.big, n.small, n.union, n.sort]),
       group('g-load', 'Load', '#f59e0b', [n.upsert, n.batches, n.publish, n.published, n.top, n.report]),
       ...Object.values(nodes),
     ],
@@ -387,13 +389,13 @@ function pricesShowcase(): Flow {
       connect('current', 'margin', 'out-0', 'in-0'), connect('margins', 'margin', 'out-0', 'in-1'),
       connect('margin', 'onHand', 'out-0', 'in-0'), connect('stock', 'onHand', 'out-0', 'in-1'),
       connect('onHand', 'rules'), connect('rules', 'listing'), connect('listing', 'change'),
-      connect('change', 'approve', 'out-0'), connect('change', 'big', 'out-1'), connect('change', 'union', 'out-2', 'in-2'),
+      connect('change', 'approve', 'out-0'), connect('change', 'big', 'out-1'), connect('change', 'small', 'out-2'), connect('small', 'union', 'out-0', 'in-2'),
       connect('approve', 'union', 'out-0', 'in-0'), connect('approve', 'failed', 'error'), connect('failed', 'end'),
       connect('big', 'union', 'out-0', 'in-1'),
       connect('union', 'sort'), connect('sort', 'copy2'),
       connect('copy2', 'upsert', 'out-0'), connect('upsert', 'end'),
-      connect('copy2', 'batches', 'out-1'), connect('batches', 'publish'), connect('publish', 'published'), connect('published', 'end'),
-      connect('copy2', 'top', 'out-2'), connect('top', 'report'), connect('report', 'end'),
+      connect('copy2', 'batches', 'out-2'), connect('batches', 'publish'), connect('publish', 'published'), connect('published', 'end'),
+      connect('copy2', 'top', 'out-1'), connect('top', 'report'), connect('report', 'end'),
     ],
   );
 }
