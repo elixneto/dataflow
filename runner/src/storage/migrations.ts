@@ -45,6 +45,11 @@ const STEPS: string[] = [
 
   INSERT INTO projects (id, name, description) VALUES ('examples', 'Examples', 'An example flow for each component.');
   `,
+  // 2: the examples project also has the showcase flows (a description changed by hand stays)
+  `
+  UPDATE projects SET description = 'An example flow for each component, and showcase flows that use them all.'
+  WHERE id = 'examples' AND description = 'An example flow for each component.';
+  `,
 ];
 
 export async function migrate(db: Database) {

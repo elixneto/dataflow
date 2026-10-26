@@ -38,8 +38,9 @@ for (const [name, url] of targets) {
 
     test('starts with the examples project, and migrating again changes nothing', async () => {
       expect((await repo.listProjects()).map(p => p.id)).toEqual(['examples']);
+      expect((await repo.getProject('examples'))?.description).toBe('An example flow for each component, and showcase flows that use them all.');
       const again = await openDatabase(url);
-      expect((await again.query('SELECT count(*)::int AS n FROM schema_migrations'))[0]).toEqual({n: 1});
+      expect((await again.query('SELECT count(*)::int AS n FROM schema_migrations'))[0]).toEqual({n: 2});
       if (url !== 'memory://') await again.close();
     });
 
