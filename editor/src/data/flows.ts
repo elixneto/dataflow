@@ -7,6 +7,7 @@ import type {ComponentNode} from '#editor/component-node';
 import {EXAMPLES_PROJECT} from '#data/projects';
 import {persist} from '#data/api';
 import {forgetValidationRuns} from '#data/validation-runs';
+import {showcaseFlows} from '#data/showcase';
 
 /*
  * Flows, stored in the runner's database as lean definitions (toDefinition). Read from the copy loaded when the
@@ -387,6 +388,7 @@ function invokerExampleFlows(): Flow[] {
 function exampleFolder(id: string) {
   if (id === SQL_SERVER_EXAMPLE_ID) return 'Data sources';
   if (id.startsWith(INVOKER_EXAMPLE_ID)) return 'Workflow Invoker';
+  if (id.startsWith('showcase-')) return 'Showcase';
   return 'Components';
 }
 
@@ -397,7 +399,7 @@ function exampleProject(_id: string) {
 
 const EXAMPLES = () => [
   exampleFlow(), filterExampleFlow(), routerExampleFlow(), lookupExampleFlow(), typescriptExampleFlow(), dataGridExampleFlow(), sqlServerExampleFlow(),
-  ...invokerExampleFlows(),
+  ...invokerExampleFlows(), ...showcaseFlows(),
 ];
 
 /**

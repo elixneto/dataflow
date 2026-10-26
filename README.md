@@ -119,6 +119,13 @@ The runner executes code written in the editor (expressions and the TypeScript c
 | `editor/` | React app: projects, folders, visual editor, component windows and run results. |
 | `docs/` | [Architecture](docs/architecture.md) |
 
+## Showcase examples
+
+The examples project has a **Showcase** folder with two flows that use every component together. Both run as they are with the editor's **Run**, with no database, secret or network: the components that read from outside are pinned with sample data, and the ones that write send nothing in a test run.
+
+- **Showcase: daily order sync**: ERP order lines (SQL Server) are deduplicated, filtered, joined to a customer mapping (Data Grid) and priced by tier. Unknown customers are looked up in a CRM (HTTP GET) and registered by a child flow (Workflow Invoker). TypeScript groups the lines into orders, which are sorted and then written to the CRM (MongoDB Upsert), split into pick lines joined to the product catalog (MongoDB Pipeline) and posted to the warehouse in batches (HTTP POST). Old picks are cleared (MongoDB Delete) and the top orders are logged.
+- **Showcase: supplier price sync**: a supplier's price list (HTTP GET) is split and deduplicated. Discontinued items are removed from the shop (MongoDB Delete), and the rest is joined to the published catalog, the category margins and the ERP stock. TypeScript reprices each item and a Router sends it on by the size of the change (new products are approved by a child flow). The results are saved to the catalog, published in batches (HTTP POST) and reported.
+
 ## Creating a component
 
 1. The logic in `core/src/components/<name>.ts` (`validate` and `execute`), registered in `core/src/components/index.ts`.
