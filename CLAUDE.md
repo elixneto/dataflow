@@ -45,6 +45,10 @@ For now they live in the runner, outside git: `runner/secrets.local.json` (text 
 - Imports with `#` (subpath imports in the part's package.json): in the editor every folder (`#types/...`, `#components/catalog`...), never relative; in the core the folders `#types`, `#envelope`, `#validation`, `#errors` and `#engine` (e.g. `#types/envelope.type`, `#errors/normalize-error`).
 - Semicolon at the end of every statement and type member; never the `any` type (use `unknown`, generics or the real type). Both are lint errors and fail the build.
 
+## Where to work
+
+- Always work directly in the user's local clone (`E:\GITHUB\dataflow`), on branch `v0`: edit the files there, run lint, typecheck and tests there, and commit and push from there. Never work in a separate copy (a cloud container or another clone) and never create branches or pull requests.
+
 ## Commits
 
 - Commit messages must NEVER contain `Co-Authored-By:` or `Claude-Session:` lines.
