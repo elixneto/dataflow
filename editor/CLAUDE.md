@@ -2,6 +2,8 @@
 
 Projects, the visual flow editor, runs, secrets and files.
 
+Always work directly in the user's local clone (`E:\GITHUB\dataflow`), on branch `v0` — never in a separate copy, a branch or a pull request (see "Where to work" in the root CLAUDE.md).
+
 ## Stack and commands
 
 - Vite + React 19 + TypeScript + Tailwind 4 + React Flow (`@xyflow/react`) + Monaco + lucide-react.

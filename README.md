@@ -127,6 +127,11 @@ The runner executes code written in the editor (expressions and the TypeScript c
 
 The contract details are in the [architecture](docs/architecture.md#7-component-contract-core).
 
+## Working on this repository (people and AI agents)
+
+- All work happens directly in the maintainer's local clone (`E:\GITHUB\dataflow`), on branch `v0`: edit the files there, run lint, typecheck and tests there, and commit and push from there.
+- Never work in a separate copy (a cloud container, a sandbox or another clone) and never create branches or pull requests.
+
 ## License
 
 [MIT](LICENSE)
