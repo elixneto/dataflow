@@ -1,1 +1,0 @@
-Organization entity + OrganizationRepository. Same table on-premise (1 org) and SaaS (N orgs).

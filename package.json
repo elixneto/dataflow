@@ -4,6 +4,10 @@
   "version": "0.1.0",
   "description": "Visual data flows: core (TS engine) and server (Bun: api, supervisor, workers). POC_v0/ is the proof of concept, kept for reference.",
   "type": "module",
+  "engines": {
+    "node": ">=26",
+    "bun": ">=1.4.4"
+  },
   "workspaces": ["dataflow.core", "dataflow.server"],
   "scripts": {
     "test": "bun test --cwd=dataflow.core && bun test --cwd=dataflow.server",

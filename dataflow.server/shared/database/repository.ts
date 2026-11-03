@@ -1,0 +1,102 @@
+import { and, eq, isNull, type InferInsertModel, type InferSelectModel, type SQL } from 'drizzle-orm';
+import type { AnyPgColumn, PgInsertValue, PgTable, PgUpdateSetSource } from 'drizzle-orm/pg-core';
+import type { Database } from './database';
+
+/*
+ * The repository pattern, written once on top of Drizzle: insert, find, exists, update and soft delete of a table
+ * that belongs to an organization. A feature's repository extends OrgRepository with its table and only adds its
+ * own queries (with this.scope(...), so they keep the same filters).
+ */
+
+/** a table with id and org_id; with deleted_at/deleted_by it is soft deleted */
+export type OrgTable = PgTable & {
+  id: AnyPgColumn;
+  orgId: AnyPgColumn;
+  deletedAt?: AnyPgColumn;
+  deletedBy?: AnyPgColumn;
+};
+
+export type FindOptions = {
+  orderBy?: SQL | AnyPgColumn | (SQL | AnyPgColumn)[];
+  limit?: number;
+};
+
+/**
+ * The rows of ONE organization: the orgId comes in the constructor, every query filters by it and every insert writes
+ * it, so a repository built for org A cannot see or change org B's rows. Deleted rows are left out.
+ */
+export class OrgRepository<TTable extends OrgTable> {
+  constructor(protected readonly db: Database, protected readonly table: TTable, protected readonly orgId: string) {}
+
+  async insert(values: Omit<InferInsertModel<TTable>, 'orgId'>): Promise<InferSelectModel<TTable>> {
+    const rows = await this.db.orm
+      .insert(this.table)
+      .values({ ...values, orgId: this.orgId } as PgInsertValue<TTable>)
+      .returning();
+
+    return (rows as InferSelectModel<TTable>[])[0]!;
+  }
+
+  async findById(id: string): Promise<InferSelectModel<TTable> | null> {
+    const [row] = await this.findMany(eq(this.table.id, id), { limit: 1 });
+    return row ?? null;
+  }
+
+  async findOne(where: SQL): Promise<InferSelectModel<TTable> | null> {
+    const [row] = await this.findMany(where, { limit: 1 });
+    return row ?? null;
+  }
+
+  async findMany(where?: SQL, options: FindOptions = {}): Promise<InferSelectModel<TTable>[]> {
+    const query = this.db.orm.select().from(this.table as PgTable).where(this.scope(where)).$dynamic();
+    if (options.orderBy) {
+      query.orderBy(...[options.orderBy].flat());
+    }
+
+    if (options.limit !== undefined) {
+      query.limit(options.limit);
+    }
+
+    return (await query) as InferSelectModel<TTable>[];
+  }
+
+  async exists(where: SQL): Promise<boolean> {
+    const rows = await this.db.orm.select({ id: this.table.id }).from(this.table as PgTable).where(this.scope(where)).limit(1);
+    return rows.length > 0;
+  }
+
+  /** changes the given fields; null when there is no such (live) row */
+  async update(id: string, values: Partial<Omit<InferInsertModel<TTable>, 'id' | 'orgId'>>): Promise<InferSelectModel<TTable> | null> {
+    const rows = await this.db.orm
+      .update(this.table)
+      .set(values as PgUpdateSetSource<TTable>)
+      .where(this.scope(eq(this.table.id, id)))
+      .returning();
+
+    return (rows as InferSelectModel<TTable>[])[0] ?? null;
+  }
+
+  /** marks the row deleted (the row stays); false when there is no such live row */
+  async softDelete(id: string, by: string): Promise<boolean> {
+    if (!this.table.deletedAt || !this.table.deletedBy) {
+      throw new Error('This table has no soft delete.');
+    }
+
+    const rows = await this.db.orm
+      .update(this.table)
+      .set({ deletedAt: new Date(), deletedBy: by } as PgUpdateSetSource<TTable>)
+      .where(this.scope(eq(this.table.id, id)))
+      .returning({ id: this.table.id });
+
+    return rows.length > 0;
+  }
+
+  /** `where` plus the organization and "not deleted": every query of this repository goes through it */
+  protected scope(where?: SQL): SQL {
+    return and(
+      eq(this.table.orgId, this.orgId),
+      this.table.deletedAt ? isNull(this.table.deletedAt) : undefined,
+      where,
+    )!;
+  }
+}

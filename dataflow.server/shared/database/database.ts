@@ -1,18 +1,25 @@
-import {mkdir} from 'node:fs/promises';
-import {fileURLToPath} from 'node:url';
-import {SQL} from 'bun';
-import {PGlite} from '@electric-sql/pglite';
-import {lockFolder} from './pglite-lock';
-import {migrate} from './migrate';
+import { mkdir } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
+import { SQL } from 'bun';
+import { PGlite } from '@electric-sql/pglite';
+import type { PgDatabase, PgQueryResultHKT } from 'drizzle-orm/pg-core';
+import { drizzle as drizzleBunSql } from 'drizzle-orm/bun-sql';
+import { drizzle as drizzlePglite } from 'drizzle-orm/pglite';
+import { lockFolder } from './pglite-lock';
+import { migrate } from './migrate';
 
 /*
  * The product's database (api, supervisor and workers): Postgres. With a URL, a real server (Bun's own client, Bun.sql); without one, PGlite,
  * Postgres compiled to WebAssembly, writing to dataflow.server/data.local/ (outside git), so nobody has to install anything to
- * develop. "memory://" keeps everything in memory (tests). Both speak the same SQL; repositories only use `query`.
- * (Same approach as the PoC: POC_v0/runner/src/storage/database.ts.)
+ * develop. "memory://" keeps everything in memory (tests). Both speak the same SQL. Repositories use `orm` (Drizzle, built on
+ * the same client); `query` and `exec` are for raw SQL (migrations).
  */
 
+/** Drizzle, on whichever driver is open; in a `transaction`, bound to it */
+export type Orm = PgDatabase<PgQueryResultHKT>;
+
 export type Database = {
+  orm: Orm;
   /** a single statement with $1, $2... parameters; returns the rows */
   query<T = Record<string, unknown>>(text: string, params?: unknown[]): Promise<T[]>;
   /** several statements, without parameters (migrations) */
@@ -27,6 +34,7 @@ const LOCAL_FOLDER = fileURLToPath(new URL('../../data.local/', import.meta.url)
 function postgres(url: string): Database {
   const sql = new SQL(url);
   const wrap = (client: SQL): Database => ({
+    orm: drizzleBunSql({ client }) as unknown as Orm,
     query: async <T>(text: string, params: unknown[] = []) => [...await client.unsafe(text, params)] as T[],
     exec: async text => void await client.unsafe(text),
     transaction: work => client.begin(tx => work(wrap(tx))),
@@ -39,14 +47,18 @@ function embedded(folder?: string): Database {
   // a folder on disk is for one process only (pglite-lock.ts); in memory there is nothing to share
   const release = folder ? lockFolder(folder) : () => undefined;
   let db: PGlite;
+
   try {
     db = new PGlite(folder);
   } catch (e) {
     release();
     throw e;
   }
+
   // PGlite runs one query at a time; a transaction holds it until it ends
   const wrap = (client: Pick<PGlite, 'query' | 'exec'>): Database => ({
+    // in a transaction the client is PGlite's Transaction: same `query`, which is all Drizzle calls outside orm.transaction
+    orm: drizzlePglite({ client: client as PGlite }) as unknown as Orm,
     query: async <T>(text: string, params: unknown[] = []) => (await client.query<T>(text, params)).rows,
     exec: async text => void await client.exec(text),
     transaction: work => db.transaction(tx => work(wrap(tx))),
@@ -55,18 +67,22 @@ function embedded(folder?: string): Database {
       release();
     },
   });
+
   return wrap(db);
 }
 
 /** Opens the database and brings the schema up to date. */
 export async function openDatabase(url?: string): Promise<Database> {
   let db: Database;
-  if (url === 'memory://') db = embedded();
-  else if (url) db = postgres(url);
-  else {
-    await mkdir(LOCAL_FOLDER, {recursive: true});
+  if (url === 'memory://') {
+    db = embedded();
+  } else if (url) {
+    db = postgres(url);
+  } else {
+    await mkdir(LOCAL_FOLDER, { recursive: true });
     db = embedded(LOCAL_FOLDER);
   }
+
   try {
     await migrate(db);
   } catch (e) {
@@ -78,10 +94,16 @@ export async function openDatabase(url?: string): Promise<Database> {
 
 /** where the data is, for the startup log (without the password) */
 export function describeDatabase(url?: string): string {
-  if (url === 'memory://') return 'PGlite in memory';
-  if (!url) return `PGlite at ${LOCAL_FOLDER}`;
+  if (url === 'memory://') {
+    return 'PGlite in memory';
+  }
+
+  if (!url) {
+    return `PGlite at ${LOCAL_FOLDER}`;
+  }
+
   try {
-    const {protocol, host, pathname} = new URL(url);
+    const { protocol, host, pathname } = new URL(url);
     return `Postgres at ${protocol}//${host}${pathname}`;
   } catch {
     return 'Postgres';

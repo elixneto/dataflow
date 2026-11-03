@@ -3,7 +3,7 @@ import {fileURLToPath} from 'node:url';
 import type {Database} from './database';
 
 /*
- * The schema, one file at a time: migrations/NNNN_description.sql, applied in name order, each in its own
+ * The schema, one file at a time: migrations/<number>_<description>.sql, applied in numeric order, each in its own
  * transaction. A file is never edited after it is committed: a change becomes a new file at the end. The checksum
  * recorded in `schema_migrations` makes an edited file an error instead of a silent difference between databases.
  * The api and the worker may start together, so each step takes an advisory lock and checks again before applying.
@@ -19,7 +19,17 @@ const checksumOf = (sql: string) => new Bun.CryptoHasher('sha256').update(sql).d
 
 /** The migration files, in the order they are applied. */
 export async function readMigrations(folder = MIGRATIONS_FOLDER): Promise<Migration[]> {
-  const names = (await readdir(folder)).filter(name => /^\d{4}_[\w-]+\.sql$/.test(name)).sort();
+  // <number>_<description>.sql, in numeric order (1_initial.sql, 2_..., 10_... comes after 9_...)
+  const files = (await readdir(folder))
+    .map(name => ({name, number: Number(/^(\d+)_[\w-]+\.sql$/.exec(name)?.[1])}))
+    .filter(file => Number.isInteger(file.number))
+    .sort((a, b) => a.number - b.number);
+  const repeated = files.find((file, i) => i > 0 && file.number === files[i - 1]!.number);
+  if (repeated) {
+    throw new Error(`Two migrations share the number ${repeated.number}; each file needs its own.`);
+  }
+
+  const names = files.map(file => file.name);
   return Promise.all(names.map(async name => {
     // line endings normalized, so a Windows checkout (CRLF) has the same checksum as a Linux one
     const sql = (await Bun.file(`${folder}${name}`).text()).replace(/\r\n/g, '\n');

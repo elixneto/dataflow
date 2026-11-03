@@ -14,11 +14,13 @@
   },
   "dependencies": {
     "@dataflow/core": "workspace:*",
-    "@electric-sql/pglite": "^0.5.11",
-    "hono": "^4.13.13"
+    "@electric-sql/pglite": "^0.5.15",
+    "drizzle-orm": "^0.45.4",
+    "hono": "^4.13.16",
+    "zod": "^4.6.7"
   },
   "devDependencies": {
-    "@types/bun": "^1.4.3",
-    "typescript": "~5.9.3"
+    "@types/bun": "^1.4.4",
+    "typescript": "~7.0.2"
   }
 }
