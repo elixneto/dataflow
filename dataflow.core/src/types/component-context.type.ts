@@ -1,0 +1,78 @@
+import type {Envelope} from '#types/envelope.type';
+import type {ExecutableNode} from '#types/executable-node.type';
+import type {ExpressionField} from '#types/expression-field.type';
+import type {LogLevel} from '#types/log-level.type';
+import type {RunRecord} from '#types/run-record.type';
+import type {ScriptFunction} from '#types/script-function.type';
+import type {DatabaseKind} from '#types/database-kind.type';
+import type {DatabaseQuery} from '#types/database-query.type';
+import type {WorkflowCurrentRun} from '#types/workflow-current-run.type';
+import type {EnvelopeData} from '#types/envelope-data.type';
+import type {DocumentStoreKind} from '#types/document-store-kind.type';
+import type {DocumentBatch} from '#types/document-batch.type';
+import type {UpsertAnswer} from '#types/upsert-answer.type';
+import type {DocumentQuery} from '#types/document-query.type';
+import type {DocumentDelete} from '#types/document-delete.type';
+import type {HttpRequest} from '#types/http-request.type';
+import type {HttpResponse} from '#types/http-response.type';
+
+export type ComponentContext = {
+  run: WorkflowCurrentRun;
+  node: ExecutableNode;
+  /** compiles the component's code and returns the process function (a compile error becomes an exception) */
+  prepareScript: (code: string) => Promise<ScriptFunction>;
+  /** evaluates a field that can be plain text or an expression, in the context of an envelope */
+  fieldValue: (field: ExpressionField, doc: Envelope) => unknown;
+  log: (level: LogLevel, message: string) => void;
+  /**
+   * Waits for something that is not an input (e.g. an internal signal of the component). Use it instead of a direct
+   * `await`, so this wait does not count as active time. The engine already discounts waiting for inputs by itself.
+   */
+  wait: <T>(promise: Promise<T>) => Promise<T>;
+  /** Like wait, for reading an internal queue (e.g. Union reads the queue its inputs pour into). */
+  waitEach: <T>(source: AsyncIterable<T>) => AsyncIterable<T>;
+  /**
+   * How many envelopes the component is holding right now (e.g. the Lookup table, the Aggregate batch). The engine keeps
+   * the peak. Pass the envelope you just stored: the engine measures some of them to estimate the size.
+   */
+  holding: (envelopes: number, held?: Envelope) => void;
+  /**
+   * Runs another workflow (Workflow Invoker) with the values of its Start parameters and, optionally, an input.
+   * `envelopes` yields the DATA of each envelope that reaches its End, as it arrives; `result` is its record.
+   * A caller that stops reading before the end calls `cancel`.
+   */
+  invokeWorkflow: (workflowId: string, call: {parameters: Record<string, string>; input?: unknown}) => {
+    envelopes: AsyncIterable<EnvelopeData>;
+    result: Promise<RunRecord>;
+    cancel: () => void;
+  };
+  /**
+   * Query on a database, through the driver the runner registered for that kind. The name of the secret holding the
+   * connection string becomes the connection string here; the run's signal cancels the query.
+   */
+  queryDatabase: (kind: DatabaseKind, query: Omit<DatabaseQuery, 'connection' | 'signal'> & {secret: string}) => AsyncIterable<Record<string, unknown>>;
+  /**
+   * Runs an aggregation pipeline (read only) through the document database driver the runner registered for that kind,
+   * and yields the documents one by one. The name of the secret becomes the connection string; the run's signal stops it.
+   */
+  aggregateDocuments: (kind: DocumentStoreKind, query: Omit<DocumentQuery, 'connection' | 'signal'> & {secret: string}) => AsyncIterable<Record<string, unknown>>;
+  /**
+   * Writes a batch of upserts through the document database driver the runner registered for that kind; one result per
+   * upsert, in order, and the count of modified documents. In a test run of a component with side effects it writes
+   * nothing: it logs what it would send and answers null.
+   */
+  upsertDocuments: (kind: DocumentStoreKind, batch: Omit<DocumentBatch, 'connection' | 'signal'> & {secret: string}) => Promise<UpsertAnswer | null>;
+  /**
+   * Deletes the documents the filter matches, through the driver the runner registered for that kind, and answers how
+   * many (`deleted`). In a test run of a component with side effects it deletes nothing: it counts what the filter
+   * matches, logs it and answers `{notSent: true, matched}`.
+   */
+  deleteDocuments: (kind: DocumentStoreKind, request: Omit<DocumentDelete, 'connection' | 'signal' | 'countOnly'> & {secret: string}) => Promise<{deleted: number} | {notSent: true; matched: number}>;
+  /**
+   * Sends an HTTP request through the runner's function (fetch). In a test run of a component that writes (e.g. a POST)
+   * it sends nothing: it logs the method, the URL and an excerpt of the body, with the secrets hidden, and answers null.
+   */
+  sendHttp: (request: Omit<HttpRequest, 'signal'>) => Promise<HttpResponse | null>;
+  /** the text with the run's secret values hidden (for logs and error messages) */
+  mask: (text: string) => string;
+};

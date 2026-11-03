@@ -1,0 +1,1 @@
+Keyring (SECRETS_KEYS), AES-256-GCM with crypto.subtle, AAD = id + name.

@@ -1,0 +1,24 @@
+{
+  "name": "@dataflow/server",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "imports": {
+    "#shared/*": "./shared/*.ts",
+    "#features/*": "./features/*.ts"
+  },
+  "scripts": {
+    "migrate": "bun shared/database/migrate-cli.ts",
+    "test": "bun test",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@dataflow/core": "workspace:*",
+    "@electric-sql/pglite": "^0.5.11",
+    "hono": "^4.13.13"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.4.3",
+    "typescript": "~5.9.3"
+  }
+}

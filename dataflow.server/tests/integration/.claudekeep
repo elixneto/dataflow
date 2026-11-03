@@ -1,0 +1,1 @@
+Against a real database (PGlite in memory, or Postgres): api + worker end to end (like GRO.Server.IntegrationTests).

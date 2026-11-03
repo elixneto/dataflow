@@ -1,0 +1,1 @@
+SendPromotionCommand/handler: builds the package and POSTs it to PROMOTE_TO /promotions with the machine token (push).

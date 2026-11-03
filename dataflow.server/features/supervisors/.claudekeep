@@ -1,0 +1,1 @@
+Supervisor entity (live supervisor process: tags, number of workers, version, last_seen) + SupervisorRepository.

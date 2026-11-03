@@ -1,0 +1,1 @@
+Vertical slices per domain, like GRO.Server.Features: the domain root holds the entity, repository and shared types; each use case has its own folder (command, validator, handler, or query).

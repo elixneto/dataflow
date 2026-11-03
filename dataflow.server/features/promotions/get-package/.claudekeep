@@ -1,0 +1,1 @@
+GetPackageQuery: GET /packages/:id for pull mode.

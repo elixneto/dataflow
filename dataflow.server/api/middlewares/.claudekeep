@@ -1,0 +1,1 @@
+Authentication, the logged-in user's organization (org_id), the manager role, refusing writes when readonly=true.

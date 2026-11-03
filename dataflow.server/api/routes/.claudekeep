@@ -1,0 +1,1 @@
+One routes file per feature (flows.routes.ts, runs.routes.ts...). Takes the HTTP request, calls the feature's handler/query, answers with toHttpResult().
