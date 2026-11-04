@@ -5,12 +5,15 @@
  */
 export class Stopwatch {
   total = 0;
+  /** when it first ran (performance.now()) */
+  firstAt?: number;
   private since?: number;
 
   get running() { return this.since !== undefined; }
 
   resume() {
     this.since ??= performance.now();
+    this.firstAt ??= this.since;
   }
 
   stop() {

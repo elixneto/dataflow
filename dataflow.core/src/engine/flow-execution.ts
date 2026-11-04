@@ -32,6 +32,9 @@ async function drain(source: AsyncIterable<Envelope>) {
 /** Copy of the sample (the envelope moves on and may be changed by another component). */
 const clone = <T>(v: T): T => JSON.parse(JSON.stringify(v)) as T;
 
+/** a performance.now() time as a date */
+const isoAt = (at: number) => new Date(performance.timeOrigin + at).toISOString();
+
 const STATUS_LABEL: Record<RunRecord['status'], string> = {
   completed: 'completed', 'with-warnings': 'with warnings', 'with-errors': 'with errors', failed: 'failed',
 };
@@ -76,6 +79,21 @@ export class FlowExecution {
   }
 
   recordOf(nodeId: string) { return this.records.get(nodeId)!; }
+
+  /** when each component opened (performance.now()): its first envelope, or the work it did before it */
+  private readonly opened = new Map<string, number>();
+
+  /**
+   * Marks the component open, once: now (its first envelope), or when it started working if it did real work before
+   * (a TypeScript component compiles its script first): what it did counts inside its open time.
+   */
+  private markOpen(nodeId: string) {
+    if (this.opened.has(nodeId)) return;
+    const stopwatch = this.stopwatchOf(nodeId);
+    const at = stopwatch.total >= 1 && stopwatch.firstAt !== undefined ? stopwatch.firstAt : performance.now();
+    this.opened.set(nodeId, at);
+    this.recordOf(nodeId).start = isoAt(at);
+  }
   /** Run from here: the component the run started from */
   fromOf() {
     const from = this.options.runFrom;
@@ -235,7 +253,7 @@ export class FlowExecution {
     const stopwatch = this.stopwatchOf(node.id);
     stopwatch.stop();
     for await (const doc of source) {
-      rec.start ??= new Date().toISOString();
+      this.markOpen(node.id);
       if (rec.status === 'not-run') rec.status = 'running';
       rec.inputs[port] = (rec.inputs[port] ?? 0) + 1;
       if (rec.inputSample.length < SAMPLE_SIZE) rec.inputSample.push(this.sampled(doc.DATA));
@@ -257,7 +275,7 @@ export class FlowExecution {
     const log = (level: LogLevel, message: string) => rec.logs.push({at: new Date().toISOString(), level, message: maskText(message, hiddenValues(this.options))});
     const outputPorts = [...new Set(this.channels.filter(c => c.source === node.id).map(c => c.sourcePort))];
     const stopwatch = this.stopwatchOf(node.id);
-    const t0 = Date.now();
+    const t0 = performance.now();
     let errors = 0;
     let dryRun = false;
     let replayed = false;
@@ -296,8 +314,8 @@ export class FlowExecution {
           }),
         ]);
       } else if (node.type === START) {
-        rec.start = new Date().toISOString();
         stopwatch.resume();
+        this.markOpen(node.id);
         for (const envelope of this.initialEnvelopes) {
           if (this.options.input !== undefined) {
             rec.inputs['in-0'] = (rec.inputs['in-0'] ?? 0) + 1;
@@ -358,9 +376,13 @@ export class FlowExecution {
       rec.memory = this.memoryOf(node.id).summary;
       const waiting = this.waitingOf(node.id).total;
       if (waiting > 0) rec.waitingMs = Math.round(waiting * 100) / 100;
-      rec.start ??= new Date(t0).toISOString();
-      rec.end = new Date().toISOString();
-      rec.durationMs = Date.now() - Date.parse(rec.start);
+      // open from its first envelope (or the work it did before it), until now: the same clock as its active and
+      // waiting times, so they fit in it
+      const opened = this.opened.get(node.id) ?? t0;
+      const now = performance.now();
+      rec.start = isoAt(opened);
+      rec.end = isoAt(now);
+      rec.durationMs = Math.round((now - opened) * 100) / 100;
       for (const port of outputPorts) for (const channel of this.outputsOf(node.id, port)) channel.close();
     }
   }
