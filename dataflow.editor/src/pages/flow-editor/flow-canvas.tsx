@@ -37,6 +37,7 @@ import { canSplice, edgeUnder, pointerBox, splice } from '@/editor/edge-splice';
 import { GROUP_COLORS, GROUP_SIZE, GROUP_Z, layerGroups, type GroupNode } from '@/editor/group';
 import { GroupNodeMemo } from '@/editor/group-node';
 import { HistoryContext, isEditableField, UndoStack } from '@/editor/history';
+import { copiedComponents, pastedComponents } from '@/editor/clipboard';
 import { CARD_HEIGHT, CARD_WIDTH } from '@/editor/node-geometry';
 import { ComponentPalette } from './component-palette';
 import { ZoomControls } from './zoom-controls';
@@ -44,6 +45,8 @@ import { ZoomControls } from './zoom-controls';
 /** the grid: a small dot every DOT_GAP px (--grid on --canvas in index.css) */
 const DOT_GAP = 16;
 const DOT_SIZE = 1.5;
+/** how far a paste lands from what was copied (one grid step more each paste) */
+const PASTE_OFFSET = 32;
 
 const NODE_TYPES = { component: ComponentNodeMemo, group: GroupNodeMemo };
 
@@ -228,6 +231,58 @@ export function FlowCanvas(props: {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [undo, redo, saveNow]);
+
+  // Ctrl+C with components selected copies them (editor/clipboard.ts); Ctrl+V pastes them, a little further each time.
+  // Typing in a field, or text selected on the page: the browser's own copy and paste
+  const pastes = useRef<{ at: { x: number; y: number } | null; count: number }>({ at: null, count: 0 });
+  // the pointer over the canvas (screen coordinates), null once it left: a paste lands there
+  const pointer = useRef<{ x: number; y: number } | null>(null);
+  useEffect(() => {
+    const busy = () => isEditableField(document.activeElement) || Boolean(window.getSelection()?.toString());
+    const onCopy = (event: ClipboardEvent) => {
+      if (busy() || !event.clipboardData) {
+        return;
+      }
+
+      const text = copiedComponents(nodes, edges);
+      if (text) {
+        event.preventDefault();
+        event.clipboardData.setData('text/plain', text);
+        pastes.current = { at: null, count: 0 };
+      }
+    };
+    const onPaste = (event: ClipboardEvent) => {
+      if (isEditableField(document.activeElement) || !event.clipboardData) {
+        return;
+      }
+
+      // at the pointer on the canvas; away from it, in the middle of what is on screen (snapped to the grid). Again at
+      // the same place: a step further, so the copies do not hide each other
+      const box = document.querySelector('.react-flow')?.getBoundingClientRect();
+      const point = pointer.current ?? (box ? { x: box.left + box.width / 2, y: box.top + box.height / 2 } : null);
+      const spot = flow && point ? flow.screenToFlowPosition(point) : { x: 0, y: 0 };
+      const snap = (value: number) => Math.round(value / DOT_GAP) * DOT_GAP;
+      const at = { x: snap(spot.x), y: snap(spot.y) };
+      const again = pastes.current.at?.x === at.x && pastes.current.at?.y === at.y;
+      const count = again ? pastes.current.count + 1 : 0;
+      const pasted = pastedComponents(event.clipboardData.getData('text/plain'), nodes, at, { offset: PASTE_OFFSET * count, center: !pointer.current });
+      if (!pasted) {
+        return;
+      }
+
+      event.preventDefault();
+      pastes.current = { at, count };
+      record();
+      setNodes(current => [...current.map(n => ({ ...n, selected: false })), ...pasted.nodes]);
+      setEdges(current => [...current, ...pasted.edges]);
+    };
+    window.addEventListener('copy', onCopy);
+    window.addEventListener('paste', onPaste);
+    return () => {
+      window.removeEventListener('copy', onCopy);
+      window.removeEventListener('paste', onPaste);
+    };
+  }, [nodes, edges, record, setNodes, setEdges, flow]);
 
   const onConnect = useCallback(
     (connection: Connection) => {
@@ -507,6 +562,8 @@ export function FlowCanvas(props: {
               onInit={setFlow}
               onDragOver={onDragOver}
               onDrop={onDrop}
+              onMouseMove={event => (pointer.current = { x: event.clientX, y: event.clientY })}
+              onMouseLeave={() => (pointer.current = null)}
               onDragLeave={event => !event.currentTarget.contains(event.relatedTarget as Node | null) && setSpliceEdge(null)}
               onNodeDragStart={onNodeDragStart}
               onNodeDragStop={(_, __, moved) => connectFitted(moved, flow?.getNodes() ?? nodes)}

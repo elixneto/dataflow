@@ -241,22 +241,24 @@ export function arrange<T extends Placed>(nodes: T[], edges: Edge[]): T[] {
 
   const left = Math.min(...components.map(c => c.position.x));
   const top = Math.min(...components.map(c => c.position.y));
-  // where each column starts: glued to the one before, unless an edge leaves from a port with a name (Distinct's
-  // unique) or with several edges (its 2x, 3x): then room for that text, so it shows between the cards
-  const columnX = new Map<number, number>();
-  const columns = [...new Set(column.values())].sort((a, b) => a - b);
-  for (const col of columns) {
-    const feeding = links.filter(e => column.get(e.target) === col);
-    const needs = feeding.map(e => {
-      const from = column.get(e.source)!;
-      return (columnX.get(from) ?? 0) + (col - from) * CARD_WIDTH + portTextRoom(byId.get(e.source)!, e.sourceHandle, links) + inputTextRoom(byId.get(e.target)!);
-    });
-    const previous = columns.filter(c => c < col).at(-1);
-    const glued = previous === undefined ? 0 : columnX.get(previous)! + (col - previous) * CARD_WIDTH;
-    columnX.set(col, Math.max(glued, ...needs));
+  // where each card starts: glued to what feeds it, unless an edge leaves from a port with a name (Distinct's unique)
+  // or with several edges (its 2x, 3x), or it has input names (Lookup's): then room for that text, so it shows between
+  // the cards. Each card on its own: the room one needs does not push the others of its column (another row). The
+  // columns give the order, left to right; a card never starts on another one of its rows.
+  const xOf = new Map<string, number>();
+  const rowEnd = new Map<number, number>();
+  const byColumn = [...components].sort((a, b) => column.get(a.id)! - column.get(b.id)!);
+  for (const c of byColumn) {
+    const needs = links
+      .filter(e => e.target === c.id && xOf.has(e.source))
+      .map(e => xOf.get(e.source)! + CARD_WIDTH + portTextRoom(byId.get(e.source)!, e.sourceHandle, links) + inputTextRoom(c));
+    const rows = Array.from({ length: span(c) }, (_, i) => row.get(c.id)! + i);
+    const x = Math.max(0, ...needs, ...rows.map(r => rowEnd.get(r) ?? 0));
+    xOf.set(c.id, x);
+    rows.forEach(r => rowEnd.set(r, x + CARD_WIDTH));
   }
 
-  const moved = new Map(components.map(c => [c.id, { x: left + columnX.get(column.get(c.id)!)!, y: top + row.get(c.id)! * PORT_GAP }]));
+  const moved = new Map(components.map(c => [c.id, { x: left + xOf.get(c.id)!, y: top + row.get(c.id)! * PORT_GAP }]));
 
   const groups = fitAndSeparate(tree, components, moved);
   return nodes.map(n => {

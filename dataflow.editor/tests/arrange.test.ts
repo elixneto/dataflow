@@ -253,5 +253,36 @@ describe('arrange (left to right, glued)', () => {
       expect(placed.discard![1]).toBeLessThan(placed.start![1]);
     }
   });
-});
 
+  test("the room one card needs does not push the cards of another row in its column (they stay glued)", () => {
+    // like the editor's test flow: start → (2x) mapper (top branch, with a Lookup's named inputs) and start → http → ts → split
+    const nodes = [
+      card('start', 'start', 0, 0),
+      card('map', 'mapper', 0, 0),
+      card('a', 'datagrid', 0, 0),
+      card('b', 'datagrid', 0, 0),
+      card('lookup', 'lookup', 0, 0),
+      card('http', 'http-request', 0, 0),
+      card('ts', 'typescript', 0, 0),
+      card('split', 'split', 0, 0),
+    ];
+    const edges = [
+      edge('start', 'http'),
+      edge('start', 'map'),
+      edge('map', 'a'),
+      edge('map', 'b'),
+      edge('a', 'lookup'),
+      edge('b', 'lookup', 'out-0', 'in-1'),
+      edge('http', 'ts'),
+      edge('ts', 'split'),
+    ];
+    const placed = at(arrange(nodes, edges));
+    const x = (id: string) => placed[id]![0];
+    // the main row: http, ts, split one card width apart, whatever the Mapper's 2x or the Lookup's input names need
+    expect(x('ts') - x('http')).toBe(CARD_WIDTH);
+    expect(x('split') - x('ts')).toBe(CARD_WIDTH);
+    // the top branch keeps its room: after the Mapper's 2x, and before the Lookup's input names
+    expect(x('a') - x('map')).toBeGreaterThan(CARD_WIDTH);
+    expect(x('lookup') - x('a')).toBeGreaterThan(CARD_WIDTH);
+  });
+});

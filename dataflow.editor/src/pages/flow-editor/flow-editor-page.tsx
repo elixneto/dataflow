@@ -229,6 +229,8 @@ export function FlowEditorPage() {
 
   return (
     <div className="flex h-svh flex-col">
+      {/* the browser tab says which flow it is (React puts it in the head; leaving the page gives the app's back) */}
+      {current?.flow && <title>{`Flow :: ${current.flow.name}`}</title>}
       {/* same height and border as the app's top bar */}
       <header className="flex h-14 shrink-0 items-center gap-2 border-b bg-background px-4">
         <ProjectBreadcrumb project={project.status === 'ready' ? project.project : null} folders={current?.folders} flowName={flowName} />
