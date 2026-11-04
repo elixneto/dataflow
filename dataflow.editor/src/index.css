@@ -162,6 +162,38 @@
     outline: none;
 }
 
+/* MOCK On error = Divert: the error port, a red bump hanging under the card (component-node.tsx), and its edges in red */
+.react-flow__handle.node-port.node-port-error {
+    top: auto;
+    bottom: -16px;
+    left: 50%;
+    right: auto;
+    width: 32px;
+    height: 16px;
+    border-radius: 0 0 999px 999px;
+    transform: translateX(-50%);
+}
+
+.react-flow__handle.node-port.node-port-error .node-port-dot {
+    margin: 0 0 3px;
+    background: color-mix(in oklch, var(--destructive) 60%, transparent);
+}
+
+.react-flow__handle.node-port.node-port-error.is-connected .node-port-dot,
+.react-flow__handle.node-port.node-port-error:hover .node-port-dot {
+    background: var(--destructive);
+}
+
+.react-flow__edge.is-error-edge .react-flow__edge-path {
+    stroke: var(--destructive);
+}
+
+/* the edge a dragged component would go into (drop on an edge, edge-splice.ts): thicker, in the selected blue */
+.react-flow__edge.is-splice-target .react-flow__edge-path {
+    stroke: var(--xy-edge-stroke-selected);
+    stroke-width: 3;
+}
+
 /* the edges between ports, as in the PoC: a dashed curve; selected (or focused) and while running, in the primary color */
 .react-flow__edge .react-flow__edge-path {
     stroke: var(--muted-foreground);
@@ -203,8 +235,25 @@
     transform: translateY(-50%);
 }
 
+/*
+ * The input's handle is a thin line at the back of the hole (React Flow ends the edge at the handle's left side, so
+ * the dashed line reaches into the hole and touches the card); ::before keeps the whole hole as the area to drop on.
+ */
 .react-flow__handle.node-port-in {
-    left: -1px;
+    left: 13px;
+    width: 2px;
+}
+
+.react-flow__handle.node-port-in::before {
+    content: '';
+    position: absolute;
+    inset: 0 -2px 0 -14px;
+}
+
+.react-flow__handle.node-port-in .node-port-dot {
+    margin-right: 0;
+    flex-shrink: 0;
+    translate: -6px 0;
 }
 
 .react-flow__handle.node-port-out {

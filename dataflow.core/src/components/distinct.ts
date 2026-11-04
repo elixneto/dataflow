@@ -16,6 +16,7 @@ export const distinct: ComponentLogic = {
   type: 'distinct',
   inputs: 1,
   outputs: 2,
+  outputLabels: ['unique', 'duplicates'],
   optionalOutputs: ['out-1'],
 
   validate(config) {

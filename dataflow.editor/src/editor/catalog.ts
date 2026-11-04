@@ -1,6 +1,5 @@
 import {
   aggregate,
-  copy,
   datagrid,
   distinct,
   filter,
@@ -17,12 +16,12 @@ import {
   split,
   sqlserver,
   typescript,
-  union,
   workflowInvoker,
+  END,
+  START,
 } from '@dataflow/core';
 import {
   ArrowDownUp,
-  Copy,
   Database,
   FileCode,
   FingerprintPattern,
@@ -31,7 +30,6 @@ import {
   Layers,
   Leaf,
   ListEnd,
-  Merge,
   ScrollText,
   SearchCheck,
   Shuffle,
@@ -39,6 +37,8 @@ import {
   Table,
   Ungroup,
   Workflow,
+  Flag,
+  Play,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -68,9 +68,6 @@ export type ComponentInfo = {
   description: string;
   category: Category;
   icon: LucideIcon;
-  /** names shown next to the ports, when they have one */
-  inputLabels?: string[];
-  outputLabels?: string[];
 };
 
 const COMPONENTS: ComponentInfo[] = [
@@ -81,23 +78,32 @@ const COMPONENTS: ComponentInfo[] = [
   { type: httpRequest.type, label: 'HTTP Request', description: 'Sends one HTTP request per envelope', category: 'api', icon: Globe },
   { type: typescript.type, label: 'TypeScript', description: 'Processes the envelopes with code', category: 'code', icon: FileCode },
   { type: aggregate.type, label: 'Aggregate', description: 'Groups the envelopes into batches', category: 'transformation', icon: Layers },
-  { type: copy.type, label: 'Copy', description: 'Sends each envelope to every output', category: 'transformation', icon: Copy },
   { type: datagrid.type, label: 'Data Grid', description: 'A typed table that emits one envelope per row', category: 'transformation', icon: Table },
-  { type: distinct.type, label: 'Distinct', description: 'Lets through only the first envelope of each key', category: 'transformation', icon: FingerprintPattern, outputLabels: ['unique', 'duplicates'] },
-  { type: filter.type, label: 'Filter', description: 'Splits the envelopes into true and false', category: 'transformation', icon: Funnel, outputLabels: ['true', 'false'] },
+  { type: distinct.type, label: 'Distinct', description: 'Lets through only the first envelope of each key', category: 'transformation', icon: FingerprintPattern },
+  { type: filter.type, label: 'Filter', description: 'Splits the envelopes into true and false', category: 'transformation', icon: Funnel },
   { type: limit.type, label: 'Limit', description: 'Lets only the first or last N envelopes through', category: 'transformation', icon: ListEnd },
-  { type: lookup.type, label: 'Lookup', description: 'Finds the envelope of another input by key', category: 'transformation', icon: SearchCheck, inputLabels: ['input', 'lookup'] },
+  { type: lookup.type, label: 'Lookup', description: 'Finds the envelope of another input by key', category: 'transformation', icon: SearchCheck },
   { type: mapper.type, label: 'Mapper', description: 'Writes fields into the envelope (source → target)', category: 'transformation', icon: Shuffle },
   { type: router.type, label: 'Router', description: 'Sends each envelope to the first true case', category: 'transformation', icon: Split },
   { type: sort.type, label: 'Sort', description: 'Sorts the envelopes by keys', category: 'transformation', icon: ArrowDownUp },
   { type: split.type, label: 'Split', description: 'Yields one envelope per item of a list', category: 'transformation', icon: Ungroup },
-  { type: union.type, label: 'Union', description: 'Joins several inputs into a single output', category: 'transformation', icon: Merge },
   { type: log.type, label: 'Log', description: 'Records a message for each envelope', category: 'flow', icon: ScrollText },
   { type: workflowInvoker.type, label: 'Workflow Invoker', description: 'Calls another workflow with the parameters of its Start', category: 'flow', icon: Workflow },
 ];
 
 /** the component of a type (undefined for one the editor does not know) */
-export const componentInfo = (type: string): ComponentInfo | undefined => COMPONENTS.find(c => c.type === type);
+/**
+ * Start and End, as in the PoC: every flow has one of each, they cannot be deleted and are not in the palette. The
+ * Start's output and the End's input take several edges (the flow begins and finishes in several places).
+ */
+const FIXED: ComponentInfo[] = [
+  { type: START, label: 'Start', description: 'Starting point of the flow', category: 'flow', icon: Play },
+  { type: END, label: 'End', description: 'Every chain ends here', category: 'flow', icon: Flag },
+];
+
+export const isFixedType = (type: string) => type === START || type === END;
+
+export const componentInfo = (type: string): ComponentInfo | undefined => [...COMPONENTS, ...FIXED].find(c => c.type === type);
 
 /** the palette's sections: each category (in CATEGORY_ORDER) with its components by label; `search` filters by label or description */
 export function paletteSections(search = ''): { category: Category; components: ComponentInfo[] }[] {

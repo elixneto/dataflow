@@ -14,6 +14,7 @@ export const filter: ComponentLogic = {
   type: 'filter',
   inputs: 1,
   outputs: 2,
+  outputLabels: ['true', 'false'],
   optionalOutputs: ['out-1'],
 
   validate(config) {

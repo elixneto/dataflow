@@ -24,16 +24,39 @@ describe('snap-to-connect', () => {
     expect(fittedConnections(card('b', 'sort', CARD_WIDTH, 16), [a], [])).toEqual([]);
   });
 
-  test('not when either port already has an edge', () => {
+  test("ports that already have edges take one more when fitted, but not Lookup's inputs", () => {
     const b = card('b', 'sort', CARD_WIDTH, 0);
     const fromA: Edge = { id: 'e1', source: 'a', sourceHandle: 'out-0', target: 'x', targetHandle: 'in-0' };
     const toB: Edge = { id: 'e2', source: 'x', sourceHandle: 'out-0', target: 'b', targetHandle: 'in-0' };
-    expect(fittedConnections(b, [a, b], [fromA])).toEqual([]);
-    expect(fittedConnections(b, [a, b], [toB])).toEqual([]);
+    const aToB = [{ source: 'a', sourceHandle: 'out-0', target: 'b', targetHandle: 'in-0' }];
+    expect(fittedConnections(b, [a, b], [fromA])).toEqual(aToB);
+    expect(fittedConnections(b, [a, b], [toB])).toEqual(aToB);
+
+    const lookup = card('l', 'lookup', CARD_WIDTH, 0);
+    const toLookup: Edge = { id: 'e3', source: 'x', sourceHandle: 'out-0', target: 'l', targetHandle: 'in-0' };
+    expect(fittedConnections(lookup, [a, lookup], [toLookup])).toEqual([]);
   });
 
-  test("a card's lower ports fit too: Copy's second output on a card a row below", () => {
-    const copy = card('c', 'copy', 0, 0);
+  test('the Start and the End take several when fitted too; the same two ports are not connected twice', () => {
+    const start = card('start', 'start', 0, 0);
+    const b = card('b', 'sort', CARD_WIDTH, 0);
+    const startToOther: Edge = { id: 'e', source: 'start', sourceHandle: 'out-0', target: 'x', targetHandle: 'in-0' };
+    expect(fittedConnections(b, [start, b], [])).toEqual([{ source: 'start', sourceHandle: 'out-0', target: 'b', targetHandle: 'in-0' }]);
+    expect(fittedConnections(b, [start, b], [startToOther])).toEqual([{ source: 'start', sourceHandle: 'out-0', target: 'b', targetHandle: 'in-0' }]);
+
+    const end = card('end', 'end', CARD_WIDTH, 0);
+    const otherToEnd: Edge = { id: 'f', source: 'x', sourceHandle: 'out-0', target: 'end', targetHandle: 'in-0' };
+    expect(fittedConnections(end, [a, end], [otherToEnd])).toEqual([{ source: 'a', sourceHandle: 'out-0', target: 'end', targetHandle: 'in-0' }]);
+
+    const already: Edge = { id: 'g', source: 'a', sourceHandle: 'out-0', target: 'end', targetHandle: 'in-0' };
+    expect(fittedConnections(end, [a, end], [already])).toEqual([]);
+
+    // the core's rule: never Start straight to End, even fitted
+    expect(fittedConnections(end, [start, end], [])).toEqual([]);
+  });
+
+  test("a card's lower ports fit too: Filter's second output on a card a row below", () => {
+    const copy = card('c', 'filter', 0, 0);
     const below = card('d', 'sort', CARD_WIDTH, PORT_GAP);
     expect(fittedConnections(below, [copy, below], [])).toEqual([{ source: 'c', sourceHandle: 'out-1', target: 'd', targetHandle: 'in-0' }]);
   });

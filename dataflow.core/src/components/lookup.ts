@@ -38,6 +38,9 @@ const keyText = (value: unknown) => (isDate(value) ? value.toISOString() : Strin
 export const lookup: ComponentLogic = {
   type: 'lookup',
   inputs: 2,
+  inputLabels: ['input', 'lookup'],
+  // what is looked up and where: one edge each (to join several sources, take them to one component first)
+  singleEdgeInputs: true,
   outputs: 1,
   defaultOutputKey: 'lookup',
 

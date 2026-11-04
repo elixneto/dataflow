@@ -12,15 +12,13 @@ test('Router sends each envelope to the first true case or to the else', async (
         {label: 'SP', condition: '$state === "SP"'},
         {label: 'South', condition: '["PR", "SC", "RS"].includes($state)'},
       ]}},
-      {id: 'u', type: 'union', label: 'Union', config: {inputCount: 2}},
       {id: 'end', type: 'end', label: 'End', config: {}},
     ],
     edges: [
       {source: 'start', sourcePort: 'out-0', target: 'r', targetPort: 'in-0'},
-      {source: 'r', sourcePort: 'out-0', target: 'u', targetPort: 'in-0'},
-      {source: 'r', sourcePort: 'out-1', target: 'u', targetPort: 'in-1'},
+      {source: 'r', sourcePort: 'out-0', target: 'end', targetPort: 'in-0'},
+      {source: 'r', sourcePort: 'out-1', target: 'end', targetPort: 'in-0'},
       // else (out-2) unconnected: drops without a warning
-      {source: 'u', sourcePort: 'out-0', target: 'end', targetPort: 'in-0'},
     ],
   };
   const input = [{state: 'SP'}, {state: 'RS'}, {state: 'BA'}, {state: 'SC'}, {state: 'SP'}];

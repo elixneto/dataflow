@@ -23,6 +23,7 @@ export const router: ComponentLogic = {
   inputs: 1,
   // one per case + the else; the count comes from the configuration
   outputs: 1,
+  outputsFromConfig: config => [...routerCases(config).map((c, i) => ({label: c.label?.trim() || `case ${i + 1}`})), {label: 'else'}],
   optionalOutputs: config => [routerElsePort(config)],
 
   validate(config) {

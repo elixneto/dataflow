@@ -44,18 +44,19 @@ test('a real run ignores the pin and executes the node', async () => {
 
 test('a node that feeds a pinned node and a running one still runs, and the pinned one drops its input', async () => {
   const wf: ExecutableWorkflow = {
-    project: 'Test', workflow: 'Pins and Copy', parameters: [],
+    project: 'Test', workflow: 'Pins and fan-out', parameters: [],
     nodes: [
       {id: 'start', type: 'start', label: 'Start', config: {acceptsInput: true}},
-      {id: 'c', type: 'copy', label: 'Copy', config: {outputCount: 2}},
+      {id: 'c', type: 'limit', label: 'All', config: {count: 1000}},
       {id: 'p', type: 'mapper', label: 'Pinned', config: {fields: [{target: 'x', value: '1', expression: true}]}, pinned: {'out-0': [{pinned: true}]}},
       {id: 'm', type: 'mapper', label: 'Mapper', config: {fields: [{target: 'x', value: '2', expression: true}]}},
-      {id: 'u', type: 'union', label: 'Union', config: {inputCount: 2}},
+      {id: 'u', type: 'limit', label: 'Join', config: {count: 1000}},
       {id: 'end', type: 'end', label: 'End', config: {}},
     ],
-    edges: [edge('start', 'c'), edge('c', 'p'), edge('c', 'm', 'out-1'), edge('p', 'u'), edge('m', 'u', 'out-0', 'in-1'), edge('u', 'end')],
+    // c's output to both p and m; p and m into u's one input
+    edges: [edge('start', 'c'), edge('c', 'p'), edge('c', 'm'), edge('p', 'u'), edge('m', 'u'), edge('u', 'end')],
   };
-  // more envelopes than a channel holds: the pinned node must keep reading so the Copy does not get stuck
+  // more envelopes than a channel holds: the pinned node must keep reading so the fan-out does not get stuck
   const input = Array.from({length: 300}, (_, i) => ({i}));
   const r = await workflowRunner(wf, {mode: 'validation', id: 'p2', evaluate, input});
   expect(r.status).toBe('completed');

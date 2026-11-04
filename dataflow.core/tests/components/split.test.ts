@@ -33,15 +33,13 @@ test('split undoes an aggregate and a value that is not a list is an error of th
       {id: 'start', type: 'start', label: 'Start', config: {acceptsInput: true}},
       {id: 'sp', type: 'split', label: 'Split', config: {onError: 'divert', list: '$items'}},
       {id: 'handle', type: 'mapper', label: 'Handle error', config: {fields: [{target: 'status', value: 'ERROR', expression: false}]}},
-      {id: 'union', type: 'union', label: 'Union', config: {inputCount: 2}},
       {id: 'end', type: 'end', label: 'End', config: {}},
     ],
     edges: [
       {source: 'start', sourcePort: 'out-0', target: 'sp', targetPort: 'in-0'},
-      {source: 'sp', sourcePort: 'out-0', target: 'union', targetPort: 'in-0'},
+      {source: 'sp', sourcePort: 'out-0', target: 'end', targetPort: 'in-0'},
       {source: 'sp', sourcePort: 'error', target: 'handle', targetPort: 'in-0'},
-      {source: 'handle', sourcePort: 'out-0', target: 'union', targetPort: 'in-1'},
-      {source: 'union', sourcePort: 'out-0', target: 'end', targetPort: 'in-0'},
+      {source: 'handle', sourcePort: 'out-0', target: 'end', targetPort: 'in-0'},
     ],
   };
   const diverted = await workflowRunner(direct, {mode: 'execution', id: 'split2', evaluate, input: [{items: 'x'}, {items: [{a: 1}, 2]}, {items: []}, {items: [{a: 2}]}]});

@@ -10,6 +10,17 @@ export type ComponentLogic = {
   inputs: number;
   /** number of outputs (out-0, out-1...), besides the error port */
   outputs: number;
+  /**
+   * Every port takes several edges: an output sends each envelope to all of them (each path gets its own copy), an input
+   * joins them in arrival order. A component whose inputs mean different things (Lookup: input and lookup) takes one edge
+   * on each instead.
+   */
+  singleEdgeInputs?: boolean;
+  /** names of the inputs / outputs, in order, when they have one (Lookup's input and lookup, Filter's true and false) */
+  inputLabels?: string[];
+  outputLabels?: string[];
+  /** outputs that depend on the config, with their names (the Router: one per case and the else); replaces `outputs` */
+  outputsFromConfig?: (config: Record<string, unknown>) => {label: string}[];
   /** outputs that may stay unconnected: what goes out through them is dropped silently (e.g. Filter's false, Router's else) */
   optionalOutputs?: string[] | ((config: Record<string, unknown>) => string[]);
   /**

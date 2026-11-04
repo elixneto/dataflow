@@ -36,11 +36,26 @@ describe('arrange (left to right, glued)', () => {
 
   test("a branch goes a row down, where the second output is (Filter's false)", () => {
     const placed = arrange([card('f', 'filter', 0, 0), card('t', 'log', 0, 0), card('x', 'sort', 0, 0)], [edge('f', 't'), edge('f', 'x', 'out-1')]);
-    expect(at(placed)).toEqual({ f: [0, 0], t: [CARD_WIDTH, 0], x: [CARD_WIDTH, PORT_GAP] });
+    // Filter's outputs have names (true, false): the next column leaves room for them (64 px: 5 letters and the room)
+    expect(at(placed)).toEqual({ f: [0, 0], t: [CARD_WIDTH + 64, 0], x: [CARD_WIDTH + 64, PORT_GAP] });
   });
 
-  test("a Union lines up with its first input; the second source's card above it on another row", () => {
-    const nodes = [card('a', 'mapper', 0, 0), card('b', 'sort', 0, 100), card('u', 'union', 0, 0)];
+  test('not glued after an output with several edges: room for its 2x, 3x', () => {
+    const placed = arrange(
+      [card('s', 'mapper', 0, 0), card('a', 'sort', 0, 0), card('b', 'log', 0, 0), card('c', 'limit', 0, 0)],
+      [edge('s', 'a'), edge('s', 'b'), edge('s', 'c')],
+    );
+    expect(at(placed)).toMatchObject({ s: [0, 0], a: [CARD_WIDTH + 48, 0], b: [CARD_WIDTH + 48, PORT_GAP], c: [CARD_WIDTH + 48, 2 * PORT_GAP] });
+  });
+
+  test('room for the longest name of the card (Distinct: duplicates), also after the unnamed-looking first output', () => {
+    const placed = arrange([card('d', 'distinct', 0, 0), card('e', 'log', 0, 0)], [edge('d', 'e')]);
+    // "duplicates": 10 letters → 10 × 6.5 + 24 = 89 → 96 (whole grid steps)
+    expect(at(placed)).toMatchObject({ e: [CARD_WIDTH + 96, 0] });
+  });
+
+  test("a Lookup lines up with its first input; the second source's card on the next row", () => {
+    const nodes = [card('a', 'mapper', 0, 0), card('b', 'sort', 0, 100), card('u', 'lookup', 0, 0)];
     const placed = arrange(nodes, [edge('a', 'u'), edge('b', 'u', 'out-0', 'in-1')]);
     expect(at(placed)).toEqual({ a: [0, 0], b: [0, PORT_GAP], u: [CARD_WIDTH, 0] });
   });
@@ -52,7 +67,7 @@ describe('arrange (left to right, glued)', () => {
     expect(placed[0]).toMatchObject({ position: { x: -32, y: -48 }, width: 2 * CARD_WIDTH + 64, height: 64 + 48 + 32 });
   });
 
-  test('groups never overlap: a group fed by another one starts a column later; groups of separate flows go down', () => {
+  test('groups never overlap: a group fed by another one moves right of it; groups of separate flows go down', () => {
     const boxOf = (n: { position: { x: number; y: number }; width?: number; height?: number }) => ({ ...n.position, w: n.width!, h: n.height! });
     const apart = (a: ReturnType<typeof boxOf>, b: ReturnType<typeof boxOf>) =>
       a.x + a.w <= b.x || b.x + b.w <= a.x || a.y + a.h <= b.y || b.y + b.h <= a.y;
@@ -83,7 +98,7 @@ describe('arrange (left to right, glued)', () => {
     const blue = { id: 'blue', type: 'group', position: { x: -40, y: -40 }, width: 260, height: 120, data: {} };
     const yellow = { id: 'yellow', type: 'group', position: { x: -40, y: 100 }, width: 260, height: 120, data: {} };
     const placed = arrange(
-      [green, blue, yellow, card('a', 'typescript', 0, 0), card('b', 'sqlserver', 0, 140), card('u', 'union', 400, 0)],
+      [green, blue, yellow, card('a', 'typescript', 0, 0), card('b', 'sqlserver', 0, 140), card('u', 'lookup', 400, 0)],
       [edge('a', 'u'), edge('b', 'u', 'out-0', 'in-1')],
     ) as Sized[];
     const box = (id: string) => boxOf(placed.find(n => n.id === id)!);
@@ -91,6 +106,83 @@ describe('arrange (left to right, glued)', () => {
     expect(apart(box('blue'), box('yellow'))).toBe(true);
     expect(within(box('blue'), box('green'))).toBe(true);
     expect(within(box('yellow'), box('green'))).toBe(true);
+  });
+
+  test('a loose card going out of a group and back in does not open a gap in the group: it moves above the box', () => {
+    // as in the screenshot: start → aggregate → http → router → end inside the group; start → grid (outside) → router
+    const group = { id: 'g', type: 'group', position: { x: -50, y: -50 }, width: 900, height: 200, data: {} };
+    const placed = arrange(
+      [group, card('s', 'start', 0, 0), card('ag', 'aggregate', 170, 0), card('h', 'http-request', 340, 0), card('r', 'router', 600, 0), card('e', 'end', 800, 0), card('dg', 'datagrid', 300, 400)],
+      [edge('s', 'ag'), edge('s', 'dg'), edge('ag', 'h'), edge('h', 'r'), edge('dg', 'r'), edge('r', 'e')],
+    ) as { id: string; position: { x: number; y: number }; width?: number; height?: number }[];
+    const x = (id: string) => placed.find(n => n.id === id)!.position.x;
+    const box = placed.find(n => n.id === 'g')!;
+    const grid = placed.find(n => n.id === 'dg')!;
+
+    // the Router right after the HTTP Request (no empty column between them); the End after the Router's else (its name)
+    expect(x('r') - x('h')).toBe(CARD_WIDTH);
+    expect(x('e') - x('r')).toBe(CARD_WIDTH + 64);
+    // the Aggregate after the Start's 2x
+    expect(x('ag') - x('s')).toBe(CARD_WIDTH + 48);
+    // the Data Grid out of the group's box, above it (moving up is preferred to down)
+    expect(grid.position.y + 64).toBeLessThanOrEqual(box.position.y);
+  });
+
+  test('a loose card between cards of a group never ends on top of another card: the group stays whole', () => {
+    type Placed = { id: string; position: { x: number; y: number } };
+    const flow = (groupWidth: number) =>
+      arrange(
+        [
+          { id: 'g', type: 'group', position: { x: -50, y: -50 }, width: groupWidth, height: 200, data: {} },
+          card('s', 'start', 0, 0), card('ag', 'aggregate', 170, 0), card('h', 'http-request', 340, 0),
+          card('r', 'router', 600, 300), card('e', 'end', 900, 0), card('dg', 'datagrid', 300, 400),
+        ],
+        [edge('s', 'ag'), edge('s', 'dg'), edge('ag', 'h'), edge('h', 'r'), edge('dg', 'r'), edge('r', 'e')],
+      ) as Placed[];
+    const apart = (placed: Placed[]) => {
+      const cards = placed.filter(n => n.id !== 'g');
+      return cards.every((a, i) =>
+        cards.slice(i + 1).every(b => Math.abs(a.position.x - b.position.x) >= CARD_WIDTH || Math.abs(a.position.y - b.position.y) >= PORT_GAP),
+      );
+    };
+
+    // the Router out of the group, the End out too: the Router goes past the box and the End moves along after it
+    const bothOut = flow(1100);
+    const x = (placed: Placed[], id: string) => placed.find(n => n.id === id)!.position.x;
+    expect(apart(bothOut)).toBe(true);
+    expect(x(bothOut, 'e')).toBeGreaterThan(x(bothOut, 'r'));
+
+    // the Router out, the End in the group: the Router goes above the box, nothing on top of the End
+    const endIn = flow(1300);
+    expect(apart(endIn)).toBe(true);
+  });
+
+  test('moving a group away never leaves two loose cards on top of each other (the Lookup and the Mapper)', () => {
+    type Placed = { id: string; position: { x: number; y: number } };
+    // as in the screenshot: Start → Mapper (loose), Start → Mapper → Sort → Router → End in a group, Start → both
+    // inputs of a Lookup (loose); the Mapper and the Lookup go to the End. Whatever order the edges were drawn in.
+    const nodes = [
+      card('s', 'start', 40, 248), card('m1', 'mapper', 410, 40),
+      { id: 'g', type: 'group', position: { x: 380, y: 200 }, width: 770, height: 140, data: {} },
+      card('m2', 'mapper', 410, 248), card('so', 'sort', 570, 248), card('r', 'router', 730, 248), card('e', 'end', 955, 248),
+      card('l', 'lookup', 665, 487),
+    ];
+    const rest = [edge('m2', 'so'), edge('so', 'r'), edge('r', 'e'), edge('m1', 'e'), edge('l', 'e')];
+    const fromStart = [edge('s', 'm1'), edge('s', 'm2'), edge('s', 'l'), edge('s', 'l', 'out-0', 'in-1')];
+    const orders = [fromStart, [fromStart[2]!, fromStart[3]!, fromStart[0]!, fromStart[1]!], [fromStart[1]!, fromStart[2]!, fromStart[0]!, fromStart[3]!], [fromStart[1]!, fromStart[0]!, fromStart[2]!, fromStart[3]!]];
+
+    for (const order of orders) {
+      const placed = arrange(nodes, [...order, ...rest]) as Placed[];
+      const at = (id: string) => placed.find(n => n.id === id)!.position;
+      // the Lookup takes two rows (its strip): nothing may sit in either
+      const lookup = at('l');
+      for (const other of ['s', 'm1', 'm2', 'so', 'r', 'e']) {
+        const p = at(other);
+        const sameColumn = Math.abs(p.x - lookup.x) < CARD_WIDTH;
+        const inRows = p.y > lookup.y - PORT_GAP && p.y < lookup.y + 2 * PORT_GAP;
+        expect(`${other}: ${sameColumn && inRows}`).toBe(`${other}: false`);
+      }
+    }
   });
 
   test('separate flows one below the other; groups and loose cards are kept', () => {

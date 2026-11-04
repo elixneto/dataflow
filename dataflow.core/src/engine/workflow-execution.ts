@@ -155,7 +155,11 @@ export class WorkflowExecution {
     }
     const sample = (rec.outputSample[port] ??= []);
     if (sample.length < SAMPLE_SIZE) sample.push(clone(doc.DATA));
-    for (const channel of this.outputsOf(node.id, port)) await channel.send(doc);
+    // a port with several edges gives each its own copy: a path that changes the envelope does not touch what another
+    // one received. One edge: the envelope itself.
+    const channels = this.outputsOf(node.id, port);
+    const copies = channels.slice(1).map(() => structuredClone(doc));
+    for (const [i, channel] of channels.entries()) await channel.send(i === 0 ? doc : copies[i - 1]!);
     if (wasRunning) stopwatch.resume();
   }
 
@@ -243,7 +247,7 @@ export class WorkflowExecution {
           }
           errors += 1;
           log('error', output.error.message);
-          if (policy === 'stop') throw new RunInterrupted(`"${node.label}": ${output.error.message}`);
+          if (policy === 'throw') throw new RunInterrupted(`"${node.label}": ${output.error.message}`);
           // continue: the incoming envelope goes out as it was through the main output and the flow moves on
           if (policy === 'continue') await send('out-0', output.doc);
         }

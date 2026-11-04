@@ -48,32 +48,32 @@ test('disabled with a loose output: bypass, dropped envelope and nothing at the 
   expect(r.status).toBe('with-warnings');
 });
 
-function flowWithUnion(): ExecutableWorkflow {
+function flowJoiningError(): ExecutableWorkflow {
   return {
-    project: 'Test', workflow: 'Union', parameters: [],
+    project: 'Test', workflow: 'Join', parameters: [],
     nodes: [
       {id: 'start', type: 'start', label: 'Start', config: {acceptsInput: true}},
       {id: 'ok', type: 'mapper', label: 'Mapper', config: {onError: 'divert', fields: [{target: 'double', value: '$n * 2 + $failure.x', expression: true}]}},
       {id: 'handle', type: 'mapper', label: 'Handle error', config: {fields: [{target: 'status', value: 'ERROR', expression: false}]}},
-      {id: 'union', type: 'union', label: 'Union', config: {inputCount: 2}},
+      {id: 'join', type: 'limit', label: 'Join', config: {count: 100}},
       {id: 'end', type: 'end', label: 'End', config: {}},
     ],
     edges: [
       {source: 'start', sourcePort: 'out-0', target: 'ok', targetPort: 'in-0'},
-      {source: 'ok', sourcePort: 'out-0', target: 'union', targetPort: 'in-0'},
+      {source: 'ok', sourcePort: 'out-0', target: 'join', targetPort: 'in-0'},
       {source: 'ok', sourcePort: 'error', target: 'handle', targetPort: 'in-0'},
-      {source: 'handle', sourcePort: 'out-0', target: 'union', targetPort: 'in-1'},
-      {source: 'union', sourcePort: 'out-0', target: 'end', targetPort: 'in-0'},
+      {source: 'handle', sourcePort: 'out-0', target: 'join', targetPort: 'in-0'},
+      {source: 'join', sourcePort: 'out-0', target: 'end', targetPort: 'in-0'},
     ],
   };
 }
 
-test('Union joins the normal output and the error handling one', async () => {
-  const wfUnion = flowWithUnion();
+test('an input with two edges joins the normal output and the error handling one', async () => {
+  const wf = flowJoiningError();
   // $failure only exists in the 2nd envelope: the 1st one fails (goes to "handle"), the 2nd passes
-  const r = await workflowRunner(wfUnion, {mode: 'execution', id: 't11', evaluate, input: [{n: 1}, {n: 2, failure: {x: 0}}]});
-  const joined = r.components.find(c => c.nodeId === 'union')!;
-  expect(joined.inputs).toEqual({'in-0': 1, 'in-1': 1});
+  const r = await workflowRunner(wf, {mode: 'execution', id: 't11', evaluate, input: [{n: 1}, {n: 2, failure: {x: 0}}]});
+  const joined = r.components.find(c => c.nodeId === 'join')!;
+  expect(joined.inputs).toEqual({'in-0': 2});
   expect(joined.outputs['out-0']).toBe(2);
   expect(r.components.find(c => c.nodeId === 'end')!.inputs['in-0']).toBe(2);
   // what goes out through the error port carries DATA.errors

@@ -41,22 +41,22 @@ test('a cycle in the edges does not run (infinite loop)', async () => {
     project: 'Test', workflow: 'Cycle', parameters: [],
     nodes: [
       {id: 'start', type: 'start', label: 'Start', config: {}},
-      {id: 'union', type: 'union', label: 'Union', config: {inputCount: 2}},
+      {id: 'join', type: 'limit', label: 'Join', config: {count: 100}},
       {id: 'm1', type: 'mapper', label: 'Mapper 1', config: {onError: 'divert', fields: [{target: 'x', value: '$y.z', expression: true}]}},
       {id: 'm2', type: 'mapper', label: 'Mapper 2', config: {fields: [{target: 's', value: 'ERROR', expression: false}]}},
       {id: 'end', type: 'end', label: 'End', config: {}},
     ],
     edges: [
-      {source: 'start', sourcePort: 'out-0', target: 'union', targetPort: 'in-0'},
-      {source: 'union', sourcePort: 'out-0', target: 'm1', targetPort: 'in-0'},
+      {source: 'start', sourcePort: 'out-0', target: 'join', targetPort: 'in-0'},
+      {source: 'join', sourcePort: 'out-0', target: 'm1', targetPort: 'in-0'},
       {source: 'm1', sourcePort: 'out-0', target: 'end', targetPort: 'in-0'},
       {source: 'm1', sourcePort: 'error', target: 'm2', targetPort: 'in-0'},
-      {source: 'm2', sourcePort: 'out-0', target: 'union', targetPort: 'in-1'},
+      {source: 'm2', sourcePort: 'out-0', target: 'join', targetPort: 'in-0'},
     ],
   };
   const r = await workflowRunner(withCycle, {mode: 'execution', id: 't13', evaluate});
   expect(r.status).toBe('failed');
-  expect(r.error).toContain('Union → Mapper 1 → Mapper 2 → Union');
+  expect(r.error).toContain('Join → Mapper 1 → Mapper 2 → Join');
 });
 
 test('run cancelled by the signal', async () => {

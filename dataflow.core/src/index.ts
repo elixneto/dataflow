@@ -7,6 +7,7 @@ export * from '#validation/expression-check';
 export * from '#validation/workflow-dependencies';
 export * from '#validation/workflow-cycle';
 export * from '#validation/port-connections';
+export * from '#validation/ports';
 export * from '#validation/key-name';
 export * from '#errors/normalize-error';
 export * from './folders/folder-tree';
@@ -30,8 +31,6 @@ export {mongoPipelineConfig, mongoPipelineIssue, mongoPipelineTextIssue, mongodb
 export {httpConfig, httpRequest, httpWrites, HTTP_METHODS, DEFAULT_HTTP_TIMEOUT_S, MAX_HTTP_CONCURRENCY, type HttpMethod, type HttpPair} from './components/http-request';
 export {mongoDeleteConfig, mongodbDelete, emptyFilterText, DEFAULT_DELETE_FILTER} from './components/mongodb-delete';
 export {mongoUpsertConfig, mongodbUpsert, DEFAULT_MONGODB_BATCH_SIZE, MAX_MONGODB_BATCH_SIZE, type MongoFilterKey, type MongoDocumentSource} from './components/mongodb-upsert';
-export {copy, MAX_COPY_OUTPUTS, MIN_COPY_OUTPUTS, copyOutputCount} from './components/copy';
-export {MAX_UNION_INPUTS, MIN_UNION_INPUTS, unionInputCount, union} from './components/union';
 export {log, logConfig, LOG_LEVELS, MAX_LOG_LINES, type LogComponentLevel} from './components/log';
 export {workflowInvokerConfig, workflowInvoker, type InvokerParameter} from './components/workflow';
 export {MAX_WORKFLOW_DEPTH, SAMPLE_SIZE, START, END} from '#engine/constants';

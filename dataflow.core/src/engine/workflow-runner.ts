@@ -1,4 +1,4 @@
-import { END, START } from '#engine/constants';
+import { START } from '#engine/constants';
 import { resolveParameters } from '#engine/workflow-parameters';
 import { WorkflowExecution } from '#engine/workflow-execution';
 import { findCycle } from '#validation/workflow-cycle';
@@ -38,8 +38,9 @@ export async function workflowRunner(wf: ExecutableWorkflow, options: RunOptions
     return execution.finish('failed', `The flow has a cycle (infinite loop): ${cycle.map(name).join(' → ')}.`);
   }
 
-  // one edge per port (the End's input takes several): a flow from the API or the YAML may have more
-  const crowded = portConnectionIssues(wf.edges, id => wf.nodes.find(n => n.id === id)?.type === END);
+  // the connection rules (validation/ports.ts): one edge per port, but the Start's output and the End's input take
+  // several; never Start straight to End. A flow from the API or the YAML may break them
+  const crowded = portConnectionIssues(wf.edges, id => wf.nodes.find(n => n.id === id)?.type);
   if (crowded.length) {
     return execution.finish('failed', crowded.map(i => `"${name(i.nodeId)}" ${i.message}`).join(' '));
   }

@@ -2,6 +2,7 @@ import { memo } from 'react';
 import { NodeResizer, useReactFlow, type NodeProps } from '@xyflow/react';
 import { cn } from '@/lib/utils';
 import { GROUP_COLORS, type GroupData, type GroupNode } from './group';
+import { useHistory } from './history';
 
 /*
  * A group, as in the PoC: a colored rectangle behind the components, only to organize them visually (it is not part of
@@ -11,11 +12,16 @@ import { GROUP_COLORS, type GroupData, type GroupNode } from './group';
 
 function GroupNodeView({ id, data, selected }: NodeProps<GroupNode>) {
   const { updateNodeData } = useReactFlow<GroupNode>();
-  const set = (changes: Partial<GroupData>) => updateNodeData(id, changes);
+  const { record, recordEdit } = useHistory();
+  // typing the title is one Ctrl+Z step; a color is one
+  const set = (changes: Partial<GroupData>) => {
+    recordEdit(`${id}:${Object.keys(changes).join(',')}`);
+    updateNodeData(id, changes);
+  };
 
   return (
     <>
-      <NodeResizer isVisible={selected} minWidth={160} minHeight={96} color={data.color} />
+      <NodeResizer isVisible={selected} minWidth={160} minHeight={96} color={data.color} onResizeStart={record} />
       <div
         className="absolute inset-0 flex flex-col rounded-xl border-2"
         style={{

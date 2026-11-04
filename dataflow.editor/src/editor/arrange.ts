@@ -1,11 +1,11 @@
 import type { Edge } from '@xyflow/react';
-import { CARD_HEIGHT, CARD_WIDTH, PORT_GAP } from './node-geometry';
-import { inputPorts, outputPorts } from './ports';
+import { CARD_HEIGHT, CARD_WIDTH, PORT_GAP, STACK_GAP } from './node-geometry';
+import { inputPorts, outputPorts } from '@dataflow/core';
 
 /*
  * Arrange, as in the PoC but only left to right, and with the cards glued: each card goes in the column right after
  * what feeds it (one card width away, the output's bump in its input's hole) and at the height where its input meets
- * that output, so a straight line of cards reads like one piece. A branch (Copy's second output, Filter's false...)
+ * that output, so a straight line of cards reads like one piece. A branch (Filter's false, a Router's case...)
  * goes a row down; a row is a card and the gap (PORT_GAP), so ports always line up. Cards that would land on another
  * go down to the next free row. Each flow that starts on its own (a card with no input edge) starts below the others.
  * A group is resized around the cards that were inside it (fitGroups), and groups never overlap: going into another
@@ -36,8 +36,9 @@ export function arrange<T extends Placed>(nodes: T[], edges: Edge[]): T[] {
   const span = (c: T) => Math.max(1, inputPorts(component(c).type, component(c).config).length, outputPorts(component(c).type, component(c).config).length);
   const tree = groupTree(nodes, components, span);
 
-  // column: the longest way from a card with no input edge (a cycle stops at the cards already counted). Going into
-  // another group (or out of one) skips a column, so the groups' boxes have room between them.
+  // column: the longest way from a card with no input edge (a cycle stops at the cards already counted). Groups add no
+  // column of their own: when two boxes (or a box and a loose card) would overlap, the pass after (separate) moves the
+  // later one away, so the cards inside a group stay glued.
   const column = new Map<string, number>();
   const columnOf = (id: string, seen = new Set<string>()): number => {
     const known = column.get(id);
@@ -50,7 +51,7 @@ export function arrange<T extends Placed>(nodes: T[], edges: Edge[]): T[] {
     }
 
     seen.add(id);
-    const value = Math.max(0, ...incoming(id).map(e => columnOf(e.source, seen) + (tree.cardParent.get(e.source) === tree.cardParent.get(id) ? 1 : 2)));
+    const value = Math.max(0, ...incoming(id).map(e => columnOf(e.source, seen) + 1));
     column.set(id, value);
     return value;
   };
@@ -86,7 +87,7 @@ export function arrange<T extends Placed>(nodes: T[], edges: Edge[]): T[] {
         continue;
       }
 
-      // wait for every card that feeds it (a Union's inputs), then line up with the one on its first input
+      // wait for every card that feeds it (several edges in, Lookup's two inputs), then line up with the one on its first input
       const feeders = incoming(next.id);
       if (feeders.some(f => !row.has(f.source))) {
         continue;
@@ -112,7 +113,22 @@ export function arrange<T extends Placed>(nodes: T[], edges: Edge[]): T[] {
 
   const left = Math.min(...components.map(c => c.position.x));
   const top = Math.min(...components.map(c => c.position.y));
-  const moved = new Map(components.map(c => [c.id, { x: left + column.get(c.id)! * CARD_WIDTH, y: top + row.get(c.id)! * PORT_GAP }]));
+  // where each column starts: glued to the one before, unless an edge leaves from a port with a name (Distinct's
+  // unique) or with several edges (its 2x, 3x): then room for that text, so it shows between the cards
+  const columnX = new Map<number, number>();
+  const columns = [...new Set(column.values())].sort((a, b) => a - b);
+  for (const col of columns) {
+    const feeding = links.filter(e => column.get(e.target) === col);
+    const needs = feeding.map(e => {
+      const from = column.get(e.source)!;
+      return (columnX.get(from) ?? 0) + (col - from) * CARD_WIDTH + portTextRoom(byId.get(e.source)!, e.sourceHandle, links);
+    });
+    const previous = columns.filter(c => c < col).at(-1);
+    const glued = previous === undefined ? 0 : columnX.get(previous)! + (col - previous) * CARD_WIDTH;
+    columnX.set(col, Math.max(glued, ...needs));
+  }
+
+  const moved = new Map(components.map(c => [c.id, { x: left + columnX.get(column.get(c.id)!)!, y: top + row.get(c.id)! * PORT_GAP }]));
 
   const groups = fitAndSeparate(tree, components, moved);
   return nodes.map(n => {
@@ -120,6 +136,24 @@ export function arrange<T extends Placed>(nodes: T[], edges: Edge[]): T[] {
     const group = groups.get(n.id);
     return position ? { ...n, position } : group ? { ...n, position: { x: group.x, y: group.y }, width: group.w, height: group.h } : n;
   });
+}
+
+/** about the width of a character of a port's name or count (10px monospace), and the room around that text */
+const TEXT_CHAR = 6.5;
+const TEXT_ROOM = 24;
+
+/**
+ * Extra room (px, whole grid steps) after a card for what its output shows past the bump: the port's name (Distinct's
+ * unique / duplicates: the longest of the card's names) or how many edges leave it (2x). 0 when there is nothing.
+ */
+function portTextRoom(card: Placed, handle: string | null | undefined, links: Edge[]): number {
+  const data = card.data as { type: string; config?: Record<string, unknown> };
+  const ports = outputPorts(data.type, data.config);
+  const port = ports.find(p => p.id === handle);
+  const count = links.filter(e => e.source === card.id && e.sourceHandle === handle).length;
+  const named = port?.label ? Math.max(...ports.map(p => p.label?.length ?? 0)) : 0;
+  const text = Math.max(named, count > 1 ? `${count}x`.length : 0);
+  return text === 0 ? 0 : Math.ceil((text * TEXT_CHAR + TEXT_ROOM) / 16) * 16;
 }
 
 type Box = { x: number; y: number; w: number; h: number };
@@ -238,15 +272,17 @@ function fitAndSeparate(tree: Tree, components: Placed[], moved: Map<string, { x
     });
   };
 
-  // while two blocks overlap (one of them a group: two loose cards are the arrange's business), the later one (to the
-  // right, then below) moves right if it starts beside the other, down if below it, by whole columns / rows
+  // while two blocks overlap (with a group: closer than GROUP_GAP; two loose cards: on top of each other, which the
+  // arrange itself never does but moving a group may cause), the later one (to the right, then below) moves away the shorter way, by whole columns / rows: up, above it (alone), or right, taking along every
+  // block that starts at or past it, so what comes after it in the flow stays after it and does not get covered
   const separate = (blocks: Block[]) => {
     for (let round = 0; round < blocks.length * blocks.length + 10; round++) {
       const order = [...blocks].sort((a, b) => a.box().x - b.box().x || a.box().y - b.box().y);
       let clash: [Block, Block] | undefined;
       for (let i = 0; i < order.length && !clash; i++) {
         for (let j = i + 1; j < order.length && !clash; j++) {
-          if ((order[i]!.isGroup || order[j]!.isGroup) && overlap(order[i]!.box(), order[j]!.box(), GROUP_GAP)) {
+          const withGroup = order[i]!.isGroup || order[j]!.isGroup;
+          if (overlap(order[i]!.box(), order[j]!.box(), withGroup ? GROUP_GAP : -1)) {
             clash = [order[i]!, order[j]!];
           }
         }
@@ -259,10 +295,17 @@ function fitAndSeparate(tree: Tree, components: Placed[], moved: Map<string, { x
       const [first, later] = clash;
       const a = first.box();
       const b = later.box();
-      if (b.y >= a.y + a.h / 2) {
-        shift(later, 0, snapUp(a.y + a.h + GROUP_GAP - b.y, PORT_GAP));
+      // two loose cards: the next row or column is enough; with a group, its gap too
+      const gap = first.isGroup || later.isGroup ? GROUP_GAP : 0;
+      // up, above the other one (preferred to down: the flow grows upwards), or right
+      const up = snapUp(b.y + b.h + Math.max(gap, STACK_GAP) - a.y, PORT_GAP);
+      const right = snapUp(a.x + a.w + gap - b.x, CARD_WIDTH);
+      if (b.y >= a.y + a.h / 2 || up < right) {
+        shift(later, 0, -up);
       } else {
-        shift(later, snapUp(a.x + a.w + GROUP_GAP - b.x, CARD_WIDTH), 0);
+        for (const block of blocks.filter(other => other !== first && other.box().x >= b.x)) {
+          shift(block, right, 0);
+        }
       }
     }
   };

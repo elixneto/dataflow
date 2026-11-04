@@ -25,7 +25,7 @@ describe('Workflow Invoker', () => {
     ],
     edges: [edge('start', 'm'), edge('m', 'end')],
   };
-  const parent = (workflowId: string, onError = 'stop'): ExecutableWorkflow => ({
+  const parent = (workflowId: string, onError = 'throw'): ExecutableWorkflow => ({
     id: 'A', project: 'Test', workflow: 'Parent', parameters: [],
     nodes: [
       {id: 'start', type: 'start', label: 'Start', config: {}},

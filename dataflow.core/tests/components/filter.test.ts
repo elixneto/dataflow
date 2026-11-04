@@ -9,14 +9,12 @@ test('Filter sends each envelope to true or false by the condition', async () =>
     nodes: [
       {id: 'start', type: 'start', label: 'Start', config: {acceptsInput: true}},
       {id: 'f', type: 'filter', label: 'Filter', config: {condition: '$price > 10'}},
-      {id: 'u', type: 'union', label: 'Union', config: {inputCount: 2}},
       {id: 'end', type: 'end', label: 'End', config: {}},
     ],
     edges: [
       {source: 'start', sourcePort: 'out-0', target: 'f', targetPort: 'in-0'},
-      {source: 'f', sourcePort: 'out-0', target: 'u', targetPort: 'in-0'},
-      {source: 'f', sourcePort: 'out-1', target: 'u', targetPort: 'in-1'},
-      {source: 'u', sourcePort: 'out-0', target: 'end', targetPort: 'in-0'},
+      {source: 'f', sourcePort: 'out-0', target: 'end', targetPort: 'in-0'},
+      {source: 'f', sourcePort: 'out-1', target: 'end', targetPort: 'in-0'},
     ],
   };
   const input = [{price: 5}, {price: 20}, {price: 30}, {price: 0}, {price: 11}];
@@ -26,7 +24,7 @@ test('Filter sends each envelope to true or false by the condition', async () =>
   expect(f.outputs).toEqual({'out-0': 3, 'out-1': 2});
   expect(f.outputSample['out-1']).toEqual([{price: 5}, {price: 0}]);
 
-  // a failing condition is an error of the envelope (default policy: stop)
+  // a failing condition is an error of the envelope (default policy: throw)
   withFilter.nodes[1].config = {condition: '$doesNotExist > 1'};
   const withError = await workflowRunner(withFilter, {mode: 'execution', id: 'tf2', evaluate, input});
   expect(withError.status).toBe('failed');
