@@ -1,32 +1,13 @@
 import { useCallback, useContext, useEffect, useRef, useState } from 'react';
-import Editor, { loader } from '@monaco-editor/react';
-import * as monaco from 'monaco-editor';
-import editorWorker from 'monaco-editor/editor/editor.worker?worker';
-import tsWorker from 'monaco-editor/language/typescript/ts.worker?worker';
+import Editor from '@monaco-editor/react';
+import { useParams } from 'react-router';
+import { ts, useScriptModels } from './monaco-setup';
 import { ScriptGlobalsContext } from './project-resources';
 
 /*
  * The code editor (Monaco, as in the PoC), bundled in (no CDN) with Vite's workers. Loaded only when a window shows a
  * code setting (settings-form lazy-loads this file), so the canvas does not carry it.
  */
-
-self.MonacoEnvironment = {
-  getWorker: (_, label) => (label === 'typescript' || label === 'javascript' ? new tsWorker() : new editorWorker()),
-};
-loader.config({ monaco });
-
-const ts = monaco.typescript;
-ts.typescriptDefaults.setCompilerOptions({
-  target: ts.ScriptTarget.ESNext,
-  lib: ['esnext', 'dom'],
-  strict: false,
-  noEmit: true,
-  allowNonTsExtensions: true,
-  // each component is a module: two open TypeScript components do not fight over the process function
-  moduleDetection: 3,
-} as monaco.typescript.CompilerOptions);
-// JavaScript (a MongoDB pipeline or filter) is an expression with the envelope's $variables: not checked
-ts.javascriptDefaults.setDiagnosticsOptions({ noSemanticValidation: true, noSyntaxValidation: true });
 
 const isDark = () => document.documentElement.classList.contains('dark');
 
@@ -45,6 +26,9 @@ export default function CodeEditor(props: { id: string; nodeId?: string; value: 
   // and its `Data`, what reached this component in the runs: one set of globals at a time in Monaco, so the editor in
   // use (mounted, focused) puts its own
   const globals = useContext(ScriptGlobalsContext)(nodeId);
+  // the project's scripts as Monaco models: `import ... from '@myproject/scripts/<path>'` resolves (autocomplete, errors)
+  const { projectId = '' } = useParams();
+  useScriptModels(projectId);
   const latest = useRef(globals);
   const apply = useCallback(() => ts.typescriptDefaults.setExtraLibs([{ content: latest.current, filePath: 'file:///dataflow-globals.d.ts' }]), []);
   useEffect(() => {
@@ -77,6 +61,9 @@ export default function CodeEditor(props: { id: string; nodeId?: string; value: 
           automaticLayout: true,
           fixedOverflowWidgets: true,
           lineNumbersMinChars: 3,
+          // the hidden textarea, not the browser's EditContext: the canvas (React Flow's Space to pan, Delete) knows a
+          // textarea is someone typing; with EditContext it took the Space
+          editContext: false,
         }}
       />
     </div>

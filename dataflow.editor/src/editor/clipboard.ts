@@ -12,6 +12,30 @@ import { CARD_HEIGHT, CARD_WIDTH } from './node-geometry';
  * has one of each.
  */
 
+/** the parts of an element the focus check reads (an Element; a plain object in the tests) */
+type Focused = { tagName?: string; isContentEditable?: boolean; closest?: (selector: string) => unknown } | null | undefined;
+
+/**
+ * Whether Ctrl+C / Ctrl+V are the canvas's (components): the focus on the page itself or on the canvas, not in a field,
+ * a code editor (Monaco keeps its own selection, which the page's selection does not show), a window or anything else
+ * outside the canvas.
+ */
+export function canvasHasFocus(active: Focused): boolean {
+  if (!active || active.tagName === 'BODY' || active.tagName === 'HTML') {
+    return true;
+  }
+
+  if (active.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(active.tagName ?? '')) {
+    return false;
+  }
+
+  if (active.closest?.('.monaco-editor, [role="dialog"], [contenteditable], [data-floating-window]')) {
+    return false;
+  }
+
+  return Boolean(active.closest?.('.react-flow'));
+}
+
 /** what tells a paste that the clipboard holds components (and not text) */
 export const CLIPBOARD_MARKER = 'dataflow/components';
 

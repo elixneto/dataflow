@@ -49,3 +49,4 @@ export {flowOrder} from '#engine/flow-order';
 export {applyRunFrom, downstreamOf, planRunFrom, skippedNodes, type RunFromPlan} from '#engine/run-from';
 export {resolveParameters} from '#engine/flow-parameters';
 export * from './flows/flow-file';
+export * from './scripts/script-path';

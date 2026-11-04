@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import type { Edge, Node } from '@xyflow/react';
-import { CLIPBOARD_MARKER, copiedComponents, pastedComponents } from '../src/editor/clipboard';
+import { canvasHasFocus, CLIPBOARD_MARKER, copiedComponents, pastedComponents } from '../src/editor/clipboard';
 
 const node = (id: string, type: string, extra: Partial<Node> & { data?: Record<string, unknown> } = {}): Node => ({
   id,
@@ -82,5 +82,29 @@ describe('copy and paste of components', () => {
     const pasted = pastedComponents(text, [], { x: 0, y: 0 })!;
     expect(pasted.nodes.map(n => n.data.type)).toEqual(['mapper']);
     expect(pasted.edges).toEqual([]);
+  });
+});
+
+describe("whether Ctrl+C / Ctrl+V are the canvas's", () => {
+
+  /** an element inside the given selectors */
+  const inside = (tagName: string, ...selectors: string[]) => ({
+    tagName,
+    isContentEditable: false,
+    closest: (selector: string) => (selector.split(',').some(s => selectors.includes(s.trim())) ? {} : null),
+  });
+
+  test('the page itself or the canvas: yes', () => {
+    expect(canvasHasFocus(null)).toBe(true);
+    expect(canvasHasFocus({ tagName: 'BODY' })).toBe(true);
+    expect(canvasHasFocus(inside('DIV', '.react-flow'))).toBe(true);
+  });
+
+  test("a field, a code editor (Monaco's own selection), a window or anything outside the canvas: no", () => {
+    expect(canvasHasFocus(inside('TEXTAREA', '.react-flow'))).toBe(false);
+    expect(canvasHasFocus({ tagName: 'DIV', isContentEditable: true })).toBe(false);
+    expect(canvasHasFocus(inside('DIV', '.monaco-editor', '[role="dialog"]'))).toBe(false);
+    expect(canvasHasFocus(inside('BUTTON', '[role="dialog"]', '.react-flow'))).toBe(false);
+    expect(canvasHasFocus(inside('BUTTON'))).toBe(false);
   });
 });

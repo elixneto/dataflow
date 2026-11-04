@@ -90,7 +90,10 @@ describe("a component's settings form, from the core's settings", () => {
     );
     expect(html).toContain('<option value="f2" selected="">Load orders</option>');
     expect(html).toContain('Add parameter');
-    expect(render('typescript', {})).toContain('async function process');
+    // its code editor (Monaco) loads on demand: its empty frame meanwhile, never a plain text box to type in
+    const ts = render('typescript', {});
+    expect(ts).toContain('aria-label="Code (loading)"');
+    expect(ts).not.toContain('<textarea');
   });
 
   test('the Start: Accepts input, its default input only when on, and the parameters with type and Required', () => {

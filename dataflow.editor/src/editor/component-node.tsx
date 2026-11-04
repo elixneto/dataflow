@@ -113,10 +113,15 @@ function ComponentNodeView({ id, data, selected }: NodeProps<ComponentNode>) {
               </LogIn>
             )}
             {parameterCount > 0 && (
-              <span role="img" aria-label={`${parameterCount} parameter${parameterCount === 1 ? '' : 's'}`} className="flex items-center gap-0.5 text-muted-foreground">
+              // a tooltip by attribute: a <title> outside an svg would become the page's title (React hoists it)
+              <span
+                role="img"
+                aria-label={`${parameterCount} parameter${parameterCount === 1 ? '' : 's'}`}
+                title={`${parameterCount} parameter${parameterCount === 1 ? '' : 's'}`}
+                className="flex items-center gap-0.5 text-muted-foreground"
+              >
                 <SlidersHorizontal className="size-3.5" aria-hidden />
                 <span className="font-mono text-[10px] leading-none font-medium">{parameterCount}</span>
-                <title>{`${parameterCount} parameter${parameterCount === 1 ? '' : 's'}`}</title>
               </span>
             )}
             {onError === 'continue' && (

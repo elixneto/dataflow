@@ -37,7 +37,8 @@ import { canSplice, edgeUnder, pointerBox, splice } from '@/editor/edge-splice';
 import { GROUP_COLORS, GROUP_SIZE, GROUP_Z, layerGroups, type GroupNode } from '@/editor/group';
 import { GroupNodeMemo } from '@/editor/group-node';
 import { HistoryContext, isEditableField, UndoStack } from '@/editor/history';
-import { copiedComponents, pastedComponents } from '@/editor/clipboard';
+import { canvasHasFocus, copiedComponents, pastedComponents } from '@/editor/clipboard';
+import { preloadCodeEditor } from '@/editor/code-editor-loader';
 import { CARD_HEIGHT, CARD_WIDTH } from '@/editor/node-geometry';
 import { ComponentPalette } from './component-palette';
 import { ZoomControls } from './zoom-controls';
@@ -232,13 +233,16 @@ export function FlowCanvas(props: {
     return () => window.removeEventListener('keydown', onKey);
   }, [undo, redo, saveNow]);
 
+  // the code editor (Monaco) in the background: a window with code opens with it at once
+  useEffect(preloadCodeEditor, []);
+
   // Ctrl+C with components selected copies them (editor/clipboard.ts); Ctrl+V pastes them, a little further each time.
   // Typing in a field, or text selected on the page: the browser's own copy and paste
   const pastes = useRef<{ at: { x: number; y: number } | null; count: number }>({ at: null, count: 0 });
   // the pointer over the canvas (screen coordinates), null once it left: a paste lands there
   const pointer = useRef<{ x: number; y: number } | null>(null);
   useEffect(() => {
-    const busy = () => isEditableField(document.activeElement) || Boolean(window.getSelection()?.toString());
+    const busy = () => !canvasHasFocus(document.activeElement) || Boolean(window.getSelection()?.toString());
     const onCopy = (event: ClipboardEvent) => {
       if (busy() || !event.clipboardData) {
         return;
@@ -252,7 +256,7 @@ export function FlowCanvas(props: {
       }
     };
     const onPaste = (event: ClipboardEvent) => {
-      if (isEditableField(document.activeElement) || !event.clipboardData) {
+      if (!canvasHasFocus(document.activeElement) || !event.clipboardData) {
         return;
       }
 
@@ -470,7 +474,12 @@ export function FlowCanvas(props: {
   const [windows, setWindows] = useState<OpenWindow[]>([]);
   // each window comes back where it was and with its size (this browser tab, per flow and component)
   const resources = useLoadProjectResources(projectId);
-  const openWindow = (id: string) =>
+  const openWindow = (id: string) => {
+    // the component goes out of the selection: the window is where the work goes on (its Ctrl+C copies its text)
+    setNodes(current => (current.some(n => n.selected) ? current.map(n => (n.selected ? { ...n, selected: false } : n)) : current));
+    openWindowOnly(id);
+  };
+  const openWindowOnly = (id: string) =>
     setWindows(current => {
       const open = current.find(w => w.id === id);
       if (open) {

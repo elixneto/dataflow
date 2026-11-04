@@ -3,7 +3,7 @@
 export const PROJECTS_PATH = '/projects';
 
 /** the tabs of a project */
-export type ProjectTab = 'flows' | 'connections' | 'secrets' | 'files';
+export type ProjectTab = 'flows' | 'scripts' | 'connections' | 'secrets' | 'files';
 
 /** a project's tab (flows by default) */
 export const projectTabPath = (projectId: string, tab: ProjectTab = 'flows') => `/projects/${projectId}/${tab}`;

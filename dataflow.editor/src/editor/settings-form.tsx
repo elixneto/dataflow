@@ -1,15 +1,15 @@
 import { createContext, lazy, Suspense, useContext, type ReactNode } from 'react';
 import { useParams } from 'react-router';
-import { ArrowDown, ArrowUp, Plus, Trash } from 'lucide-react';
+import { ArrowDown, ArrowUp, LoaderCircle, Plus, Trash } from 'lucide-react';
 import { settingDefault, settingsDefaults, settingValue, settingVisible, withSetting, type ExpressionField, type SettingField } from '@dataflow/core';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 import { projectTabPath } from '@/app/paths';
 import { cn } from '@/lib/utils';
 import { useProjectResources } from './project-resources';
 import { ExpressionBox } from './expression-box';
+import { loadCodeEditor } from './code-editor-loader';
 
 type Values = Record<string, unknown>;
 
@@ -17,7 +17,7 @@ type Values = Record<string, unknown>;
 const NodeContext = createContext<string | undefined>(undefined);
 
 /** Monaco, only when a code setting shows */
-const CodeEditor = lazy(() => import('./code-editor'));
+const CodeEditor = lazy(loadCodeEditor);
 
 const SELECT = 'h-8 w-full rounded-lg border border-input bg-transparent px-2.5 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring dark:bg-input/30';
 
@@ -112,10 +112,14 @@ function Control({ id, field, value, onChange }: { id: string; field: SettingFie
     case 'expression':
       return <NodeExpressionBox id={id} value={text} placeholder={field.placeholder} onChange={onChange} />;
     case 'code': {
-      // a plain text box while the code editor (Monaco) loads
-      const plain = <Textarea id={id} value={text} placeholder={field.placeholder} spellCheck={false} className="min-h-32 font-mono text-xs" onChange={event => onChange(event.target.value)} />;
+      // while the code editor (Monaco) loads: its frame, empty (nothing to type in, nothing typed is lost)
+      const loading = (
+        <div id={id} aria-label={`${field.label} (loading)`} className="flex h-72 items-center justify-center rounded-lg border border-input text-muted-foreground">
+          <LoaderCircle className="size-4 animate-spin" aria-hidden />
+        </div>
+      );
       return (
-        <Suspense fallback={plain}>
+        <Suspense fallback={loading}>
           <CodeEditor id={id} nodeId={nodeId} value={text} language={field.language ?? 'javascript'} label={field.label} onChange={onChange} />
         </Suspense>
       );

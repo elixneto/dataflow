@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { Link } from 'react-router';
-import { FileStack, KeyRound, Plug, TriangleAlert, Workflow, type LucideIcon } from 'lucide-react';
+import { FileCode2, FileStack, KeyRound, Plug, TriangleAlert, Workflow, type LucideIcon } from 'lucide-react';
 import { projectTabPath, PROJECTS_PATH, type ProjectTab } from '@/app/paths';
 import { Button } from '@/components/ui/button';
 import type { Folder } from '@/data/flows/flow';
@@ -11,6 +11,7 @@ import { ProjectBreadcrumb } from '@/pages/project-flows/project-breadcrumb';
 /** a tab marked soon shows disabled, with a "Soon" tag: it is coming, not there yet */
 const TABS: { tab: ProjectTab; label: string; icon: LucideIcon; soon?: boolean }[] = [
   { tab: 'flows', label: 'Flows', icon: Workflow },
+  { tab: 'scripts', label: 'Scripts', icon: FileCode2 },
   { tab: 'connections', label: 'Connections', icon: Plug },
   { tab: 'secrets', label: 'Secrets and Variables', icon: KeyRound },
   { tab: 'files', label: 'Files', icon: FileStack, soon: true },
@@ -28,7 +29,7 @@ type Props = {
 };
 
 /**
- * Every tab of a project: the breadcrumb, the tab bar (Flows | Connections | Secrets and Variables | Files) and the tab's
+ * Every tab of a project: the breadcrumb, the tab bar (Flows | Scripts | Connections | Secrets and Variables | Files) and the tab's
  * content.
  * An archived project is read-only: no buttons to add things.
  */
