@@ -8,6 +8,8 @@ import type {Envelope} from '#types/envelope.type';
  * Lookup (in Kettle, Stream lookup): for each envelope of the main input (in-0), looks for the envelope of the lookup
  * input (in-1) with the same key and writes its whole DATA into the node's output key (default `lookup`; null if
  * not found). Picking fields and giving default values is the job of a Mapper after it (e.g. `$company?.id`).
+ * With If not found on "Not found output", it has two outputs: found (out-0, the same port as before) and not found
+ * (out-1), where the envelopes without a match go as they came in; that one may stay unconnected (they are dropped).
  * With Override, DATA becomes only the envelope found (empty if not found). E.g.: company code in the source system → company in the target.
  *
  * Reads the whole lookup input before yielding the first envelope (it stays in memory). Meanwhile, it holds what arrives
@@ -16,20 +18,14 @@ import type {Envelope} from '#types/envelope.type';
  */
 
 export type LookupKey = {main: string; lookup: string};
-export type IfNotFound = 'null' | 'error';
+export type IfNotFound = 'null' | 'output';
 
 export function lookupConfig(config: Record<string, unknown>) {
   return {
     keys: Array.isArray(config.keys) ? (config.keys as LookupKey[]) : [],
-    ifNotFound: (config.ifNotFound === 'error' ? 'error' : 'null') as IfNotFound,
+    // 'error' (earlier versions: an error for each envelope without a match) became the not found output
+    ifNotFound: (config.ifNotFound === 'output' || config.ifNotFound === 'error' ? 'output' : 'null') as IfNotFound,
   };
-}
-
-class NotFound extends Error {
-  constructor(key: string) {
-    super(`Lookup did not find the key ${key}.`);
-    this.name = 'NotFound';
-  }
 }
 
 /** A key value as text: 1 matches "1"; a date is its instant (String() would drop the milliseconds). */
@@ -42,6 +38,10 @@ export const lookup: ComponentLogic = {
   // what is looked up and where: one edge each (to join several sources, take them to one component first)
   singleEdgeInputs: true,
   outputs: 1,
+  // with the not found output: found and not found (out-1, may stay unconnected); otherwise its one output
+  outputsFromConfig: config => (lookupConfig(config).ifNotFound === 'output' ? [{label: 'found'}, {label: 'not found'}] : undefined),
+  optionalOutputs: ['out-1'],
+  usesOverride: true,
   defaultOutputKey: 'lookup',
   settings: [
     {
@@ -51,7 +51,7 @@ export const lookup: ComponentLogic = {
         {key: 'lookup', label: 'Lookup', kind: 'expression', required: true, placeholder: '$id'},
       ],
     },
-    {key: 'ifNotFound', label: 'If not found', kind: 'select', default: 'null', options: [{value: 'null', label: 'Null'}, {value: 'error', label: 'Error'}]},
+    {key: 'ifNotFound', label: 'If not found', kind: 'select', default: 'null', options: [{value: 'null', label: 'Null'}, {value: 'output', label: 'Not found output'}]},
   ],
 
   validate(config) {
@@ -110,9 +110,14 @@ export const lookup: ComponentLogic = {
       try {
         const key = keyOf(doc, 'main');
         const match = table.get(key);
-        if (!match && ifNotFound === 'error') throw new NotFound(key);
         if (match) found += 1;
         else unmatched += 1;
+        // no match, with the not found output: the envelope goes there as it came in
+        if (!match && ifNotFound === 'output') {
+          yield {port: 'out-1', doc};
+          continue;
+        }
+
         const output: Envelope = ctx.node.override
           ? {FLOW_CURRENT_RUN: doc.FLOW_CURRENT_RUN, PARAMETERS: doc.PARAMETERS, DATA: {...match?.DATA}}
           : withKey(doc, ctx.node.outputKey || 'lookup', match ? match.DATA : null);
@@ -122,6 +127,6 @@ export const lookup: ComponentLogic = {
       }
     }
     await hold;
-    ctx.log('info', `${found} envelope(s) found and ${unmatched} without a match in the lookup.`);
+    ctx.log('info', `${found} envelope(s) found and ${unmatched} not found in the lookup.`);
   },
 };

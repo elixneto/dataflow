@@ -28,6 +28,8 @@ export type FlowFileNode = {
   position: Point;
   config: Record<string, unknown>;
   outputKey?: string;
+  /** what the component produces replaces the envelope's DATA (only for a component with `usesOverride`) */
+  override?: boolean;
   disabled?: boolean;
   /** pinned output: the DATA of the envelopes per output port, replayed in test runs instead of executing */
   pinned?: Record<string, EnvelopeData[]>;
@@ -64,6 +66,7 @@ export function flowToYaml(file: FlowFile): string {
       position: {x: Math.round(n.position.x), y: Math.round(n.position.y)},
       config: n.config,
       ...(n.outputKey ? {outputKey: n.outputKey} : {}),
+      ...(n.override ? {override: true} : {}),
       ...(n.disabled ? {disabled: true} : {}),
       ...(n.pinned ? {pinned: n.pinned} : {}),
       ...(n.notes ? {notes: n.notes} : {}),
@@ -163,6 +166,7 @@ export function validateFlowFile(data: unknown): FlowFileResult {
       position: n.position as Point,
       config: (n.config as Record<string, unknown> | undefined) ?? {},
       ...(typeof n.outputKey === 'string' && n.outputKey ? {outputKey: n.outputKey} : {}),
+      ...(n.override === true ? {override: true} : {}),
       ...(n.disabled === true ? {disabled: true} : {}),
       // pinned output: envelopes per port (a bare `true` of earlier versions had none: not pinned)
       ...(isPinned(n.pinned) ? {pinned: n.pinned} : {}),
@@ -218,6 +222,8 @@ export function toExecutableFlow(file: FlowFile, project: string): ExecutableFlo
       label: n.label || n.type,
       config: n.config,
       ...(n.outputKey ? {outputKey: n.outputKey} : {}),
+      // Override only where the component offers it
+      ...(n.override && COMPONENTS[n.type]?.usesOverride ? {override: true} : {}),
       ...(n.disabled ? {disabled: true} : {}),
       ...(n.pinned ? {pinned: n.pinned} : {}),
     })),

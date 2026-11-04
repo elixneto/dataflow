@@ -26,6 +26,7 @@ export const typescript: ComponentLogic = {
   type: 'typescript',
   inputs: 1,
   outputs: 1,
+  usesOverride: true,
   defaultOutputKey: 'result',
   settings: [{key: 'code', label: 'Code', kind: 'code', language: 'typescript', required: true, default: DEFAULT_CODE}],
 

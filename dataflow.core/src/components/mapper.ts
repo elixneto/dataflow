@@ -23,12 +23,14 @@ export const mapper: ComponentLogic = {
   type: 'mapper',
   inputs: 1,
   outputs: 1,
+  usesOverride: true,
   settings: [
     {
-      key: 'fields', label: 'Fields', kind: 'list', itemLabel: 'field', required: true,
+      // as in the PoC: the source (value) → the key in the envelope
+      key: 'fields', label: 'Fields', kind: 'list', itemLabel: 'field', required: true, arrow: true,
       item: [
-        {key: 'target', label: 'Field', kind: 'text', required: true, placeholder: 'total'},
-        {key: 'value', label: 'Value', kind: 'value', spread: true, default: {value: '', expression: true}, placeholder: '$price * $quantity'},
+        {key: 'value', label: 'Source (value)', kind: 'value', spread: true, default: {value: '', expression: true}, placeholder: '$price * $quantity'},
+        {key: 'target', label: 'Key in the envelope', kind: 'text', required: true, placeholder: 'total'},
       ],
     },
   ],

@@ -41,6 +41,7 @@ export const datagrid: ComponentLogic = {
   type: 'datagrid',
   inputs: 1,
   outputs: 1,
+  usesOverride: true,
   settings: [{
     key: 'columns', label: 'Data', kind: 'grid', required: true,
     options: [{value: 'text', label: 'Text'}, {value: 'number', label: 'Number'}, {value: 'boolean', label: 'Boolean'}],

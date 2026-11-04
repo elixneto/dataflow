@@ -20,6 +20,8 @@ export type ComponentData = {
   label?: string;
   /** the key it writes in the envelope (empty: the component's default) */
   outputKey?: string;
+  /** what it produces replaces the envelope's DATA (a component with Override) */
+  override?: boolean;
   /** free notes (the window's Notes tab) */
   notes?: string;
 };
@@ -266,7 +268,7 @@ function PortHandle(props: { port: PortInfo; kind: 'source' | 'target'; style: C
           aria-hidden
           style={style}
           className={cn(
-            'pointer-events-none absolute -translate-y-[calc(100%+4px)] font-mono text-[10px] text-muted-foreground',
+            'pointer-events-none absolute -translate-y-[calc(100%+4px)] font-mono text-[10px] whitespace-nowrap text-muted-foreground',
             input ? 'right-[calc(100%+6px)]' : 'left-[calc(100%+20px)]',
           )}
         >

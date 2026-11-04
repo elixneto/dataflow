@@ -6,7 +6,7 @@ describe("a component window's draft", () => {
 
   test('starts as the node is (empty fields as text): nothing changed', () => {
     const draft = draftOf(data);
-    expect(draft).toEqual({ label: 'Prices', outputKey: '', notes: '', config: data.config });
+    expect(draft).toEqual({ label: 'Prices', outputKey: '', notes: '', override: false, config: data.config });
     expect(draftChanged(draft, data)).toBe(false);
   });
 
@@ -15,6 +15,7 @@ describe("a component window's draft", () => {
     expect(draftChanged({ ...draft, label: 'Prices 2' }, data)).toBe(true);
     expect(draftChanged({ ...draft, notes: 'x' }, data)).toBe(true);
     expect(draftChanged({ ...draft, outputKey: 'price' }, data)).toBe(true);
+    expect(draftChanged({ ...draft, override: true }, data)).toBe(true);
     expect(draftChanged({ ...draft, config: { fields: [{ target: 'b', value: '1' }] } }, data)).toBe(true);
     // a new config object with the same content is not a change
     expect(draftChanged({ ...draft, config: { fields: [{ target: 'a', value: '1' }] } }, data)).toBe(false);

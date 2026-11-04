@@ -78,3 +78,20 @@ test('for every kind of component, active + waiting fit in its open time: an HTT
   }
   expect(record.components.find(c => c.nodeId === 'http')!.waitingMs!).toBeGreaterThanOrEqual(110);
 });
+
+test("a component's start and end are on the run's clock: inside the run, even when the process's high-resolution clock drifted", async () => {
+  const realOrigin = performance.timeOrigin;
+  // a worker alive for hours: its timeOrigin no longer matches Date.now() (here, 5 s behind)
+  Object.defineProperty(performance, 'timeOrigin', {value: realOrigin - 5_000, configurable: true});
+  try {
+    const prepareScript: PrepareScript = async () => async () => 1;
+    const record = await flowRunner(flow, {mode: 'validation', id: 'o3', evaluate, input: [{a: 1}], prepareScript});
+    const runStart = Date.parse(record.run.startedAt);
+    for (const c of record.components.filter(x => x.start)) {
+      expect(Date.parse(c.start!)).toBeGreaterThanOrEqual(runStart);
+      expect(Date.parse(c.end!)).toBeLessThanOrEqual(runStart + record.durationMs + 2);
+    }
+  } finally {
+    Object.defineProperty(performance, 'timeOrigin', {value: realOrigin, configurable: true});
+  }
+});

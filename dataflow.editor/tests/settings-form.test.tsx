@@ -17,6 +17,15 @@ describe("a component's settings form, from the core's settings", () => {
     expect(html).toContain('Add case');
   });
 
+  test("a Mapper's rows read as in the PoC: Source (value) → Key in the envelope, an arrow between them", () => {
+    const html = render('mapper', { fields: [{ target: 'total', value: '$a', expression: true }] });
+    const text = html.replace(/<svg[^>]*lucide-arrow-right[^>]*>.*?<\/svg>/g, '→').replace(/<[^>]+>/g, '|').replace(/\|+/g, '|');
+    expect(text).toContain('|Source (value)|Key in the envelope|');
+    // the row: the value, the arrow, the key
+    expect(html.indexOf('$a')).toBeLessThan(html.lastIndexOf('lucide-arrow-right'));
+    expect(html.lastIndexOf('lucide-arrow-right')).toBeLessThan(html.indexOf('value="total"'));
+  });
+
   test("a Mapper's value has the fx toggle; a Limit has its select and number with the defaults", () => {
     expect(render('mapper', { fields: [{ target: 'total', value: '$a', expression: true }] })).toContain('aria-pressed="true"');
     const limit = render('limit', {});

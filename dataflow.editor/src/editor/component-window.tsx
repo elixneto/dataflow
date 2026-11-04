@@ -108,6 +108,19 @@ export function ComponentWindow({ id, data, onSave, onCancel, onRemove, register
             </div>
           )}
 
+          {logic?.usesOverride && (
+            <label className="flex w-fit cursor-pointer items-center gap-2 text-sm">
+              <input
+                id={`${id}-override`}
+                type="checkbox"
+                checked={draft.override}
+                className="size-4 accent-primary"
+                onChange={event => set({ override: event.target.checked })}
+              />
+              Override
+            </label>
+          )}
+
           {issues.length > 0 && (
             <ul aria-label="Issues" className="grid gap-1.5 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-xs text-destructive">
               {issues.map(issue => (

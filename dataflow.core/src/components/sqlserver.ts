@@ -103,6 +103,7 @@ export const sqlserver: ComponentLogic = {
   type: 'sqlserver',
   inputs: 1,
   outputs: 1,
+  usesOverride: true,
   settings: [
     ...connectionSettings('sqlserver'),
     {key: 'sql', label: 'Query', kind: 'code', language: 'sql', required: true, placeholder: 'SELECT id, name FROM Customer WHERE id > @since'},

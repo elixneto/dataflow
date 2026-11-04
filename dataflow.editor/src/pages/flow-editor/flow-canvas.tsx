@@ -519,6 +519,7 @@ export function FlowCanvas(props: {
       config: draft.config,
       label: draft.label?.trim() || undefined,
       outputKey: draft.outputKey?.trim() || undefined,
+      override: draft.override || undefined,
       notes: draft.notes || undefined,
     };
     setNodes(current => current.map(n => (n.id === id && isComponent(n) ? { ...n, data: { ...n.data, ...changes } } : n)));

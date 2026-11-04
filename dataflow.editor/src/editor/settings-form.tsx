@@ -1,6 +1,6 @@
 import { createContext, lazy, Suspense, useContext, type ReactNode } from 'react';
 import { useParams } from 'react-router';
-import { ArrowDown, ArrowUp, LoaderCircle, Plus, Trash } from 'lucide-react';
+import { ArrowDown, ArrowRight, ArrowUp, LoaderCircle, Plus, Trash } from 'lucide-react';
 import { settingDefault, settingsDefaults, settingValue, settingVisible, withSetting, type ExpressionField, type SettingField } from '@dataflow/core';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -346,7 +346,12 @@ function ValueControl({ id, field, value, onChange }: { id: string; field: Setti
 /** a list (a Mapper's fields, a Router's cases): one row per item, its settings side by side; add, remove, reorder */
 function ListSetting({ id, field, items, onChange }: { id: string; field: SettingField; items: Values[]; onChange: (items: Values[]) => void }) {
   const itemFields = field.item ?? [];
-  const columns = { gridTemplateColumns: itemFields.map(f => ({ text: 'minmax(0, 2fr)', select: 'minmax(0, 1.5fr)', number: 'minmax(0, 1fr)', boolean: 'auto' })[f.kind as string] ?? 'minmax(0, 3fr)').join(' ') + ' auto' };
+  const widths = itemFields.map(f => ({ text: 'minmax(0, 2fr)', select: 'minmax(0, 1.5fr)', number: 'minmax(0, 1fr)', boolean: 'auto' })[f.kind as string] ?? 'minmax(0, 3fr)');
+  // a list that takes its first setting to the second (a Mapper): an arrow column between them, as in the PoC
+  const arrow = Boolean(field.arrow) && itemFields.length >= 2;
+  const columns = { gridTemplateColumns: (arrow ? [widths[0], '1rem', ...widths.slice(1)] : widths).join(' ') + ' auto' };
+  const between = (index: number, cell: ReactNode) =>
+    arrow && index === 1 ? [<span key="arrow" aria-hidden className="flex h-8 items-center justify-center text-muted-foreground"><ArrowRight className="size-4" /></span>, cell] : [cell];
   const set = (index: number, item: Values) => onChange(items.map((current, i) => (i === index ? item : current)));
   const move = (index: number, by: number) => {
     const next = [...items];
@@ -360,25 +365,26 @@ function ListSetting({ id, field, items, onChange }: { id: string; field: Settin
       <legend className="mb-1.5 text-sm leading-none font-medium">{field.label}</legend>
       {items.length > 0 && (
         <div className="grid gap-1.5 text-xs text-muted-foreground" style={columns} aria-hidden>
-          {itemFields.map(f => (
-            <span key={f.key}>{f.label}</span>
-          ))}
+          {itemFields.flatMap((f, i) => (arrow && i === 1 ? [<span key="arrow" />, <span key={f.key}>{f.label}</span>] : [<span key={f.key}>{f.label}</span>]))}
           <span className="w-[4.5rem]" />
         </div>
       )}
       {items.map((item, index) => (
         <div key={index} role="group" aria-label={`${field.itemLabel ?? 'item'} ${index + 1}`} className="grid items-start gap-1.5" style={columns}>
-          {itemFields.map(f =>
-            settingVisible(f, item, itemFields) ? (
-              <Control
-                key={f.key}
-                id={`${id}-${index}-${f.key}`}
-                field={f}
-                value={settingValue(f, item)}
-                onChange={value => set(index, withSetting(f, item, value))}
-              />
-            ) : (
-              <span key={f.key} />
+          {itemFields.flatMap((f, i) =>
+            between(
+              i,
+              settingVisible(f, item, itemFields) ? (
+                <Control
+                  key={f.key}
+                  id={`${id}-${index}-${f.key}`}
+                  field={f}
+                  value={settingValue(f, item)}
+                  onChange={value => set(index, withSetting(f, item, value))}
+                />
+              ) : (
+                <span key={f.key} />
+              ),
             ),
           )}
           <div className="flex h-8 items-center">

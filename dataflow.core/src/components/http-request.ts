@@ -64,6 +64,7 @@ export const httpRequest: ComponentLogic = {
   type: 'http-request',
   inputs: 1,
   outputs: 1,
+  usesOverride: true,
   defaultOutputKey: 'response',
   sideEffects: httpWrites,
   settings: [

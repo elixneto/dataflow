@@ -21,7 +21,7 @@ export type ComponentLogic = {
   inputLabels?: string[];
   outputLabels?: string[];
   /** outputs that depend on the config, with their names (the Router: one per case and the else); replaces `outputs` */
-  outputsFromConfig?: (config: Record<string, unknown>) => {label: string}[];
+  outputsFromConfig?: (config: Record<string, unknown>) => {label: string}[] | undefined;
   /** outputs that may stay unconnected: what goes out through them is dropped silently (e.g. Filter's false, Router's else) */
   optionalOutputs?: string[] | ((config: Record<string, unknown>) => string[]);
   /**
@@ -35,6 +35,11 @@ export type ComponentLogic = {
    * Without it, the component writes directly into the DATA fields (e.g. Mapper).
    */
   defaultOutputKey?: string;
+  /**
+   * Offers Override on the node (as in the PoC): what it produces replaces the envelope's DATA instead of being added to
+   * it (`ctx.node.override`). Off by default.
+   */
+  usesOverride?: boolean;
   /**
    * A target: writes outside the run (a database, an API). In a test run (`validation`, the editor's Run) it does not
    * write and its envelopes go on with `{notSent: true}` in its output key, unless it is pinned (docs/architecture.md, section 12). Runs for real in `execution`.

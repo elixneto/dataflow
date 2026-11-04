@@ -63,6 +63,7 @@ export const mongodbUpsert: ComponentLogic = {
   type: 'mongodb-upsert',
   inputs: 1,
   outputs: 1,
+  usesOverride: true,
   defaultOutputKey: 'mongodb',
   sideEffects: true,
   settings: [

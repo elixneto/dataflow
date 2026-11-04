@@ -47,6 +47,8 @@ export type SettingField = {
   flat?: boolean;
   /** list: what a new item is called (e.g. 'field', 'case') */
   itemLabel?: string;
+  /** a list whose items take their first setting to the second (a Mapper: a value to a key): an arrow between them */
+  arrow?: boolean;
   /** shown only when another setting (of the same level) has one of these values; several: all of them */
   when?: SettingCondition | SettingCondition[];
 };

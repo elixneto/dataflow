@@ -35,6 +35,7 @@ export const mongodbDelete: ComponentLogic = {
   type: 'mongodb-delete',
   inputs: 1,
   outputs: 1,
+  usesOverride: true,
   defaultOutputKey: 'mongodb',
   sideEffects: true,
   settings: [

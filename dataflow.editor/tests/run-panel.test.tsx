@@ -156,3 +156,45 @@ test('after a Run from here, the canvas still knows the full test run (Run from 
   expect(marks.byNode.has('f')).toBe(false);
   expect(runActions(marks.full?.get('f'), false).runFromHere).toBe(true);
 });
+
+describe('what the Data tab shows, kept from one run to the next', () => {
+  test('the component chosen stays; nothing chosen: the first after the Start', async () => {
+    const { dataTabSelection } = await import('../src/pages/flow-editor/run-view');
+    const record = mockRunRecord(flow, 'validation', new Date('2026-11-04T12:00:00Z'));
+    expect(dataTabSelection(record, undefined)).toBe('f');
+    expect(dataTabSelection(record, 'start')).toBe('start');
+  });
+
+  test('while the next run has not reached it, it waits on it; a run that ended without it (removed): the first after the Start', async () => {
+    const { dataTabSelection } = await import('../src/pages/flow-editor/run-view');
+    const record = mockRunRecord(flow, 'validation', new Date('2026-11-04T12:00:00Z'));
+    const starting = { ...record, status: 'running' as const, components: record.components.filter(c => c.type === 'start') };
+    expect(dataTabSelection(starting, 'f')).toBe('f');
+    expect(dataTabSelection({ ...record, components: starting.components }, 'f')).toBe('start');
+    expect(dataTabSelection(record, 'gone')).toBe('f');
+  });
+
+  test('chosen but not reached yet: it says so instead of showing another component', () => {
+    const record = mockRunRecord(flow, 'validation', new Date('2026-11-04T12:00:00Z'));
+    const starting = { ...record, status: 'running' as const, components: record.components.filter(c => c.type === 'start') };
+    const html = renderToStaticMarkup(
+      <RunPanel record={starting} running="test" onFocus={() => {}} pinned={new Set()} onPin={() => {}} onClose={() => {}} show={{ nodeId: 'f', port: 'out-0', at: 1 }} />,
+    );
+    expect(html).toContain('Not run yet');
+  });
+});
+
+describe("the Metrics tab's timeline", () => {
+  test('its axis is the run, or longer when a component closed after the run (finer times): no bar runs past it', async () => {
+    const { timelineSpan } = await import('../src/pages/flow-editor/run-view');
+    const record = mockRunRecord(flow, 'validation', new Date('2026-11-04T12:00:00Z'));
+    const runStart = Date.parse(record.run.startedAt);
+    const late = {
+      ...record,
+      durationMs: 1,
+      components: record.components.map((c, i) => ({ ...c, start: new Date(runStart + i).toISOString(), durationMs: 1 })),
+    };
+    expect(timelineSpan(late, runStart)).toBe(record.components.length);
+    expect(timelineSpan({ ...record, durationMs: 500, components: [] }, runStart)).toBe(500);
+  });
+});

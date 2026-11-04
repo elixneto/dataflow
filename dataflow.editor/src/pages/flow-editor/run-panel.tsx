@@ -1,9 +1,6 @@
-import { useMemo, useState, type PointerEvent, type ReactNode } from 'react';
+import { useLayoutEffect, useMemo, useRef, useState, type PointerEvent, type ReactNode } from 'react';
 import { ChevronDown, ChevronUp, CircleAlert, CircleCheck, CircleDashed, CircleMinus, CircleStop, CircleX, Clock, LoaderCircle, Pin, Power, Square, X } from 'lucide-react';
-import { ERROR_PORT, inputPorts, type ComponentRun, type EnvelopeData, type LogLine, type RunProgress, type RunRecord } from '@dataflow/core';
-
-/** the record shown: the run so far while it goes on, then the final one */
-type Shown = RunRecord | RunProgress;
+import { ERROR_PORT, inputPorts, type ComponentRun, type EnvelopeData, type LogLine, type RunRecord } from '@dataflow/core';
 import { Button } from '@/components/ui/button';
 import type { RunUsage } from '@/data/flows/flows-api';
 import { componentInfo } from '@/editor/catalog';
@@ -11,6 +8,7 @@ import { cn } from '@/lib/utils';
 import { readChoice, rememberChoice } from '@/editor/run/run-choices';
 import { portLabel } from '@/editor/run/port-label';
 import { runActions } from '@/editor/run/run-marks';
+import { dataTabComponents, dataTabSelection, timelineSpan, type Shown } from './run-view';
 import { JsonTree } from '@/editor/run/json-tree';
 
 /*
@@ -108,12 +106,17 @@ export function RunPanel({ record, usage, running, queued, onStop, stopping, onF
     setTabState(next);
     rememberChoice(TAB_KEY, next);
   };
-  // a count clicked on the canvas: open, on the Data tab (the request is applied once, when it changes)
+  // what is being looked at, kept from one run to the next (the record is gone while the next one starts): the Data
+  // tab's component and the Logs tab's filters
+  const [selected, setSelected] = useState<string | undefined>(undefined);
+  const [logsFilter, setLogsFilter] = useState<LogsFilter>({ level: 'all', node: 'all' });
+  // a count clicked on the canvas: open, on the Data tab, on that component (the request is applied once, when it changes)
   const [shown, setShown] = useState<number | undefined>(undefined);
   if (show && show.at !== shown) {
     setShown(show.at);
     setCollapsed(false);
     setTabState('data');
+    setSelected(show.nodeId);
   }
   const [drag, setDrag] = useState<{ y: number; h: number } | null>(null);
 
@@ -223,9 +226,11 @@ export function RunPanel({ record, usage, running, queued, onStop, stopping, onF
       </header>
       {!collapsed && record && !error && (
         <div className="min-h-0 flex-1 overflow-auto">
-          {tab === 'logs' && <LogsTab record={record} onFocus={onFocus} />}
+          {tab === 'logs' && <LogsTab record={record} onFocus={onFocus} filter={logsFilter} onFilter={setLogsFilter} />}
           {tab === 'metrics' && <MetricsTab record={record} onFocus={onFocus} portName={portName} />}
-          {tab === 'data' && <DataTab key={show?.at} record={record} onFocus={onFocus} pinned={pinned} onPin={onPin} show={show ?? undefined} portName={portName} />}
+          {tab === 'data' && (
+            <DataTab record={record} onFocus={onFocus} pinned={pinned} onPin={onPin} show={show ?? undefined} portName={portName} selected={selected} onSelect={setSelected} />
+          )}
         </div>
       )}
     </section>
@@ -235,10 +240,14 @@ export function RunPanel({ record, usage, running, queued, onStop, stopping, onF
 const LEVELS = ['debug', 'info', 'warning', 'error'] as const;
 const LEVEL_COLOR: Record<string, string> = { debug: 'text-muted-foreground', info: 'text-sky-600 dark:text-sky-400', warning: 'text-amber-600 dark:text-amber-400', error: 'text-destructive' };
 
+/** the Logs tab's filters: a level and up, one component */
+type LogsFilter = { level: string; node: string };
+
 /** every log line of the run, by time; a click focuses its component */
-function LogsTab({ record, onFocus }: { record: Shown; onFocus: (nodeId: string) => void }) {
-  const [level, setLevel] = useState<string>('all');
-  const [node, setNode] = useState<string>('all');
+function LogsTab({ record, onFocus, filter, onFilter }: { record: Shown; onFocus: (nodeId: string) => void; filter: LogsFilter; onFilter: (filter: LogsFilter) => void }) {
+  const { level, node } = filter;
+  const setLevel = (next: string) => onFilter({ ...filter, level: next });
+  const setNode = (next: string) => onFilter({ ...filter, node: next });
   const lines = useMemo(
     () =>
       record.components
@@ -326,18 +335,21 @@ function Timeline({ c, runStart, runMs }: { c: ComponentRun; runStart: number; r
     return <span className="text-muted-foreground">—</span>;
   }
 
-  const pct = (value: number) => `${Math.min(100, Math.max(0, (value / runMs) * 100))}%`;
+  const share = (value: number) => Math.min(100, Math.max(0, (value / runMs) * 100));
   // a component still running: open until now
   const open = Math.max(c.durationMs ?? runMs - (Date.parse(c.start) - runStart), 0);
+  // inside the axis: where it opened, and how long, never past its end
+  const left = share(Date.parse(c.start) - runStart);
+  const width = Math.min(share(open), 100 - left);
   const active = Math.min(c.activeTimeMs ?? 0, open);
   const waiting = Math.min(c.waitingMs ?? 0, open - active);
   const title = `Open ${ms(open)} (from ${time(c.start)}) · active ${shortMs(active)}${c.waitingMs !== undefined ? ` · waiting ${shortMs(waiting)}` : ''}`;
   return (
-    <span className="relative block h-3 w-full min-w-40 rounded-sm bg-muted/60" title={title} aria-label={title}>
+    <span className="relative block h-3 w-full min-w-40 overflow-hidden rounded-sm bg-muted/60" title={title} aria-label={title}>
       <span
         className="absolute inset-y-0 flex min-w-0.5 overflow-hidden rounded-sm bg-primary/25"
         // one that opened at the very end still shows a sliver inside the axis
-        style={{ left: `min(${pct(Date.parse(c.start) - runStart)}, calc(100% - 2px))`, width: pct(open) }}
+        style={{ left: `min(${left}%, calc(100% - 2px))`, width: `${width}%` }}
       >
         <span className="h-full bg-primary" style={{ width: open ? `${(active / open) * 100}%` : 0 }} />
         <span className="h-full bg-primary/55" style={{ width: open ? `${(waiting / open) * 100}%` : 0 }} />
@@ -349,13 +361,16 @@ function Timeline({ c, runStart, runMs }: { c: ComponentRun; runStart: number; r
 /** one row per component: status, envelopes in and out per port, its times, memory and timeline; a click shows it */
 function MetricsTab({ record, onFocus, portName }: { record: Shown; onFocus: (nodeId: string) => void; portName: PortName }) {
   const runStart = Date.parse(record.run.startedAt);
+  // the axis: the whole run, or further when a component's times (finer than the run's ms) end after it
+  const span = timelineSpan(record, runStart);
   const cell = 'px-3 py-1.5';
   return (
     <table className="w-full min-w-[1100px] text-xs">
       <thead className="sticky top-0 z-10 bg-card text-left text-muted-foreground">
         <tr className="border-b">
-          {METRICS.map(h => (
-            <th key={h.label} title={h.hint} className={cn(cell, 'cursor-help font-medium', h.right && 'text-right', h.label === 'Timeline' && 'w-1/4')}>
+          {METRICS.map((h, i) => (
+            // the component's name stays in view when the table is wider than the panel
+            <th key={h.label} title={h.hint} className={cn(cell, 'cursor-help font-medium', h.right && 'text-right', h.label === 'Timeline' && 'w-1/4', i === 0 && 'sticky left-0 bg-card')}>
               {h.label}
             </th>
           ))}
@@ -363,8 +378,8 @@ function MetricsTab({ record, onFocus, portName }: { record: Shown; onFocus: (no
       </thead>
       <tbody>
         {record.components.map(c => (
-          <tr key={c.nodeId} onClick={() => onFocus(c.nodeId)} title="Show on the canvas" className="cursor-pointer border-b hover:bg-accent">
-            <td className={cell}>
+          <tr key={c.nodeId} onClick={() => onFocus(c.nodeId)} title="Show on the canvas" className="group cursor-pointer border-b hover:bg-accent">
+            <td className={cn(cell, 'sticky left-0 bg-card group-hover:bg-accent')}>
               <span className="flex items-center gap-2">
                 <StatusIcon status={c.status} />
                 <span className="font-medium">{nameOf(c)}</span>
@@ -388,7 +403,7 @@ function MetricsTab({ record, onFocus, portName }: { record: Shown; onFocus: (no
             </td>
             <td className={cn(cell, 'text-right font-mono text-muted-foreground')}>{c.start ? time(c.start) : '—'}</td>
             <td className={cell}>
-              <Timeline c={c} runStart={runStart} runMs={record.durationMs} />
+              <Timeline c={c} runStart={runStart} runMs={span} />
             </td>
           </tr>
         ))}
@@ -403,12 +418,16 @@ function DataTab(props: {
   onFocus: (nodeId: string) => void;
   pinned: Set<string>;
   onPin: (nodeId: string, pinned: boolean) => void;
-  show?: { nodeId: string; port: string };
+  show?: { nodeId: string; port: string; at: number };
   portName: PortName;
+  /** the component chosen (kept across runs), and the action to choose one */
+  selected?: string;
+  onSelect: (nodeId: string) => void;
 }) {
-  const { record, onFocus, pinned, onPin, show, portName } = props;
-  const shown = record.components.filter(c => c.type !== 'end' || total(c.inputs) > 0);
-  const [selected, setSelected] = useState<string | undefined>(show?.nodeId ?? shown.find(c => c.type !== 'start')?.nodeId ?? shown[0]?.nodeId);
+  const { record, onFocus, pinned, onPin, show, portName, onSelect } = props;
+  const shown = dataTabComponents(record);
+  const selected = dataTabSelection(record, props.selected);
+  const setSelected = onSelect;
   // Table or JSON: the same for every component, kept in this browser tab
   const [view, setViewState] = useState<'table' | 'json'>(() => readChoice(VIEW_KEY, VIEWS, 'table'));
   const setView = (next: 'table' | 'json') => {
@@ -460,9 +479,16 @@ function DataTab(props: {
           </div>
           <div className="grid min-h-0 flex-1 grid-cols-2 divide-x overflow-hidden">
             <Envelopes title={`Input (${total(c.inputs)})`} envelopes={c.inputSample} view={view} treeKey={`${c.nodeId}:in`} />
-            <OutputPorts key={c.nodeId} c={c} view={view} portName={portName} show={show?.nodeId === c.nodeId ? show.port : undefined} />
+            <OutputPorts key={`${c.nodeId}:${show?.nodeId === c.nodeId ? show.at : ''}`} c={c} view={view} portName={portName} show={show?.nodeId === c.nodeId ? show.port : undefined} />
           </div>
         </div>
+      )}
+      {!c && selected && (
+        // chosen, but this run has not reached it yet
+        <p className="flex flex-1 items-center justify-center gap-2 text-xs text-muted-foreground">
+          <Clock className="size-3.5" aria-hidden />
+          Not run yet
+        </p>
       )}
     </div>
   );
@@ -483,7 +509,14 @@ function OutputPorts({ c, view, portName, show }: { c: ComponentRun; view: 'tabl
   // in the component's order (out-0, out-1… as the core lists them), the error port last
   const ports = [...new Set([...Object.keys(c.outputs), ...Object.keys(c.outputSample)])].sort((a, b) => portRank(a) - portRank(b));
   const count = (port: string) => c.outputs[port] ?? c.outputSample[port]?.length ?? 0;
-  const [port, setPortState] = useState(() => show ?? shownPort.get(c.nodeId) ?? ports.find(p => count(p) > 0) ?? ports[0]);
+  const [port, setPortState] = useState(() => {
+    // a port clicked on the canvas is the one this component shows from now on
+    if (show) {
+      shownPort.set(c.nodeId, show);
+    }
+
+    return show ?? shownPort.get(c.nodeId) ?? ports.find(p => count(p) > 0) ?? ports[0];
+  });
   const setPort = (next: string) => {
     setPortState(next);
     shownPort.set(c.nodeId, next);
@@ -529,15 +562,46 @@ function OutputPorts({ c, view, portName, show }: { c: ComponentRun; view: 'tabl
 
 const cell = (value: unknown): ReactNode => (value === null || value === undefined ? <span className="text-muted-foreground">null</span> : typeof value === 'object' ? JSON.stringify(value) : String(value));
 
+/** where each column (a component's input, a port's output) was scrolled to, while the page is open */
+const scrolledTo = new Map<string, number>();
+
 function Envelopes(props: { title: string; envelopes: EnvelopeData[]; view: 'table' | 'json'; inView?: boolean; treeKey: string }) {
   const { title, envelopes, view, inView, treeKey } = props;
   const columns = [...new Set(envelopes.flatMap(e => Object.keys(e)))];
+  // the next run shows the same place: back to where it was, as soon as the envelopes reach that far, unless the
+  // user scrolls first
+  const section = useRef<HTMLElement | null>(null);
+  const restoring = useRef(true);
+  useLayoutEffect(() => {
+    const saved = scrolledTo.get(`${treeKey}:${view}`) ?? 0;
+    if (!restoring.current || !section.current || saved === 0) {
+      restoring.current = false;
+      return;
+    }
+
+    section.current.scrollTop = saved;
+    if (section.current.scrollTop >= saved - 1) {
+      restoring.current = false;
+    }
+  });
+  const userScrolls = () => {
+    restoring.current = false;
+  };
   return (
     <section
       // the port whose count was clicked on the canvas: scrolled into view and marked
       ref={element => {
+        section.current = element;
         if (inView) {
           element?.scrollIntoView({ block: 'nearest' });
+        }
+      }}
+      onWheel={userScrolls}
+      onPointerDown={userScrolls}
+      onKeyDown={userScrolls}
+      onScroll={event => {
+        if (!restoring.current) {
+          scrolledTo.set(`${treeKey}:${view}`, event.currentTarget.scrollTop);
         }
       }}
       data-shown={inView || undefined}

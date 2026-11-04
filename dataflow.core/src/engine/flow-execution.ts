@@ -7,7 +7,7 @@ import {MemoryMeter} from '#engine/memory-meter';
 import {flowOrder} from '#engine/flow-order';
 import {errorPolicy, withError} from '#engine/error-envelope';
 import {mergeSources} from '#engine/merge-sources';
-import {ERROR_PORT} from '#validation/ports';
+import {ERROR_PORT, outputPorts} from '#validation/ports';
 import {componentContext, hiddenValues, maskText} from '#engine/component-context';
 import {skippedNodes} from '#engine/run-from';
 import {RunInterrupted} from '#errors/run-interrupted';
@@ -32,9 +32,6 @@ async function drain(source: AsyncIterable<Envelope>) {
 /** Copy of the sample (the envelope moves on and may be changed by another component). */
 const clone = <T>(v: T): T => JSON.parse(JSON.stringify(v)) as T;
 
-/** a performance.now() time as a date */
-const isoAt = (at: number) => new Date(performance.timeOrigin + at).toISOString();
-
 const STATUS_LABEL: Record<RunRecord['status'], string> = {
   completed: 'completed', 'with-warnings': 'with warnings', 'with-errors': 'with errors', failed: 'failed',
 };
@@ -49,6 +46,10 @@ export class FlowExecution {
   readonly control = new AbortController();
 
   private readonly start = Date.now();
+  /** the same moment on the high-resolution clock: component times are dates from it, on the run's own clock (a long-lived
+   * worker's performance.timeOrigin drifts from Date.now()) */
+  private readonly startPerf = performance.now();
+  private readonly isoAt = (at: number) => new Date(this.start + (at - this.startPerf)).toISOString();
   private readonly records: Map<string, ComponentRun>;
   private readonly stopwatches: Map<string, Stopwatch>;
   private readonly memories: Map<string, MemoryMeter>;
@@ -92,7 +93,7 @@ export class FlowExecution {
     const stopwatch = this.stopwatchOf(nodeId);
     const at = stopwatch.total >= 1 && stopwatch.firstAt !== undefined ? stopwatch.firstAt : performance.now();
     this.opened.set(nodeId, at);
-    this.recordOf(nodeId).start = isoAt(at);
+    this.recordOf(nodeId).start = this.isoAt(at);
   }
   /** Run from here: the component the run started from */
   fromOf() {
@@ -380,8 +381,8 @@ export class FlowExecution {
       // waiting times, so they fit in it
       const opened = this.opened.get(node.id) ?? t0;
       const now = performance.now();
-      rec.start = isoAt(opened);
-      rec.end = isoAt(now);
+      rec.start = this.isoAt(opened);
+      rec.end = this.isoAt(now);
       rec.durationMs = Math.round((now - opened) * 100) / 100;
       for (const port of outputPorts) for (const channel of this.outputsOf(node.id, port)) channel.close();
     }
@@ -394,10 +395,12 @@ export class FlowExecution {
   private reportDropped(node: ExecutableNode, log: (level: LogLevel, message: string) => void) {
     const defined = COMPONENTS[node.type]?.optionalOutputs ?? [];
     const optional = typeof defined === 'function' ? defined(node.config) : defined;
+    // a port by its name (Filter's false, Lookup's not found), or its id when it has none
+    const names = new Map(outputPorts(node.type, node.config).map(p => [p.id, p.label ?? p.id]));
     for (const port of optional) {
       const n = this.dropped.get(node.id)?.[port];
       if (!n) continue;
-      log('info', `${n} envelope(s) dropped by the output ${port}, which is not connected.`);
+      log('info', `${n} envelope(s) dropped by the output ${names.get(port) ?? port}, which is not connected.`);
       delete this.dropped.get(node.id)![port];
     }
     if (this.dropped.get(node.id) && Object.keys(this.dropped.get(node.id)!).length === 0) this.dropped.delete(node.id);
