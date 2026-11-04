@@ -13,4 +13,9 @@ export type PrepareScript = (code: string, globals: {
   /** the project's variables */
   variables: Record<string, string>;
   log: (message: string) => void;
+  /**
+   * What the script waits for outside (a fetch, a timer): the runner passes each such promise through it, so that time
+   * counts as the component's Waiting, not its Active (several at once count once).
+   */
+  wait: <T>(promise: Promise<T>) => Promise<T>;
 }) => Promise<ScriptFunction>;

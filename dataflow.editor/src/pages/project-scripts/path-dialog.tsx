@@ -8,11 +8,14 @@ import { Label } from '@/components/ui/label';
 /** what to name: a new script or folder, or renaming (moving) one */
 export type PathDialogTarget = {
   title: string;
+  /** shown under the path (who imports what is renamed) */
+  warning?: string;
   initial: string;
   submitLabel: string;
   /** what is wrong with the path typed (the core's rules, and what is already there), or null */
   issue: (path: string) => string | null;
-  onSave: (path: string) => void;
+  /** saves it: null when done, or why not (the server's answer) */
+  onSave: (path: string) => Promise<string | null>;
 };
 
 /** The window that asks for a script's or a folder's path (folders/name, e.g. upload/types). */
@@ -27,8 +30,9 @@ export function PathDialog({ target, onClose }: { target: PathDialogTarget | nul
 function PathForm({ target, onClose }: { target: PathDialogTarget; onClose: () => void }) {
   const [path, setPath] = useState(target.initial);
   const [error, setError] = useState('');
+  const [saving, setSaving] = useState(false);
 
-  const submit = (event: FormEvent) => {
+  const submit = async (event: FormEvent) => {
     event.preventDefault();
     const issue = target.issue(path);
     setError(issue ?? '');
@@ -36,8 +40,14 @@ function PathForm({ target, onClose }: { target: PathDialogTarget; onClose: () =
       return;
     }
 
-    target.onSave(normalizeScriptPath(path));
-    onClose();
+    setSaving(true);
+    const failed = await target.onSave(normalizeScriptPath(path));
+    setSaving(false);
+    if (failed) {
+      setError(failed);
+    } else {
+      onClose();
+    }
   };
 
   return (
@@ -58,6 +68,7 @@ function PathForm({ target, onClose }: { target: PathDialogTarget; onClose: () =
           onChange={event => setPath(event.target.value)}
         />
         {error && <p className="text-sm text-destructive">{error}</p>}
+        {target.warning && <p className="text-sm text-amber-600 dark:text-amber-400">{target.warning}</p>}
       </div>
 
       <DialogFooter>
@@ -66,7 +77,9 @@ function PathForm({ target, onClose }: { target: PathDialogTarget; onClose: () =
             Cancel
           </Button>
         </DialogClose>
-        <Button type="submit">{target.submitLabel}</Button>
+        <Button type="submit" disabled={saving}>
+          {target.submitLabel}
+        </Button>
       </DialogFooter>
     </form>
   );

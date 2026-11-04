@@ -3,8 +3,8 @@ import { loader } from '@monaco-editor/react';
 import * as monaco from 'monaco-editor';
 import editorWorker from 'monaco-editor/editor/editor.worker?worker';
 import tsWorker from 'monaco-editor/language/typescript/ts.worker?worker';
-import { boundNames, SCRIPT_IMPORT_PREFIX, SCRIPT_MODULE_DIR, scriptExports, scriptImport, scriptImportLine, scriptModuleUri } from '@dataflow/core';
-import { useProjectScripts, type Script } from '@/data/scripts/scripts-mock';
+import { boundNames, SCRIPT_IMPORT_PREFIX, SCRIPT_MODULE_DIR, scriptImport, scriptImportLine, scriptImports, scriptModuleUri } from '@dataflow/core';
+import { loadScriptContent, projectScripts, useProjectScripts, watchScripts, type ProjectScripts, type ScriptEntry } from '@/data/scripts/scripts-store';
 
 /*
  * Monaco, set up once (bundled in, no CDN, with Vite's workers) for every code editor: a component's settings and the
@@ -38,7 +38,9 @@ ts.typescriptDefaults.setEagerModelSync(true);
 ts.javascriptDefaults.setDiagnosticsOptions({ noSemanticValidation: true, noSyntaxValidation: true });
 
 /** the project's scripts as the code editors have them now (what auto-import offers) */
-let currentScripts: Script[] = [];
+let currentScripts: ScriptEntry[] = [];
+/** the project the open editors are in (its scripts are the ones imported) */
+let currentProject = '';
 
 /** the script a model is, or null (a component's code) */
 const scriptPathOf = (model: monaco.editor.ITextModel) => {
@@ -50,7 +52,7 @@ const scriptPathOf = (model: monaco.editor.ITextModel) => {
 /** what a model may import: every name another script exports */
 const importable = (model: monaco.editor.ITextModel) => {
   const own = scriptPathOf(model);
-  return currentScripts.filter(s => s.path !== own).flatMap(s => scriptExports(s.code).map(e => ({ ...e, path: s.path })));
+  return currentScripts.filter(s => s.path !== own).flatMap(s => s.exports.map(e => ({ ...e, path: s.path })));
 };
 
 /** the edit that adds the import of `name` (after the imports at the top), or none when it is imported already */
@@ -180,29 +182,72 @@ monaco.languages.registerCodeActionProvider('typescript', {
   },
 });
 
-/** the scripts' models as the scripts are now: new ones created, changed ones updated, removed ones gone */
-export function syncScriptModels(scripts: Script[]) {
-  currentScripts = scripts;
-  const wanted = new Map(scripts.map(s => [scriptModuleUri(s.path), s.code]));
-  for (const model of monaco.editor.getModels()) {
-    const uri = model.uri.toString();
-    if (uri.startsWith(`file:///${SCRIPT_MODULE_DIR}/`) && !wanted.has(uri)) {
-      model.dispose();
-    }
+/**
+ * Loads the scripts some code imports that are not loaded yet (their models come with them, and the scripts they import
+ * then): only what is open and what it needs, never every script of the project.
+ */
+function loadImports(model: monaco.editor.ITextModel) {
+  if (!currentProject || model.isDisposed() || model.getLanguageId() !== 'typescript') {
+    return;
   }
 
-  for (const [uri, code] of wanted) {
-    const model = monaco.editor.getModel(monaco.Uri.parse(uri));
-    if (!model) {
-      monaco.editor.createModel(code, 'typescript', monaco.Uri.parse(uri));
-    } else if (model.getValue() !== code) {
-      model.setValue(code);
+  const project = projectScripts(currentProject);
+  for (const path of scriptImports(model.getValue())) {
+    if (!project.contents[path] && project.scripts.some(s => s.path === path)) {
+      void loadScriptContent(currentProject, path);
     }
   }
 }
 
-/** keeps the project's scripts as Monaco models while the editor that uses them is open */
+// each TypeScript model (a component's code, a script) loads what it imports, when it opens and as it is typed
+monaco.editor.onDidCreateModel(model => {
+  loadImports(model);
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  model.onDidChangeContent(() => {
+    clearTimeout(timer);
+    timer = setTimeout(() => loadImports(model), 400);
+  });
+});
+
+/** the scripts' models as the page has them: one per script loaded, kept as typed, gone with the script */
+export function syncScriptModels(project: ProjectScripts) {
+  currentScripts = project.scripts;
+  const listed = new Set(project.scripts.map(s => scriptModuleUri(s.path)));
+  for (const model of monaco.editor.getModels()) {
+    const uri = model.uri.toString();
+    if (uri.startsWith(`file:///${SCRIPT_MODULE_DIR}/`) && !listed.has(uri)) {
+      model.dispose();
+    }
+  }
+
+  let created = false;
+  for (const [path, content] of Object.entries(project.contents)) {
+    const uri = monaco.Uri.parse(scriptModuleUri(path));
+    const model = monaco.editor.getModel(uri);
+    if (!model) {
+      monaco.editor.createModel(content.code, 'typescript', uri);
+      created = true;
+    } else if (model.getValue() !== content.code) {
+      model.setValue(content.code);
+    }
+  }
+
+  // a script that arrived after some code was checked: Monaco checks only the code that changes, so the import it
+  // marked as missing stays marked; the same options again make it check everything open
+  if (created) {
+    ts.typescriptDefaults.setCompilerOptions(ts.typescriptDefaults.getCompilerOptions());
+  }
+
+  // the list came after some code was open: what it imports can load now
+  monaco.editor.getModels().forEach(loadImports);
+}
+
+/** keeps the project's scripts (the ones loaded) as Monaco models while an editor that uses them is open */
 export function useScriptModels(projectId: string) {
-  const { scripts } = useProjectScripts(projectId);
-  useEffect(() => syncScriptModels(scripts), [scripts]);
+  useProjectScripts(projectId);
+  useEffect(() => {
+    currentProject = projectId;
+    syncScriptModels(projectScripts(projectId));
+    return watchScripts(() => syncScriptModels(projectScripts(projectId)));
+  }, [projectId]);
 }

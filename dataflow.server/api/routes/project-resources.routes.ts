@@ -13,12 +13,21 @@ import { CreateVariableHandler } from '#features/variables/create-variable/creat
 import { DeleteVariableHandler } from '#features/variables/delete-variable/delete-variable-handler';
 import { ListVariablesHandler } from '#features/variables/list-variables/list-variables-handler';
 import { UpdateVariableHandler } from '#features/variables/update-variable/update-variable-handler';
+import {
+  CreateScriptPathHandler,
+  DeleteScriptPathHandler,
+  GetScriptHandler,
+  ListScriptsHandler,
+  MoveScriptPathHandler,
+  SaveScriptHandler,
+  ScriptUsageHandler,
+} from '#features/scripts/scripts-handlers';
 import { toHttpResult } from '#shared/use-cases/to-http-result';
 import type { AppEnv } from '../app-env';
 import { bodyWith } from './request-input';
 
 /**
- * A project's secrets, variables and connections: listing and creating under /projects/:id/..., the rest under
+ * A project's secrets, variables, connections and scripts: listing and creating under /projects/:id/..., the rest under
  * /secrets/:id, /variables/:id, /connections/:id. HTTP in, handler, HTTP out.
  */
 export function projectResourcesRoutes() {
@@ -44,5 +53,20 @@ export function projectResourcesRoutes() {
     .put('/connections/:id', async c =>
       toHttpResult(c, await new UpdateConnectionHandler().handle(await bodyWith(c, { id: c.req.param('id') }), c.get('useCase'))))
     .delete('/connections/:id', async c => toHttpResult(c, await new DeleteConnectionHandler().handle({ id: c.req.param('id') }, c.get('useCase'))))
-    .post('/connections/:id/test', async c => toHttpResult(c, await new TestConnectionHandler().handle({ id: c.req.param('id') }, c.get('useCase'))));
+    .post('/connections/:id/test', async c => toHttpResult(c, await new TestConnectionHandler().handle({ id: c.req.param('id') }, c.get('useCase'))))
+
+    // scripts: a path has slashes (folders), so it goes in the body or the query, not the URL's path
+    .get('/projects/:id/scripts', async c => toHttpResult(c, await new ListScriptsHandler().handle({ projectId: c.req.param('id') }, c.get('useCase'))))
+    .post('/projects/:id/scripts', async c =>
+      toHttpResult(c, await new CreateScriptPathHandler().handle(await bodyWith(c, { projectId: c.req.param('id') }), c.get('useCase')), 201))
+    .get('/projects/:id/scripts/content', async c =>
+      toHttpResult(c, await new GetScriptHandler().handle({ projectId: c.req.param('id'), path: c.req.query('path') ?? '' }, c.get('useCase'))))
+    .put('/projects/:id/scripts/content', async c =>
+      toHttpResult(c, await new SaveScriptHandler().handle(await bodyWith(c, { projectId: c.req.param('id') }), c.get('useCase'))))
+    .post('/projects/:id/scripts/move', async c =>
+      toHttpResult(c, await new MoveScriptPathHandler().handle(await bodyWith(c, { projectId: c.req.param('id') }), c.get('useCase'))))
+    .post('/projects/:id/scripts/delete', async c =>
+      toHttpResult(c, await new DeleteScriptPathHandler().handle(await bodyWith(c, { projectId: c.req.param('id') }), c.get('useCase'))))
+    .get('/projects/:id/scripts/usage', async c =>
+      toHttpResult(c, await new ScriptUsageHandler().handle({ projectId: c.req.param('id'), path: c.req.query('path') ?? '' }, c.get('useCase'))));
 }

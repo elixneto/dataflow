@@ -7,6 +7,7 @@ import type { UseCaseContext } from '#shared/use-cases/use-case-context';
 import type { UseCaseHandler } from '#shared/use-cases/use-case-handler';
 import { fail, success, type UseCaseResult } from '#shared/use-cases/use-case-result';
 import { validate } from '#shared/use-cases/validate';
+import { scriptsForRun } from '#features/scripts/script-store';
 import { CHANNELS, notifyRunEvent } from '../run-queue';
 import { runs, testRuns } from '../run';
 
@@ -79,6 +80,15 @@ export class StartRunHandler implements UseCaseHandler<{ id: string }> {
       runFrom = { ...planned.plan, label: fromLabel ?? planned.plan.label };
     }
 
+    // the scripts its TypeScript components import (and those import), by the hash of their code as it is now
+    const users = checked.value.nodes
+      .filter(n => n.type === 'typescript')
+      .map(n => ({ label: n.label || 'TypeScript', code: typeof n.config.code === 'string' ? n.config.code : '' }));
+    const imported = await scriptsForRun(ctx.db, ctx.orgId, row.projectId, users);
+    if (imported.error) {
+      return fail('validation', `The flow cannot run: ${imported.error}`);
+    }
+
     const id = crypto.randomUUID();
     const draftHash = new Bun.CryptoHasher('sha256').update(JSON.stringify(checked.value)).digest('hex');
     const values = {
@@ -93,6 +103,7 @@ export class StartRunHandler implements UseCaseHandler<{ id: string }> {
       parameters,
       definition: checked.value,
       runFrom,
+      scripts: imported.scripts,
     };
     if (mode === 'execution') {
       await ctx.db.orm.insert(runs).values(values);

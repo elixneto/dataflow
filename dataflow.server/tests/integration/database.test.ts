@@ -15,7 +15,7 @@ describe('database', () => {
         "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' ORDER BY table_name");
       expect(tables.map(t => t.table_name).sort()).toEqual([
         'connections', 'deployment_history', 'deployments', 'flow_versions', 'flows', 'folders', 'organization_settings', 'organizations',
-        'projects', 'promotions', 'runs', 'schema_migrations', 'secrets', 'supervisors', 'test_runs', 'users', 'variables',
+        'projects', 'promotions', 'runs', 'schema_migrations', 'script_blobs', 'script_folders', 'scripts', 'secrets', 'supervisors', 'test_runs', 'users', 'variables',
       ].sort());
     } finally {
       await db.close();

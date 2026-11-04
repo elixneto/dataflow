@@ -57,7 +57,23 @@ export function componentContext(execution: FlowExecution, node: ExecutableNode,
     run, node, log,
     prepareScript: async code => {
       if (!options.prepareScript) throw new Error('This runner does not execute scripts.');
-      return options.prepareScript(code, {run, parameters, secrets: options.secrets ?? {}, variables: options.variables ?? {}, log: m => log('info', m)});
+      // what the script waits for outside (its fetch, its timers): Waiting, not Active; several at once count once
+      let outside = 0;
+      const wait = async <T>(promise: Promise<T>): Promise<T> => {
+        if (outside++ === 0) {
+          stopwatch.stop();
+          waiting.resume();
+        }
+        try {
+          return await promise;
+        } finally {
+          if (--outside === 0) {
+            waiting.stop();
+            stopwatch.resume();
+          }
+        }
+      };
+      return options.prepareScript(code, {run, parameters, secrets: options.secrets ?? {}, variables: options.variables ?? {}, log: m => log('info', m), wait});
     },
     fieldValue: (field, doc) => (field.expression
       ? options.evaluate(field.value, envelopeVariables(doc, options.secrets, options.variables))

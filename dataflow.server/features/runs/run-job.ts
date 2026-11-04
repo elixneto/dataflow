@@ -16,13 +16,46 @@ import {
 } from '@dataflow/core';
 import { ConnectionRepository } from '#features/connections/connection-store';
 import { projects } from '#features/projects/project';
+import { scriptBlobs } from '#features/scripts/script-store';
 import { projectSecrets } from '#features/secrets/secret-store';
 import { VariableRepository } from '#features/variables/variable-repository';
 import type { Keyring } from '#shared/crypto/keyring';
 import type { Database } from '#shared/database/database';
 import { evaluate } from '#shared/runner/evaluate';
+import { prepareScript } from '#shared/runner/prepare-script';
 import { sendHttp } from '#shared/runner/send-http';
 import type { Run } from './run';
+
+/** the code of scripts by hash, kept in the supervisor (a hash is one code forever): the latest few MB */
+const blobCache = new Map<string, string>();
+const BLOB_CACHE_BYTES = 64 * 1024 * 1024;
+let blobCacheBytes = 0;
+
+const remember = (hash: string, content: string) => {
+  blobCache.set(hash, content);
+  blobCacheBytes += content.length;
+  for (const [old, value] of blobCache) {
+    if (blobCacheBytes <= BLOB_CACHE_BYTES) break;
+    blobCache.delete(old);
+    blobCacheBytes -= value.length;
+  }
+};
+
+/** a run's scripts ({path: hash}) with their code: from the cache, the rest from script_blobs */
+async function scriptsOfRun(db: Database, orgId: string, hashes: Record<string, string>) {
+  const missing = Object.values(hashes).filter(hash => !blobCache.has(hash));
+  for (const [hash, content] of await scriptBlobs(db, orgId, [...new Set(missing)])) remember(hash, content);
+  const scripts: Record<string, string> = {};
+  for (const [path, hash] of Object.entries(hashes)) {
+    const content = blobCache.get(hash);
+    if (content === undefined) throw new Error(`The script ${path} of this run is gone.`);
+    // used now: the latest in the cache
+    blobCache.delete(hash);
+    blobCache.set(hash, content);
+    scripts[path] = content;
+  }
+  return { scripts, scriptHashes: hashes };
+}
 
 /** the longest a run may take before the engine stops it */
 export const RUN_TIMEOUT_MS = 10 * 60_000;
@@ -43,6 +76,9 @@ export type RunJob = {
   connections: Record<string, ConnectionProfileData>;
   /** Run from here: the component it starts from and what reached it in the last run */
   runFrom?: RunFromPlan;
+  /** the scripts its TypeScript components import, as they were when queued: {path: code} and {path: hash} */
+  scripts?: Record<string, string>;
+  scriptHashes?: Record<string, string>;
   /** for the record of a run that fails before the engine starts */
   projectName: string;
   flowName: string;
@@ -109,6 +145,7 @@ export async function prepareJob(db: Database, keyring: Keyring | undefined, run
     mode: run.mode,
     flow: from ? applyRunFrom(whole, from) : whole,
     ...(from ? { runFrom: from } : {}),
+    ...(await scriptsOfRun(db, run.orgId, (run.scripts as Record<string, string> | null) ?? {})),
     parameters: (run.parameters as Record<string, string> | null) ?? {},
     input,
     secrets,
@@ -141,6 +178,7 @@ export async function runJob(
       timeoutMs: RUN_TIMEOUT_MS,
       onProgress: options.onProgress,
       runFrom: job.runFrom,
+      prepareScript: (code, globals) => prepareScript(code, globals, job.scripts ?? {}, job.scriptHashes ?? {}),
       signal: options.signal,
     });
   } catch (e) {

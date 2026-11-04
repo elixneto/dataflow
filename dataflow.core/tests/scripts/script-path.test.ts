@@ -69,3 +69,27 @@ async function process($input: Data) { return null; }`;
   expect(names.has('Other')).toBe(false);
   expect(names.has('IItem')).toBe(false);
 });
+
+test('a script is at most 1 MB', async () => {
+  const {MAX_SCRIPT_BYTES, scriptContentIssue} = await import('../../src/index');
+  expect(scriptContentIssue('export const a = 1;')).toBeNull();
+  expect(scriptContentIssue('x'.repeat(MAX_SCRIPT_BYTES))).toBeNull();
+  expect(scriptContentIssue('é'.repeat(MAX_SCRIPT_BYTES / 2 + 1))).toBe('The script takes 1.0 MB (at most 1 MB).');
+});
+
+test('the scripts some code needs: what it imports and, through them, what they import; what is missing and who wants it', async () => {
+  const {scriptClosure} = await import('../../src/index');
+  const scripts = {
+    'upload/types': `export interface A {}`,
+    'upload/headers': `import type { A } from '@myproject/scripts/upload/types';\nimport { x } from '@myproject/scripts/gone';`,
+    'loop/a': `import '@myproject/scripts/loop/b';`,
+    'loop/b': `import '@myproject/scripts/loop/a';`,
+    'unused/big': `export const big = 1;`,
+  };
+  const code = `import { h } from '@myproject/scripts/upload/headers';\nimport '@myproject/scripts/loop/a';\nimport '@myproject/scripts/nope';`;
+  expect(scriptClosure(code, scripts)).toEqual({
+    paths: ['loop/a', 'loop/b', 'upload/headers', 'upload/types'],
+    missing: [{from: 'upload/headers', path: 'gone'}, {from: null, path: 'nope'}],
+  });
+  expect(scriptClosure('async function process() {}', scripts)).toEqual({paths: [], missing: []});
+});

@@ -36,10 +36,12 @@ const runColumns = () => ({
   progress: jsonb('progress'),
   /** Run from here: the core's RunFromPlan (3_run_from.sql); null for a run of the whole flow */
   runFrom: jsonb('run_from'),
+  /** the project's scripts as they were when queued, {path: code} (5_scripts.sql) */
+  scripts: jsonb('scripts'),
 });
 
 /**
- * Follows migrations/1_initial.sql to 3_run_from.sql: a real run (Run for real, a deployed version), queued,
+ * Follows migrations/1_initial.sql to 5_scripts.sql: a real run (Run for real, a deployed version), queued,
  * running or done, kept with its history. The editor's Run for real runs the flow's draft (draft_hash); a published
  * run, a deployed version (flow_version_id). `record` is the core's RunRecord.
  */

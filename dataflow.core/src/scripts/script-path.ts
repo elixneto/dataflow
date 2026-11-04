@@ -110,3 +110,34 @@ export function boundNames(code: string): Set<string> {
   for (const match of code.matchAll(declared)) names.add(match[1]!);
   return names;
 }
+
+/** the largest a script may be (its code, in bytes as UTF-8) */
+export const MAX_SCRIPT_BYTES = 1024 * 1024;
+
+/** What is wrong with a script's code, or null: only its size (types and syntax are checked when it runs). */
+export function scriptContentIssue(content: string): string | null {
+  const bytes = new TextEncoder().encode(content).length;
+  return bytes > MAX_SCRIPT_BYTES ? `The script takes ${(bytes / 1024 / 1024).toFixed(1)} MB (at most ${MAX_SCRIPT_BYTES / 1024 / 1024} MB).` : null;
+}
+
+/**
+ * The scripts some code needs: what it imports and, through them, what they import (a cycle stops at a script
+ * already taken). `missing`: the imports of a path that is not among `scripts`, with who imports it (`from`: a
+ * script's path, or null for the code itself).
+ */
+export function scriptClosure(code: string, scripts: Record<string, string>): {paths: string[]; missing: {from: string | null; path: string}[]} {
+  const paths = new Set<string>();
+  const missing: {from: string | null; path: string}[] = [];
+  const visit = (source: string, from: string | null) => {
+    for (const path of scriptImports(source)) {
+      if (!(path in scripts)) {
+        missing.push({from, path});
+      } else if (!paths.has(path)) {
+        paths.add(path);
+        visit(scripts[path]!, path);
+      }
+    }
+  };
+  visit(code, null);
+  return {paths: [...paths].sort(), missing};
+}
