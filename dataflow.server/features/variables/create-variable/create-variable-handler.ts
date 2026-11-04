@@ -12,7 +12,7 @@ export const CreateVariableCommand = z.object({ projectId: z.uuid('Invalid'), na
 
 /**
  * A new variable in an active project. Names follow the secrets' rule (@dataflow/core), unique among the project's
- * variables; a variable and a secret may share a name (ENV_VARIABLES and SECRETS are apart).
+ * variables; a variable and a secret may share a name (VARIABLES and SECRETS are apart).
  */
 export class CreateVariableHandler implements UseCaseHandler<{ id: string }> {
   async handle(input: unknown, ctx: UseCaseContext): Promise<UseCaseResult<{ id: string }>> {

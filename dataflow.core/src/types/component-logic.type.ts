@@ -2,6 +2,7 @@ import type {ComponentContext} from '#types/component-context.type';
 import type {ComponentOutput} from '#types/component-output.type';
 import type {Envelope} from '#types/envelope.type';
 import type {Issue} from '#types/issue.type';
+import type {SettingField} from '#types/setting-field.type';
 
 export type ComponentLogic = {
   type: string;
@@ -40,6 +41,8 @@ export type ComponentLogic = {
    * A function of the config when it depends on it (e.g. an HTTP request writes only with POST, PUT, PATCH, DELETE).
    */
   sideEffects?: boolean | ((config: Record<string, unknown>) => boolean);
+  /** its settings, in the order the form shows them (the editor builds the form from them) */
+  settings?: SettingField[];
   /** configuration issues (no data): short messages, without the component's name */
   validate: (config: Record<string, unknown>) => Issue[];
   /** envelope by envelope */

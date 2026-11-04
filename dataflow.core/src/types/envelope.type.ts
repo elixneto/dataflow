@@ -1,10 +1,10 @@
 import type {ParameterValue} from '#types/parameter.type';
 import type {EnvelopeData} from '#types/envelope-data.type';
-import type {WorkflowCurrentRun} from '#types/workflow-current-run.type';
+import type {FlowCurrentRun} from '#types/flow-current-run.type';
 
 /** What passes from one component to another (see "The envelope" in docs/architecture.md). */
 export type Envelope = {
-  WORKFLOW_CURRENT_RUN: WorkflowCurrentRun;
+  FLOW_CURRENT_RUN: FlowCurrentRun;
   PARAMETERS: Record<string, ParameterValue>;
   DATA: EnvelopeData;
 };

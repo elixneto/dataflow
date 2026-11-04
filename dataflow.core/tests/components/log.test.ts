@@ -1,11 +1,11 @@
 import {afterEach, expect, spyOn, test} from 'bun:test';
-import {COMPONENTS, workflowRunner} from '../../src/index';
-import type {ExecutableWorkflow} from '../../src/index';
+import {COMPONENTS, flowRunner} from '../../src/index';
+import type {ExecutableFlow} from '../../src/index';
 import {evaluate} from '../helpers';
 
 /** Data Grid (2 orders) → Log → End. */
-const flow = (config: Record<string, unknown>): ExecutableWorkflow => ({
-  project: 'Test', workflow: 'Orders', parameters: [],
+const flow = (config: Record<string, unknown>): ExecutableFlow => ({
+  project: 'Test', flow: 'Orders', parameters: [],
   nodes: [
     {id: 'start', type: 'start', label: 'Start', config: {}},
     {id: 'grid', type: 'datagrid', label: 'Orders', override: true, config: {
@@ -26,7 +26,7 @@ const spies = [spyOn(console, 'debug'), spyOn(console, 'info'), spyOn(console, '
 for (const spy of spies) spy.mockImplementation(() => undefined);
 afterEach(() => spies.forEach(spy => spy.mockClear()));
 
-const logOf = (r: Awaited<ReturnType<typeof workflowRunner>>) => r.components.find(c => c.nodeId === 'log')!;
+const logOf = (r: Awaited<ReturnType<typeof flowRunner>>) => r.components.find(c => c.nodeId === 'log')!;
 
 test('Log validates its message', () => {
   expect(COMPONENTS.log.validate({level: 'info', message: ''})).toEqual(['has no message.']);
@@ -34,7 +34,7 @@ test('Log validates its message', () => {
 });
 
 test('Log records each message in the run and on the console, and lets the envelopes through', async () => {
-  const r = await workflowRunner(flow({level: 'warn', message: '`Order ${$id}: ${$total}`'}), {mode: 'execution', id: 'l1', evaluate});
+  const r = await flowRunner(flow({level: 'warn', message: '`Order ${$id}: ${$total}`'}), {mode: 'execution', id: 'l1', evaluate});
   const node = logOf(r);
   expect(node.logs.map(l => [l.level, l.message])).toEqual([['warning', 'Order 1: 10'], ['warning', 'Order 2: 25']]);
   expect(node.outputSample['out-0']).toEqual([{id: 1, total: 10}, {id: 2, total: 25}]);
@@ -42,19 +42,19 @@ test('Log records each message in the run and on the console, and lets the envel
 });
 
 test('Log debug is recorded in test runs only', async () => {
-  const testRun = await workflowRunner(flow({level: 'debug', message: '$id'}), {mode: 'validation', id: 'l2', evaluate});
+  const testRun = await flowRunner(flow({level: 'debug', message: '$id'}), {mode: 'validation', id: 'l2', evaluate});
   expect(logOf(testRun).logs.map(l => [l.level, l.message])).toEqual([['debug', '1'], ['debug', '2']]);
   expect(spies[0].mock.calls.length).toBe(2);
 
   spies[0].mockClear();
-  const real = await workflowRunner(flow({level: 'debug', message: '$id'}), {mode: 'execution', id: 'l3', evaluate});
+  const real = await flowRunner(flow({level: 'debug', message: '$id'}), {mode: 'execution', id: 'l3', evaluate});
   expect(logOf(real).logs).toEqual([]);
   expect(spies[0].mock.calls.length).toBe(0);
   expect(logOf(real).outputSample['out-0']).toEqual([{id: 1, total: 10}, {id: 2, total: 25}]);
 });
 
 test('Log: a message that fails is an error of the envelope', async () => {
-  const r = await workflowRunner(flow({level: 'info', message: '$missing.field', onError: 'continue'}), {mode: 'execution', id: 'l4', evaluate});
+  const r = await flowRunner(flow({level: 'info', message: '$missing.field', onError: 'continue'}), {mode: 'execution', id: 'l4', evaluate});
   const node = logOf(r);
   expect(node.status).toBe('with-errors');
   expect(node.logs.filter(l => l.level === 'error')).toHaveLength(2);

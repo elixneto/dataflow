@@ -43,6 +43,16 @@ export const lookup: ComponentLogic = {
   singleEdgeInputs: true,
   outputs: 1,
   defaultOutputKey: 'lookup',
+  settings: [
+    {
+      key: 'keys', label: 'Keys', kind: 'list', itemLabel: 'key', required: true,
+      item: [
+        {key: 'main', label: 'Input', kind: 'expression', required: true, placeholder: '$customerId'},
+        {key: 'lookup', label: 'Lookup', kind: 'expression', required: true, placeholder: '$id'},
+      ],
+    },
+    {key: 'ifNotFound', label: 'If not found', kind: 'select', default: 'null', options: [{value: 'null', label: 'Null'}, {value: 'error', label: 'Error'}]},
+  ],
 
   validate(config) {
     const {keys} = lookupConfig(config);
@@ -104,7 +114,7 @@ export const lookup: ComponentLogic = {
         if (match) found += 1;
         else unmatched += 1;
         const output: Envelope = ctx.node.override
-          ? {WORKFLOW_CURRENT_RUN: doc.WORKFLOW_CURRENT_RUN, PARAMETERS: doc.PARAMETERS, DATA: {...match?.DATA}}
+          ? {FLOW_CURRENT_RUN: doc.FLOW_CURRENT_RUN, PARAMETERS: doc.PARAMETERS, DATA: {...match?.DATA}}
           : withKey(doc, ctx.node.outputKey || 'lookup', match ? match.DATA : null);
         yield {port: 'out-0', doc: output};
       } catch (e) {

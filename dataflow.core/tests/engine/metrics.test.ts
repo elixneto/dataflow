@@ -1,11 +1,11 @@
 import {expect, test} from 'bun:test';
-import {workflowRunner} from '../../src/index';
-import type {ExecutableWorkflow} from '../../src/index';
+import {flowRunner} from '../../src/index';
+import type {ExecutableFlow} from '../../src/index';
 import {evaluate} from '../helpers';
 
 test('active time does not count the wait, and Aggregate reports the batch peak', async () => {
-  const slow: ExecutableWorkflow = {
-    project: 'Test', workflow: 'Metrics', parameters: [],
+  const slow: ExecutableFlow = {
+    project: 'Test', flow: 'Metrics', parameters: [],
     nodes: [
       {id: 'start', type: 'start', label: 'Start', config: {acceptsInput: true}},
       {id: 'ts', type: 'typescript', label: 'Slow', override: true, config: {code: 'async function process($input) {}'}},
@@ -25,7 +25,7 @@ test('active time does not count the wait, and Aggregate reports the batch peak'
     await new Promise(r => setTimeout(r, 30));
     return input;
   };
-  const r = await workflowRunner(slow, {
+  const r = await flowRunner(slow, {
     mode: 'execution', id: 'metrics', evaluate, prepareScript, input: Array.from({length: 6}, (_, i) => ({a: i})),
   });
   expect(r.status).toBe('completed');

@@ -7,18 +7,19 @@ import {MemoryMeter} from '#engine/memory-meter';
 import {flowOrder} from '#engine/flow-order';
 import {errorPolicy, withError} from '#engine/error-envelope';
 import {mergeSources} from '#engine/merge-sources';
+import {ERROR_PORT} from '#validation/ports';
 import {componentContext} from '#engine/component-context';
 import {RunInterrupted} from '#errors/run-interrupted';
 import type {ComponentRun} from '#types/component-run.type';
 import type {Envelope} from '#types/envelope.type';
 import type {EnvelopeData} from '#types/envelope-data.type';
 import type {ExecutableNode} from '#types/executable-node.type';
-import type {ExecutableWorkflow} from '#types/executable-workflow.type';
+import type {ExecutableFlow} from '#types/executable-flow.type';
 import type {LogLevel} from '#types/log-level.type';
 import type {ParameterValue} from '#types/parameter.type';
 import type {RunOptions} from '#types/run-options.type';
 import type {RunRecord} from '#types/run-record.type';
-import type {WorkflowCurrentRun} from '#types/workflow-current-run.type';
+import type {FlowCurrentRun} from '#types/flow-current-run.type';
 
 async function drain(source: AsyncIterable<Envelope>) {
   for await (const _ of source) { /* dropped */ }
@@ -32,12 +33,12 @@ const STATUS_LABEL: Record<RunRecord['status'], string> = {
 };
 
 /**
- * One run of a workflow, envelope by envelope: each edge becomes a Channel and all components run at the same time.
+ * One run of a flow, envelope by envelope: each edge becomes a Channel and all components run at the same time.
  * Holds the run's state (records, stopwatches, memory, channels) and builds the record at the end.
  */
-export class WorkflowExecution {
-  readonly run: WorkflowCurrentRun;
-  /** tells whoever talks to the outside (e.g. a database query, a called workflow) that the run stopped */
+export class FlowExecution {
+  readonly run: FlowCurrentRun;
+  /** tells whoever talks to the outside (e.g. a database query, a called flow) that the run stopped */
   readonly control = new AbortController();
 
   private readonly start = Date.now();
@@ -45,15 +46,15 @@ export class WorkflowExecution {
   private readonly stopwatches: Map<string, Stopwatch>;
   private readonly memories: Map<string, MemoryMeter>;
   private readonly waits: Map<string, Stopwatch>;
-  private readonly channels: (ExecutableWorkflow['edges'][number] & {channel: Channel<Envelope>})[];
+  private readonly channels: (ExecutableFlow['edges'][number] & {channel: Channel<Envelope>})[];
   /** envelopes that went out through an unconnected port (they vanish from the flow): per node and port */
   private readonly dropped = new Map<string, Record<string, number>>();
   private initialEnvelopes: EnvelopeData[] = [];
   private failure?: string;
 
-  constructor(readonly wf: ExecutableWorkflow, readonly options: RunOptions, readonly parameters: Record<string, ParameterValue>) {
+  constructor(readonly wf: ExecutableFlow, readonly options: RunOptions, readonly parameters: Record<string, ParameterValue>) {
     this.run = {
-      id: options.id, mode: options.mode, project: wf.project, workflow: wf.workflow, startedAt: new Date(this.start).toISOString(),
+      id: options.id, mode: options.mode, project: wf.project, flow: wf.flow, startedAt: new Date(this.start).toISOString(),
       ...(options.parentId ? {parentId: options.parentId} : {}),
     };
     this.records = new Map(wf.nodes.map(node => [node.id, {
@@ -201,7 +202,7 @@ export class WorkflowExecution {
         await Promise.all([
           ...Object.values(inputs).map(drain),
           ...Object.entries(pinned).map(async ([port, items]) => {
-            for (const DATA of items) await this.send(node, port, {WORKFLOW_CURRENT_RUN: this.run, PARAMETERS: this.parameters, DATA: clone(DATA)});
+            for (const DATA of items) await this.send(node, port, {FLOW_CURRENT_RUN: this.run, PARAMETERS: this.parameters, DATA: clone(DATA)});
           }),
         ]);
       } else if (node.type === START) {
@@ -212,7 +213,7 @@ export class WorkflowExecution {
             rec.inputs['in-0'] = (rec.inputs['in-0'] ?? 0) + 1;
             if (rec.inputSample.length < SAMPLE_SIZE) rec.inputSample.push(clone(envelope));
           }
-          const doc: Envelope = {WORKFLOW_CURRENT_RUN: this.run, PARAMETERS: this.parameters, DATA: envelope};
+          const doc: Envelope = {FLOW_CURRENT_RUN: this.run, PARAMETERS: this.parameters, DATA: envelope};
           for (const port of outputPorts) await this.send(node, port, doc);
         }
         log('info', `Run ${this.run.id} started (${this.run.mode})${this.options.input !== undefined ? ' with input' : ''}.`);
@@ -242,7 +243,7 @@ export class WorkflowExecution {
           // Divert = handled error: the envelope goes out through the error port and the component does not count as "with errors"
           if (policy === 'divert') {
             log('warning', `Diverted to the error port: ${output.error.message}`);
-            await send('error', withError(output.doc, output.error, node.label));
+            await send(ERROR_PORT, withError(output.doc, output.error, node.label));
             continue;
           }
           errors += 1;

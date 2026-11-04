@@ -2,7 +2,7 @@ import { type AnyPgColumn, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg
 import { organizations } from '#features/organizations/organization';
 import { projects } from '#features/projects/project';
 
-/** follows migrations/3_folders.sql: only a visual organization of a project's flows */
+/** follows migrations/1_initial.sql: only a visual organization of a project's flows */
 export const folders = pgTable('folders', {
   id: uuid('id').primaryKey(),
   orgId: uuid('org_id').notNull().references(() => organizations.id),

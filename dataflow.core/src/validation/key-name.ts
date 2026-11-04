@@ -1,5 +1,5 @@
 /** Names that cannot be DATA keys (they are the system variables in expressions). */
-export const RESERVED_NAMES = ['WORKFLOW_CURRENT_RUN', 'PARAMETERS', 'SECRETS', 'DATA'];
+export const RESERVED_NAMES = ['FLOW_CURRENT_RUN', 'PARAMETERS', 'SECRETS', 'VARIABLES', 'DATA'];
 
 const IDENTIFIER = /^[A-Za-z_][A-Za-z0-9_]*$/;
 

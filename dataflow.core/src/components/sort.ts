@@ -36,6 +36,15 @@ export const sort: ComponentLogic = {
   type: 'sort',
   inputs: 1,
   outputs: 1,
+  settings: [
+    {
+      key: 'keys', label: 'Keys', kind: 'list', itemLabel: 'key', required: true,
+      item: [
+        {key: 'value', label: 'Key', kind: 'expression', required: true, placeholder: '$price'},
+        {key: 'direction', label: 'Order', kind: 'select', default: 'asc', options: [{value: 'asc', label: 'Ascending'}, {value: 'desc', label: 'Descending'}]},
+      ],
+    },
+  ],
 
   validate(config) {
     const keys = sortKeys(config);

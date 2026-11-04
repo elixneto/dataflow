@@ -1,12 +1,12 @@
 import {END, START} from '#engine/constants';
-import type {ExecutableWorkflow} from '#types/executable-workflow.type';
+import type {ExecutableFlow} from '#types/executable-flow.type';
 
 /**
  * Flow order (Start → ... → End), so the record lists the components in the order the envelopes pass through.
  * Components run at the same time, so the start time is useless: in a fast flow they all start in the same ms.
  * Kahn over the edges; ties by node order; whatever is not connected goes to the end.
  */
-export function flowOrder(wf: ExecutableWorkflow): string[] {
+export function flowOrder(wf: ExecutableFlow): string[] {
   const degree = new Map(wf.nodes.map(n => [n.id, 0]));
   for (const e of wf.edges) degree.set(e.target, (degree.get(e.target) ?? 0) + 1);
   const connected = new Set(wf.edges.flatMap(e => [e.source, e.target]));

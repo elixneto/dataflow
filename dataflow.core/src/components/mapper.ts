@@ -23,6 +23,15 @@ export const mapper: ComponentLogic = {
   type: 'mapper',
   inputs: 1,
   outputs: 1,
+  settings: [
+    {
+      key: 'fields', label: 'Fields', kind: 'list', itemLabel: 'field', required: true,
+      item: [
+        {key: 'target', label: 'Field', kind: 'text', required: true, placeholder: 'total'},
+        {key: 'value', label: 'Value', kind: 'value', spread: true, default: {value: '', expression: true}, placeholder: '$price * $quantity'},
+      ],
+    },
+  ],
 
   validate(config) {
     const fields = mapperFields(config);

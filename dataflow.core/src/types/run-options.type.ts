@@ -1,6 +1,7 @@
+import type {ConnectionProfileData} from '../connections/connection-access';
 import type {Envelope} from '#types/envelope.type';
 import type {EvaluateExpression} from '#types/evaluate-expression.type';
-import type {ExecutableWorkflow} from '#types/executable-workflow.type';
+import type {ExecutableFlow} from '#types/executable-flow.type';
 import type {PrepareScript} from '#types/prepare-script.type';
 import type {DatabaseKind} from '#types/database-kind.type';
 import type {QueryDatabase} from '#types/query-database.type';
@@ -14,10 +15,10 @@ import type {SendHttp} from '#types/send-http.type';
 export type RunOptions = {
   mode: RunMode;
   id: string;
-  /** values passed by the trigger (whatever is missing uses the workflow default) */
+  /** values passed by the trigger (whatever is missing uses the flow default) */
   parameterValues?: Record<string, string>;
   /**
-   * Workflow input (e.g. a webhook body). Only valid if the Start is marked as "accepts input".
+   * Flow input (e.g. a webhook body). Only valid if the Start is marked as "accepts input".
    * An object becomes the DATA fields; an array becomes one envelope per item; any other value becomes DATA.input.
    */
   input?: unknown;
@@ -34,15 +35,19 @@ export type RunOptions = {
   documentDeletes?: Partial<Record<DocumentStoreKind, DeleteDocuments>>;
   /** sends HTTP requests (HTTP Request component); without it, the component fails */
   http?: SendHttp;
-  /** workflows the Workflow Invoker can call, by id */
-  workflows?: Record<string, ExecutableWorkflow>;
-  /** run that called this one (filled in by the Workflow Invoker) */
+  /** flows the Flow Invoker can call, by id */
+  flows?: Record<string, ExecutableFlow>;
+  /** run that called this one (filled in by the Flow Invoker) */
   parentId?: string;
-  /** ids of the workflows in the call chain so far, to catch circular calls */
+  /** ids of the flows in the call chain so far, to catch circular calls */
   chain?: string[];
-  /** each envelope that reaches the End (the Workflow Invoker uses it to pass them on); the End awaits the promise */
+  /** each envelope that reaches the End (the Flow Invoker uses it to pass them on); the End awaits the promise */
   onReachEnd?: (doc: Envelope) => Promise<void>;
   secrets?: Record<string, string>;
+  /** the project's variables (plain values, not masked): $VARIABLES */
+  variables?: Record<string, string>;
+  /** the project's connection profiles, by id (their secret fields name entries of `secrets`) */
+  connections?: Record<string, ConnectionProfileData>;
   /** to cancel from outside (Stop button) */
   signal?: AbortSignal;
   /** maximum run time; past that, the run is interrupted */

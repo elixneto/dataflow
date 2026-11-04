@@ -23,7 +23,7 @@ const KINDS = ['all', 'secrets', 'variables'] as const;
 
 /**
  * A project's secrets and variables (/projects/:projectId/secrets), MOCKED for now. Secrets: the value is never shown
- * (flows read SECRETS['name']). Variables: plain values, shown (flows read ENV_VARIABLES['name']). The two are separate:
+ * (flows read SECRETS['name']). Variables: plain values, shown (flows read VARIABLES['name']). The two are separate:
  * a secret and a variable may have the same name.
  */
 export function SecretsPage() {
@@ -152,7 +152,7 @@ export function SecretsPage() {
       )}
 
       {!nothing && kind !== 'secrets' && (
-      <Section title="Variables" hint="Plain values, shown to everyone in the project. Flows use ENV_VARIABLES['name'].">
+      <Section title="Variables" hint="Plain values, shown to everyone in the project. Flows use VARIABLES['name'].">
         <ResourceView
           state={variables.state}
           onRetry={() => void variables.reload()}

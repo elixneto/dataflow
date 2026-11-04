@@ -22,11 +22,11 @@ export type ComponentRun = {
   activeTimeMs?: number;
   /**
    * Time waiting for an outside system: rows coming from a database, a write to MongoDB, the envelopes of a called
-   * workflow. Not counted: waiting for envelopes, or for the next component to take them (backpressure).
+   * flow. Not counted: waiting for envelopes, or for the next component to take them (backpressure).
    */
   waitingMs?: number;
-  /** workflows the component called (Workflow Invoker): a summary of each run, up to 50 */
-  subRuns?: {id: string; workflow: string; status: RunStatus; durationMs: number; error?: string}[];
+  /** flows the component called (Flow Invoker): a summary of each run, up to 50 */
+  subRuns?: {id: string; flow: string; status: RunStatus; durationMs: number; error?: string}[];
   /** What the component held at once (only accumulators: Lookup, Aggregate, Sort...). Bytes estimated from the DATA JSON. */
   memory?: {peakEnvelopes: number; peakBytes: number};
   /** envelopes per port */

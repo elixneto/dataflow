@@ -1,10 +1,10 @@
 import {expect, test} from 'bun:test';
-import {workflowRunner} from '../../src/index';
-import type {ExecutableWorkflow, LimitMode} from '../../src/index';
+import {flowRunner} from '../../src/index';
+import type {ExecutableFlow, LimitMode} from '../../src/index';
 import {evaluate} from '../helpers';
 
-const flow = (mode: LimitMode, count: number): ExecutableWorkflow => ({
-  project: 'Test', workflow: 'Limit', parameters: [],
+const flow = (mode: LimitMode, count: number): ExecutableFlow => ({
+  project: 'Test', flow: 'Limit', parameters: [],
   nodes: [
     {id: 'start', type: 'start', label: 'Start', config: {acceptsInput: true}},
     {id: 'l', type: 'limit', label: 'Limit', config: {mode, count}},
@@ -18,7 +18,7 @@ const flow = (mode: LimitMode, count: number): ExecutableWorkflow => ({
 
 const limited = async (mode: LimitMode, count: number, length: number) => {
   const input = Array.from({length}, (_, i) => ({n: i + 1}));
-  const r = await workflowRunner(flow(mode, count), {mode: 'execution', id: 'limit', evaluate, input});
+  const r = await flowRunner(flow(mode, count), {mode: 'execution', id: 'limit', evaluate, input});
   expect(r.status).toBe('completed');
   const l = r.components.find(c => c.nodeId === 'l')!;
   expect(l.inputs['in-0']).toBe(length);

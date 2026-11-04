@@ -1,3 +1,4 @@
+import {connectionIssues, connectionSettings, connectionUse, usesProfile} from '../connections/connection-access';
 import {withKey} from '#envelope/envelope-data';
 import {toError} from '#errors/normalize-error';
 import type {ComponentLogic} from '#types/component-logic.type';
@@ -36,12 +37,18 @@ export const mongodbDelete: ComponentLogic = {
   outputs: 1,
   defaultOutputKey: 'mongodb',
   sideEffects: true,
+  settings: [
+    ...connectionSettings('mongodb'),
+    {key: 'database', label: 'Database', kind: 'text', placeholder: 'From the connection'},
+    {key: 'collection', label: 'Collection', kind: 'text', required: true},
+    {key: 'filter', label: 'Filter', kind: 'code', language: 'javascript', required: true, default: DEFAULT_DELETE_FILTER},
+    {key: 'allowAll', label: 'Delete all (an empty filter deletes the whole collection)', kind: 'boolean'},
+  ],
 
   validate(config) {
-    const {connection, database, collection, filter, allowAll} = mongoDeleteConfig(config);
-    const issues: string[] = [];
-    if (!connection.trim()) issues.push('has no connection (name of the secret holding the connection string).');
-    if (!database.trim()) issues.push('has no database.');
+    const {database, collection, filter, allowAll} = mongoDeleteConfig(config);
+    const issues: string[] = [...connectionIssues('mongodb', config)];
+    if (!database.trim() && !usesProfile('mongodb', config)) issues.push('has no database.');
     if (!collection.trim()) issues.push('has no collection.');
     if (!filter.trim()) issues.push('has no filter.');
     else if (emptyFilterText(filter) && !allowAll) issues.push('has an empty filter, which deletes the whole collection: turn on "Delete all" to allow it.');
@@ -49,7 +56,8 @@ export const mongodbDelete: ComponentLogic = {
   },
 
   async* execute(inputs, config, ctx) {
-    const {connection, database, collection, filter, allowAll} = mongoDeleteConfig(config);
+    const {database, collection, filter, allowAll} = mongoDeleteConfig(config);
+    const connection = connectionUse('mongodb', config);
     const key = ctx.node.outputKey || 'mongodb';
     const target = `${database}.${collection}`;
     let calls = 0;
@@ -64,7 +72,7 @@ export const mongodbDelete: ComponentLogic = {
         if (Object.keys(match).length === 0 && !allowAll) {
           throw new Error('The filter is empty, which would delete the whole collection: turn on "Delete all" to allow it.');
         }
-        const answer = await ctx.deleteDocuments('mongodb', {secret: connection, database, collection, filter: match});
+        const answer = await ctx.deleteDocuments('mongodb', {connection, database, collection, filter: match});
         // a test run: nothing deleted; the envelope goes on with what the filter matches
         if ('notSent' in answer) {
           tested += 1;

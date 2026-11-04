@@ -1,15 +1,15 @@
 import {expect, test} from 'bun:test';
-import {COMPONENTS, mongoPipelineIssue, mongoPipelineTextIssue, workflowRunner} from '../../src/index';
-import type {DocumentQuery, ExecutableWorkflow} from '../../src/index';
+import {COMPONENTS, mongoPipelineIssue, mongoPipelineTextIssue, flowRunner} from '../../src/index';
+import type {DocumentQuery, ExecutableFlow} from '../../src/index';
 import {evaluate} from '../helpers';
 
 /** Data Grid (2 codes) → MongoDB Pipeline (one pipeline per code) → End. */
-const flow = (pipeline: string, config: Record<string, unknown> = {}): ExecutableWorkflow => ({
-  project: 'Test', workflow: 'Mongo', parameters: [{name: 'since', type: 'text', default: '2026-01-01'}],
+const flow = (pipeline: string, config: Record<string, unknown> = {}): ExecutableFlow => ({
+  project: 'Test', flow: 'Mongo', parameters: [{name: 'since', type: 'text', default: '2026-01-01'}],
   nodes: [
     {id: 'start', type: 'start', label: 'Start', config: {}},
     {id: 'grid', type: 'datagrid', label: 'Codes', override: true, config: {columns: [{name: 'code', type: 'text'}], rows: [['A'], ['B']]}},
-    {id: 'mongo', type: 'mongodb-pipeline', label: 'Orders', config: {connection: 'MONGO', database: 'crm', collection: 'orders', pipeline, onError: 'continue', ...config}},
+    {id: 'mongo', type: 'mongodb-pipeline', label: 'Orders', config: {connectionString: 'MONGO', database: 'crm', collection: 'orders', pipeline, onError: 'continue', ...config}},
     {id: 'end', type: 'end', label: 'End', config: {}},
   ],
   edges: [
@@ -31,11 +31,11 @@ function fakeMongo() {
   return {queries, driver};
 }
 
-const nodeOf = (r: Awaited<ReturnType<typeof workflowRunner>>) => r.components.find(c => c.nodeId === 'mongo')!;
+const nodeOf = (r: Awaited<ReturnType<typeof flowRunner>>) => r.components.find(c => c.nodeId === 'mongo')!;
 
 test('MongoDB Pipeline validates its configuration and refuses stages that write', () => {
   expect(COMPONENTS['mongodb-pipeline'].validate({pipeline: '[]'})).toEqual([
-    'has no connection (name of the secret holding the connection string).', 'has no database.', 'has no collection.',
+    'has no connection (choose one, or fill in connection string).', 'has no database.', 'has no collection.',
   ]);
   expect(mongoPipelineTextIssue('[{$match: {}}, {$out: "copy"}]')).toBe('cannot use $out (it is read-only)');
   expect(mongoPipelineTextIssue('[{"$merge": {into: "x"}}]')).toBe('cannot use $merge (it is read-only)');
@@ -53,7 +53,7 @@ test('MongoDB Pipeline runs once per envelope, with its values, and yields one e
     { $sort: { total: -1 } },
     { $limit: NumberInt('5') },
   ]`;
-  const r = await workflowRunner(flow(pipeline), {mode: 'validation', id: 'p1', evaluate, documentQueries: {mongodb: mongo.driver}, secrets: {MONGO: 'mongodb://x'}});
+  const r = await flowRunner(flow(pipeline), {mode: 'validation', id: 'p1', evaluate, documentQueries: {mongodb: mongo.driver}, secrets: {MONGO: 'mongodb://x'}});
   expect(r.status).toBe('completed');
   expect(mongo.queries).toEqual(['A', 'B'].map(code => ({
     connection: 'mongodb://x', database: 'crm', collection: 'orders', timeoutMs: 300_000,
@@ -76,14 +76,14 @@ test('MongoDB Pipeline: Override keeps only the document, and a new Date() becom
   const mongo = fakeMongo();
   const wf = flow('[{ $match: { at: { $lt: new Date("2026-10-25T00:00:00Z") } } }]');
   wf.nodes.find(n => n.id === 'mongo')!.override = true;
-  const r = await workflowRunner(wf, {mode: 'validation', id: 'p2', evaluate, documentQueries: {mongodb: mongo.driver}, secrets: {MONGO: 'mongodb://x'}});
+  const r = await flowRunner(wf, {mode: 'validation', id: 'p2', evaluate, documentQueries: {mongodb: mongo.driver}, secrets: {MONGO: 'mongodb://x'}});
   expect(mongo.queries[0].pipeline).toEqual([{$match: {at: {$lt: {$date: '2026-10-25T00:00:00.000Z'}}}}]);
   expect(nodeOf(r).outputSample['out-0'][0]).toEqual({_id: 'id-1', total: 10});
 });
 
 test('MongoDB Pipeline: a pipeline that is not a list, writes or fails to evaluate is an error of the envelope', async () => {
   const mongo = fakeMongo();
-  const run = (pipeline: string) => workflowRunner(flow(pipeline), {mode: 'validation', id: 'p3', evaluate, documentQueries: {mongodb: mongo.driver}, secrets: {MONGO: 'mongodb://x'}});
+  const run = (pipeline: string) => flowRunner(flow(pipeline), {mode: 'validation', id: 'p3', evaluate, documentQueries: {mongodb: mongo.driver}, secrets: {MONGO: 'mongodb://x'}});
   const errors = async (pipeline: string) => nodeOf(await run(pipeline)).logs.filter(l => l.level === 'error').map(l => l.message);
 
   expect(await errors('{ $match: {} }')).toEqual(Array(2).fill('The pipeline is not a list of stages ([ {...}, {...} ]).'));
@@ -94,7 +94,7 @@ test('MongoDB Pipeline: a pipeline that is not a list, writes or fails to evalua
   expect(broken[0]).not.toContain('NumberDecimal');
   expect(mongo.queries).toEqual([]);
 
-  const noSecret = await workflowRunner(flow('[]'), {mode: 'validation', id: 'p4', evaluate, documentQueries: {mongodb: mongo.driver}, secrets: {}});
+  const noSecret = await flowRunner(flow('[]'), {mode: 'validation', id: 'p4', evaluate, documentQueries: {mongodb: mongo.driver}, secrets: {}});
   expect(nodeOf(noSecret).logs.some(l => l.message.includes('"MONGO" does not exist'))).toBe(true);
 });
 
@@ -103,7 +103,7 @@ test('MongoDB Pipeline: a date of the document reaches the next component as a D
     yield {_id: 'id-1', at: new Date('2026-10-25T18:00:00.000Z'), label: '2026-10-25'};
   };
   const reached: Record<string, unknown>[] = [];
-  await workflowRunner(flow('[]'), {mode: 'validation', id: 'p5', evaluate, documentQueries: {mongodb: driver}, secrets: {MONGO: 'mongodb://x'},
+  await flowRunner(flow('[]'), {mode: 'validation', id: 'p5', evaluate, documentQueries: {mongodb: driver}, secrets: {MONGO: 'mongodb://x'},
     onReachEnd: async doc => void reached.push(doc.DATA)});
   expect(reached[0].at).toBeInstanceOf(Date);
   expect(reached[0].label).toBe('2026-10-25');

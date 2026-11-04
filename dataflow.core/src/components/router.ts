@@ -25,6 +25,15 @@ export const router: ComponentLogic = {
   outputs: 1,
   outputsFromConfig: config => [...routerCases(config).map((c, i) => ({label: c.label?.trim() || `case ${i + 1}`})), {label: 'else'}],
   optionalOutputs: config => [routerElsePort(config)],
+  settings: [
+    {
+      key: 'cases', label: 'Cases', kind: 'list', itemLabel: 'case', required: true,
+      item: [
+        {key: 'label', label: 'Name', kind: 'text', placeholder: 'big'},
+        {key: 'condition', label: 'Condition', kind: 'expression', required: true, placeholder: '$total > 1000'},
+      ],
+    },
+  ],
 
   validate(config) {
     const cases = routerCases(config);

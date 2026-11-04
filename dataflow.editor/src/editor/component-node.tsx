@@ -1,11 +1,12 @@
-import { memo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
-import { Handle, NodeToolbar, Position, useNodeConnections, useReactFlow, type Node, type NodeProps } from '@xyflow/react';
-import { LoaderCircle, Pin, Play, Power, SkipForward } from 'lucide-react';
+import { memo, useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { Handle, NodeToolbar, Position, useNodeConnections, useReactFlow, useUpdateNodeInternals, type Node, type NodeProps } from '@xyflow/react';
+import { CornerDownRight, Eye, LogIn, LoaderCircle, OctagonX, Pin, Play, Power, SkipForward, SlidersHorizontal, X, type LucideIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { CATEGORIES, componentInfo, isFixedType } from './catalog';
 import { CARD_HEIGHT, CARD_WIDTH, portTop, SIDE_GAP } from './node-geometry';
 import { useHistory } from './history';
-import { inputPorts, outputPorts, type ErrorPolicy, type PortInfo } from '@dataflow/core';
+import { nameIn, useProjectResources } from './project-resources';
+import { componentSummary, START, startConfig, ERROR_PORT, errorPort, inputPorts, outputPorts, type ErrorPolicy, type PortInfo } from '@dataflow/core';
 
 export type ComponentData = {
   type: string;
@@ -14,6 +15,12 @@ export type ComponentData = {
   disabled?: boolean;
   /** MOCK: the output is pinned (in editor runs it would replay it instead of running) */
   pinned?: boolean;
+  /** its name on the canvas (empty: the component's own, like Mapper) */
+  label?: string;
+  /** the key it writes in the envelope (empty: the component's default) */
+  outputKey?: string;
+  /** free notes (the window's Notes tab) */
+  notes?: string;
 };
 
 export type ComponentNode = Node<ComponentData, 'component'>;
@@ -21,11 +28,10 @@ export type ComponentNode = Node<ComponentData, 'component'>;
 /**
  * MOCK of the On error choice (config.onError, read by the core's errorPolicy): what an envelope that fails in the
  * component does. Throw (the default) stops the run; Continue lets the envelope go on as it came in;
- * Divert sends it out through the error port, a red bump under the card.
+ * Divert sends it out through the error port, a red bump under the card. The port itself comes from the core (errorPort).
  */
 export type OnError = ErrorPolicy;
 
-export const ERROR_PORT = 'error';
 
 const onErrorOf = (data: ComponentData): OnError => (data.config.onError === 'continue' || data.config.onError === 'divert' ? data.config.onError : 'throw');
 
@@ -43,6 +49,17 @@ function ComponentNodeView({ id, data, selected }: NodeProps<ComponentNode>) {
   const incoming = useNodeConnections({ handleType: 'target' });
   const outgoing = useNodeConnections({ handleType: 'source' });
   const hover = useHover();
+  const [infoOpen, setInfoOpen] = useState(false);
+  const closeInfo = useCallback(() => setInfoOpen(false), []);
+  const updateNodeInternals = useUpdateNodeInternals();
+  const inputCount = inputPorts(data.type, data.config).length;
+  const outputCount = outputPorts(data.type, data.config).length;
+  const hasErrorPort = errorPort(data.type, data.config) !== undefined;
+  // a port that appears or goes (the error port on Divert, a Router's case) must be measured again, or React Flow
+  // neither starts an edge from it nor draws the ones it has
+  useEffect(() => {
+    updateNodeInternals(id);
+  }, [id, inputCount, outputCount, hasErrorPort, updateNodeInternals]);
   if (!info) {
     return <div className="rounded-lg border border-destructive bg-card px-3 py-2 text-sm text-destructive">Unknown component {data.type}</div>;
   }
@@ -51,29 +68,60 @@ function ComponentNodeView({ id, data, selected }: NodeProps<ComponentNode>) {
   const outputs = outputPorts(data.type, data.config);
   const color = CATEGORIES[info.category].color;
   const onError = isFixedType(data.type) ? 'throw' : onErrorOf(data);
+  // the Start shows what it is set with: an input, its parameters
+  const start = data.type === START ? startConfig(data.config) : undefined;
+  const parameterCount = start?.parameters.length ?? 0;
 
   // the bar is a NodeToolbar: outside the card (a disabled node fades, its buttons do not) and outside the zoom
   return (
     <>
-      {/* Start and End are not run on their own: no Disable, Run from here or Pin */}
-      {!isFixedType(data.type) && <NodeActions id={id} data={data} visible={hover.on} hoverProps={hover.props} />}
+      {/* Start and End are not run on their own: no Disable, Run from here or Pin (the Start has only the eye) */}
+      {(!isFixedType(data.type) || start) && (
+        <NodeActions
+          id={id}
+          data={data}
+          visible={hover.on}
+          hoverProps={hover.props}
+          infoOpen={infoOpen}
+          onlyInfo={!!start}
+          onInfo={() => setInfoOpen(open => !open)}
+        />
+      )}
+      {infoOpen && <InfoPanel data={data} onClose={closeInfo} />}
       <div {...hover.props} style={{ '--category': color, width: CARD_WIDTH - SIDE_GAP } as CSSProperties} className={cn('relative transition-opacity', data.disabled && 'opacity-50')}>
-        <Plate inputs={inputs.length} outputs={outputs.length} errorPort={onError === 'divert'} selected={selected} />
-        <div style={{ height: CARD_HEIGHT }} className="relative flex items-center text-card-foreground">
-          <div className="flex min-w-0 flex-1 items-center gap-2 px-4">
-            <info.icon className="size-4 shrink-0" style={{ color }} />
-            <span className={cn('line-clamp-2 text-xs leading-tight font-medium break-words', data.disabled && 'line-through')}>{info.label}</span>
-            {/* pinned shows on the card too, not only on the bar (which appears on hover) */}
-            {onError === 'continue' && (
-              <SkipForward role="img" aria-label="On error: continue" className="ml-auto size-3.5 shrink-0 text-amber-600 dark:text-amber-400">
-                <title>On error: continue (the envelope goes on as it came in)</title>
-              </SkipForward>
-            )}
+        <Plate inputs={inputs.length} outputs={outputs.length} errorPort={hasErrorPort} selected={selected} />
+        {/* what is set on the node (Continue, pinned), above it where the bar appears: the bar covers it on hover and the
+            name keeps the whole card */}
+        {(onError === 'continue' || data.pinned || start?.acceptsInput || parameterCount > 0) && (
+          <div className="pointer-events-none absolute bottom-full left-1 mb-1 flex items-center gap-1 px-1">
             {data.pinned && (
-              <Pin role="img" aria-label="Output pinned" className={cn('size-3.5 shrink-0 rotate-45 text-blue-600 dark:text-blue-400', onError !== 'continue' && 'ml-auto')}>
+              <Pin role="img" aria-label="Output pinned" className="size-3.5 rotate-45 text-blue-600 dark:text-blue-400">
                 <title>Output pinned</title>
               </Pin>
             )}
+            {start?.acceptsInput && (
+              <LogIn role="img" aria-label="Accepts input" className="size-3.5 text-sky-600 dark:text-sky-400">
+                <title>{start.testInput.trim() ? 'Accepts input (default input set)' : 'Accepts input'}</title>
+              </LogIn>
+            )}
+            {parameterCount > 0 && (
+              <span role="img" aria-label={`${parameterCount} parameter${parameterCount === 1 ? '' : 's'}`} className="flex items-center gap-0.5 text-violet-600 dark:text-violet-400">
+                <SlidersHorizontal className="size-3.5" aria-hidden />
+                <span className="font-mono text-[10px] leading-none font-medium">{parameterCount}</span>
+                <title>{`${parameterCount} parameter${parameterCount === 1 ? '' : 's'}`}</title>
+              </span>
+            )}
+            {onError === 'continue' && (
+              <SkipForward role="img" aria-label="On error: continue" className="size-3.5 text-amber-600 dark:text-amber-400">
+                <title>On error: continue (the envelope goes on as it came in)</title>
+              </SkipForward>
+            )}
+          </div>
+        )}
+        <div style={{ height: CARD_HEIGHT }} className="relative flex items-center text-card-foreground">
+          <div className="flex min-w-0 flex-1 items-center gap-2 px-4">
+            <info.icon className="size-4 shrink-0" style={{ color }} />
+            <span className={cn('line-clamp-2 text-xs leading-tight font-medium break-words', data.disabled && 'line-through')}>{data.label?.trim() || info.label}</span>
           </div>
 
           {inputs.map((port, i) => (
@@ -83,7 +131,7 @@ function ComponentNodeView({ id, data, selected }: NodeProps<ComponentNode>) {
             <PortHandle key={port.id} port={port} kind="source" style={{ top: portTop(i) }} edges={outgoing.filter(c => c.sourceHandle === port.id).length} />
           ))}
           {/* Divert: the error port, a red bump under the card (what fails goes out through it) */}
-          {onError === 'divert' && (
+          {hasErrorPort && (
             <Handle
               id={ERROR_PORT}
               type="source"
@@ -226,7 +274,17 @@ function useHover() {
  * Pin output, and On error (Throw / Continue / Divert). MOCK: they only change the node; Run from here only shows it
  * running for a moment. Leaving Divert removes the edges of the error port.
  */
-function NodeActions({ id, data, visible, hoverProps }: { id: string; data: ComponentData; visible: boolean; hoverProps: ReturnType<typeof useHover>['props'] }) {
+function NodeActions(props: {
+  id: string;
+  data: ComponentData;
+  visible: boolean;
+  hoverProps: ReturnType<typeof useHover>['props'];
+  infoOpen: boolean;
+  /** only the eye (the Start) */
+  onlyInfo?: boolean;
+  onInfo: () => void;
+}) {
+  const { id, data, visible, hoverProps } = props;
   const { updateNodeData, setEdges } = useReactFlow<ComponentNode>();
   const { record } = useHistory();
   const onError = onErrorOf(data);
@@ -257,60 +315,79 @@ function NodeActions({ id, data, visible, hoverProps }: { id: string; data: Comp
   return (
     <NodeToolbar isVisible={visible} position={Position.Top} align="start" offset={4} {...hoverProps}>
       <div className="flex items-center gap-0.5 rounded-md border bg-card/90 p-0.5 shadow-xs">
-        <ActionButton
-          label={data.disabled ? 'Enable' : 'Disable'}
-          pressed={data.disabled ?? false}
-          className={data.disabled ? 'text-destructive' : undefined}
-          onClick={() => change({ disabled: !data.disabled })}
-        >
-          <Power />
-        </ActionButton>
-        <ActionButton label="Run from here" disabled={running || data.disabled} onClick={runFromHere}>
-          {running ? <LoaderCircle className="animate-spin" /> : <Play />}
-        </ActionButton>
-        <ActionButton
-          label={data.pinned ? 'Unpin output' : 'Pin output'}
-          pressed={data.pinned ?? false}
-          className={data.pinned ? 'text-blue-600 hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-400' : undefined}
-          onClick={() => change({ pinned: !data.pinned })}
-        >
-          <Pin className={cn('transition-transform', data.pinned && 'rotate-45')} />
-        </ActionButton>
-        <span className="mx-0.5 h-4 w-px bg-border" aria-hidden />
-        <div role="radiogroup" aria-label="On error" className="flex items-center gap-0.5">
-          <span className="px-1 text-[10px] text-muted-foreground">On error</span>
-          {ON_ERROR.map(option => (
-            <button
-              key={option.value}
-              type="button"
-              role="radio"
-              aria-checked={option.value === onError}
-              aria-label={option.label}
-              title={option.hint}
-              onClick={() => setOnError(option.value)}
-              className={cn(
-                'h-5 rounded px-1.5 text-[10px] font-medium transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring',
-                option.value !== onError && 'text-muted-foreground hover:bg-accent hover:text-foreground',
-                option.value === onError && option.active,
-              )}
+        {!props.onlyInfo && (
+          <>
+            <ActionButton
+              label={data.disabled ? 'Enable' : 'Disable'}
+              pressed={data.disabled ?? false}
+              className={data.disabled ? 'text-destructive' : undefined}
+              onClick={() => change({ disabled: !data.disabled })}
             >
-              {option.label}
-            </button>
-          ))}
-        </div>
+              <Power />
+            </ActionButton>
+            <ActionButton label="Run from here" disabled={running || data.disabled} onClick={runFromHere}>
+              {running ? <LoaderCircle className="animate-spin" /> : <Play />}
+            </ActionButton>
+            <ActionButton
+              label={data.pinned ? 'Unpin output' : 'Pin output'}
+              pressed={data.pinned ?? false}
+              className={data.pinned ? 'text-blue-600 hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-400' : undefined}
+              onClick={() => change({ pinned: !data.pinned })}
+            >
+              <Pin className={cn('transition-transform', data.pinned && 'rotate-45')} />
+            </ActionButton>
+            <span className="mx-0.5 h-4 w-px bg-border" aria-hidden />
+            <div role="radiogroup" aria-label="On error" className="flex items-center gap-0.5">
+              {ON_ERROR.map(option => (
+                <button
+                  key={option.value}
+                  type="button"
+                  role="radio"
+                  aria-checked={option.value === onError}
+                  aria-label={`On error: ${option.label}`}
+                  title={`On error: ${option.label}. ${option.hint}`}
+                  onClick={() => setOnError(option.value)}
+                  className={cn(
+                    'flex size-5 items-center justify-center rounded transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring [&_svg]:size-3',
+                    option.value !== onError && 'text-muted-foreground hover:bg-accent hover:text-foreground',
+                    option.value === onError && option.active,
+                  )}
+                >
+                  <option.icon aria-hidden />
+                </button>
+              ))}
+            </div>
+            <span className="mx-0.5 h-4 w-px bg-border" aria-hidden />
+          </>
+        )}
+        <ActionButton
+          label={props.infoOpen ? 'Hide details' : 'Show details'}
+          pressed={props.infoOpen}
+          className={props.infoOpen ? 'bg-accent text-foreground' : undefined}
+          onClick={props.onInfo}
+        >
+          <Eye />
+        </ActionButton>
       </div>
     </NodeToolbar>
   );
 }
 
 /** the On error choices, in the bar: the core's values (ErrorPolicy), in this order */
-const ON_ERROR: { value: OnError; label: string; hint: string; active: string }[] = [
-  { value: 'throw', label: 'Throw', hint: 'On error the run stops (default)', active: 'bg-accent text-foreground' },
-  { value: 'continue', label: 'Continue', hint: 'On error the envelope goes on as it came in', active: 'bg-amber-500/15 text-amber-700 dark:text-amber-300' },
-  { value: 'divert', label: 'Divert', hint: 'On error the envelope goes out through the error port', active: 'bg-destructive/15 text-destructive' },
+const ON_ERROR: { value: OnError; label: string; icon: LucideIcon; hint: string; active: string }[] = [
+  { value: 'throw', label: 'Throw', icon: OctagonX, hint: 'The run stops (default)', active: 'bg-accent text-foreground' },
+  { value: 'continue', label: 'Continue', icon: SkipForward, hint: 'The envelope goes on as it came in', active: 'bg-amber-500/15 text-amber-700 dark:text-amber-300' },
+  { value: 'divert', label: 'Divert', icon: CornerDownRight, hint: 'The envelope goes out through the error port', active: 'bg-destructive/15 text-destructive' },
 ];
 
-function ActionButton(props: { label: string; pressed?: boolean; disabled?: boolean; className?: string; onClick: () => void; children: ReactNode }) {
+function ActionButton(props: {
+  label: string;
+  pressed?: boolean;
+  disabled?: boolean;
+  className?: string;
+  onClick: () => void;
+  children: ReactNode;
+}) {
   return (
     <button
       type="button"
@@ -328,5 +405,74 @@ function ActionButton(props: { label: string; pressed?: boolean; disabled?: bool
     </button>
   );
 }
+
+/**
+ * The eye's panel: what the component does, read from its config by the core (componentSummary), right under the card
+ * and outside the zoom. Several can be open. It stays open while the card moves (it follows it) and
+ * closes with the eye, its X or Esc.
+ */
+function InfoPanel({ data, onClose }: { data: ComponentData; onClose: () => void }) {
+  const info = componentInfo(data.type);
+  const resources = useProjectResources();
+  const sections = componentSummary(data.type, data.config, nameIn(resources));
+  const notes = data.notes?.trim();
+  useEffect(() => {
+    const escape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        onClose();
+      }
+    };
+    document.addEventListener('keydown', escape);
+    return () => document.removeEventListener('keydown', escape);
+  }, [onClose]);
+
+  return (
+    <NodeToolbar isVisible position={Position.Bottom} align="start" offset={12}>
+      <div
+        role="dialog"
+        aria-label={`Details: ${data.label?.trim() || info?.label || data.type}`}
+        className="nowheel w-72 rounded-md border bg-card text-card-foreground shadow-md"
+      >
+        <div className="flex items-center gap-2 border-b px-2 py-1.5">
+          {info && <info.icon className="size-3.5 shrink-0" style={{ color: CATEGORIES[info.category].color }} />}
+          <span className="min-w-0 flex-1 truncate text-xs font-medium">{data.label?.trim() || info?.label || data.type}</span>
+          <button
+            type="button"
+            aria-label="Close"
+            title="Close"
+            onClick={onClose}
+            className="flex size-5 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground [&_svg]:size-3"
+          >
+            <X />
+          </button>
+        </div>
+        <div className="max-h-80 space-y-2 overflow-auto p-2 text-xs">
+          {sections.length === 0 && !notes && <p className="text-muted-foreground italic">Not set yet</p>}
+          {sections.map(section => (
+            <section key={section.title} className="space-y-1">
+              <h4 className="text-[10px] font-medium tracking-wide text-muted-foreground uppercase">{section.title}</h4>
+              {section.lines.map((line, i) => (
+                <div key={i} className="flex min-w-0 gap-2">
+                  {line.label && <span className="shrink-0 font-mono text-muted-foreground">{asText(line.label)}</span>}
+                  {/* always text (the core's summary gives text; anything else is shown as JSON, never rendered as an object) */}
+                  <span className={cn('min-w-0 break-words whitespace-pre-wrap', line.code && 'font-mono')}>{asText(line.value)}</span>
+                </div>
+              ))}
+            </section>
+          ))}
+          {notes && (
+            <section className="space-y-1">
+              <h4 className="text-[10px] font-medium tracking-wide text-muted-foreground uppercase">Notes</h4>
+              <p className="break-words whitespace-pre-wrap">{notes}</p>
+            </section>
+          )}
+        </div>
+      </div>
+    </NodeToolbar>
+  );
+}
+
+/** a summary value as text, whatever it is */
+const asText = (value: unknown) => (typeof value === 'string' ? value : JSON.stringify(value) ?? '');
 
 export const ComponentNodeMemo = memo(ComponentNodeView);

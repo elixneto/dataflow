@@ -2,7 +2,7 @@ import { pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
 import { organizations } from '#features/organizations/organization';
 import { projects } from '#features/projects/project';
 
-/** follows migrations/4_secrets_variables_connections.sql: plain values flows read as ENV_VARIABLES['name'] */
+/** follows migrations/1_initial.sql: plain values flows read as VARIABLES['name'] */
 export const variables = pgTable('variables', {
   id: uuid('id').primaryKey(),
   orgId: uuid('org_id').notNull().references(() => organizations.id),

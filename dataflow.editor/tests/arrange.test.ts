@@ -185,6 +185,14 @@ describe('arrange (left to right, glued)', () => {
     }
   });
 
+  test('what handles the errors (Divert) goes below the path that works, one column after', () => {
+    const placed = arrange(
+      [card('m', 'mapper', 0, 0, { onError: 'divert' }), card('ok', 'sort', 0, 0), card('fix', 'log', 0, 0)],
+      [edge('m', 'ok'), edge('m', 'fix', 'error')],
+    );
+    expect(at(placed)).toEqual({ m: [0, 0], ok: [CARD_WIDTH, 0], fix: [CARD_WIDTH, PORT_GAP] });
+  });
+
   test('separate flows one below the other; groups and loose cards are kept', () => {
     const group = { id: 'g', type: 'group', position: { x: 7, y: 7 }, data: {} };
     const placed = arrange([card('a', 'mapper', 0, 0), card('b', 'sort', 0, 50), group], []);

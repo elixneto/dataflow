@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { isFolderVisible, siblingNames, validateName, type ExecutableWorkflow } from '@dataflow/core';
+import { isFolderVisible, siblingNames, validateName, type ExecutableFlow } from '@dataflow/core';
 import { FlowRepository, invalidName, loadTree, location, nameTaken, requireActiveProject } from '#features/folders/project-tree';
 import type { UseCaseContext } from '#shared/use-cases/use-case-context';
 import type { UseCaseHandler } from '#shared/use-cases/use-case-handler';
@@ -16,7 +16,7 @@ export const CreateFlowCommand = z.object({
  * The draft of a new flow: no parameters, components or connections yet. The editor adds Start and End (with their
  * places on the canvas) the first time it opens it.
  */
-export const EMPTY_DRAFT: Pick<ExecutableWorkflow, 'parameters' | 'nodes' | 'edges'> = { parameters: [], nodes: [], edges: [] };
+export const EMPTY_DRAFT: Pick<ExecutableFlow, 'parameters' | 'nodes' | 'edges'> = { parameters: [], nodes: [], edges: [] };
 
 /** Creates an empty flow at the project's root or in an active folder. An archived project takes no new flows. */
 export class CreateFlowHandler implements UseCaseHandler<{ id: string }> {

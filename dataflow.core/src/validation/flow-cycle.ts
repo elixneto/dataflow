@@ -1,5 +1,5 @@
 /**
- * Looks for a cycle in the edges (the workflow must be acyclic: a cycle is an infinite loop of envelopes).
+ * Looks for a cycle in the edges (the flow must be acyclic: a cycle is an infinite loop of envelopes).
  * Returns the ids of the cycle in order (the first one repeats at the end), or null.
  */
 export function findCycle(ids: string[], edges: { source: string; target: string }[]): string[] | null {

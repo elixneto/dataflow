@@ -1,5 +1,5 @@
 /*
- * A project's variables: like environment variables, plain values the flows read as ENV_VARIABLES['name'] (secrets
+ * A project's variables: like environment variables, plain values the flows read as VARIABLES['name'] (secrets
  * stay SECRETS['name']). The difference from a secret: a variable's value is not sensitive, so it is shown and can
  * be edited in place. Names follow the secrets' rule (@dataflow/core), unique among the project's variables.
  */

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type RefObject } from 'react';
 import {
   addEdge,
   Background,
@@ -15,14 +15,20 @@ import {
   type ReactFlowInstance,
   type XYPosition,
 } from '@xyflow/react';
-import { Network, Redo2, SquareDashed, Undo2 } from 'lucide-react';
+import { Network, Redo2, SquareDashed, Undo2, X } from 'lucide-react';
+import { useParams } from 'react-router';
+import { ProjectResourcesContext, ScriptGlobalsContext, useLoadProjectResources } from '@/editor/project-resources';
 import { Button } from '@/components/ui/button';
 import '@xyflow/react/dist/style.css';
-import { connectionProblem, END, START } from '@dataflow/core';
+import { componentSettings, connectionProblem, END, ERROR_PORT, scriptGlobals, settingsDefaults, START, startParameters } from '@dataflow/core';
 import { arrange } from '@/editor/arrange';
 import { fittedConnections } from '@/editor/auto-connect';
-import { CATEGORIES, componentInfo } from '@/editor/catalog';
-import { ComponentNodeMemo, type ComponentNode } from '@/editor/component-node';
+import { CATEGORIES, componentInfo, isFixedType } from '@/editor/catalog';
+import type { ComponentDraft } from '@/editor/component-draft';
+import { ComponentWindow } from '@/editor/component-window';
+import { FloatingWindow, type WindowPosition, type WindowSize } from '@/editor/floating-window';
+import { readWindow, rememberWindow } from '@/editor/window-memory';
+import { ComponentNodeMemo, type ComponentData, type ComponentNode } from '@/editor/component-node';
 import { COMPONENT_DRAG_TYPE } from '@/editor/drag';
 import { canSplice, edgeUnder, pointerBox, splice } from '@/editor/edge-splice';
 import { GROUP_COLORS, GROUP_SIZE, GROUP_Z, layerGroups, type GroupNode } from '@/editor/group';
@@ -40,6 +46,9 @@ const NODE_TYPES = { component: ComponentNodeMemo, group: GroupNodeMemo };
 
 /** what the canvas holds: components, and groups behind them */
 type FlowNode = ComponentNode | GroupNode;
+
+/** the canvas as it is now (the page's Download reads it) */
+export type CanvasExport = () => { nodes: FlowNode[]; edges: Edge[] };
 
 const isComponent = (node: FlowNode): node is ComponentNode => node.type === 'component';
 
@@ -72,9 +81,18 @@ const FIXED_NODES: ComponentNode[] = [
  * Backspace removes what is selected. Pan with the middle/right
  * button or the scroll, zoom with Ctrl + scroll. Not saved yet: the flow's definition comes with the backend.
  */
-export function FlowCanvas() {
+/** the size a window with a code editor or a table opens with */
+const WIDE_WINDOW = { w: 760, h: null };
+
+export function FlowCanvas({ exportRef }: { exportRef?: RefObject<CanvasExport | null> }) {
   const [nodes, setNodes, onNodesChange] = useNodesState<FlowNode>(FIXED_NODES);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
+  // what the page's Download takes: the canvas as it is now
+  useEffect(() => {
+    if (exportRef) {
+      exportRef.current = () => ({ nodes, edges });
+    }
+  }, [exportRef, nodes, edges]);
   const [flow, setFlow] = useState<ReactFlowInstance<FlowNode, Edge> | null>(null);
   // a smaller group above a bigger one, so a group inside another can be clicked
   const shownNodes = useMemo(() => layerGroups(nodes), [nodes]);
@@ -176,7 +194,7 @@ export function FlowCanvas() {
     () =>
       edges.map(e => {
         // an edge out of an error port (On error = Divert) is red; the one a new component would go into, highlighted
-        const className = [e.sourceHandle === 'error' && 'is-error-edge', e.id === spliceEdge && 'is-splice-target'].filter(Boolean).join(' ');
+        const className = [e.sourceHandle === ERROR_PORT && 'is-error-edge', e.id === spliceEdge && 'is-splice-target'].filter(Boolean).join(' ');
         return className ? { ...e, className } : e;
       }),
     [edges, spliceEdge],
@@ -221,7 +239,7 @@ export function FlowCanvas() {
       id: crypto.randomUUID(),
       type: 'component',
       position: { x: Math.round(position.x / DOT_GAP) * DOT_GAP, y: Math.round((position.y - 32) / DOT_GAP) * DOT_GAP },
-      data: { type, config: {} },
+      data: { type, config: settingsDefaults(componentSettings(type)) },
       selected: true,
     };
     setNodes(current => [...current.map(n => ({ ...n, selected: false })), node]);
@@ -309,75 +327,245 @@ export function FlowCanvas() {
     );
   };
 
+  // ---- the components' windows (editor/floating-window.tsx): a double click opens one; several stay open, the last
+  // one in front
+  // minimized: hidden but kept (its size and unsaved edits), a chip in the bottom-left tray, in the order minimized
+  type OpenWindow = { id: string; position: WindowPosition; size?: WindowSize; minimized?: number; changed?: boolean };
+  const [windows, setWindows] = useState<OpenWindow[]>([]);
+  // each window comes back where it was and with its size (this browser tab, per flow and component)
+  const { flowId = '', projectId = '' } = useParams();
+  const resources = useLoadProjectResources(projectId);
+  const openWindow = (id: string) =>
+    setWindows(current => {
+      const open = current.find(w => w.id === id);
+      if (open) {
+        // already open: to the front, restored when minimized
+        return [...current.filter(w => w.id !== id), { ...open, minimized: undefined }];
+      }
+
+      const remembered = readWindow(flowId, id);
+      const n = current.length % 8;
+      const type = nodes.filter(isComponent).find(node => node.id === id)?.data.type;
+      // a code editor or a table needs room: those windows open wider (a size the user left wins)
+      const wide = componentSettings(String(type)).some(setting => setting.kind === 'code' || setting.kind === 'grid');
+      return [...current, { id, position: remembered.position ?? { x: 320 + n * 28, y: 24 + n * 28 }, size: remembered.size ?? (wide ? WIDE_WINDOW : undefined) }];
+    });
+  const closeWindow = (id: string) => setWindows(current => current.filter(w => w.id !== id));
+  const focusWindow = (id: string) =>
+    setWindows(current => (current.at(-1)?.id === id ? current : [...current.filter(w => w.id !== id), current.find(w => w.id === id)!]));
+  const updateWindow = (id: string, changes: Partial<OpenWindow>) => setWindows(current => current.map(w => (w.id === id ? { ...w, ...changes } : w)));
+  const minimizeWindow = (id: string) => updateWindow(id, { minimized: Date.now() });
+  // closing a minimized window: right away; with unsaved changes it comes back first and asks (Discard changes?)
+  const closeMinimized = (w: OpenWindow) => {
+    if (!w.changed) {
+      closeWindow(w.id);
+      return;
+    }
+
+    openWindow(w.id);
+    closers.current.get(w.id)?.();
+  };
+  // only when it changes: the window reports it on every render
+  const markChanged = (id: string, changed: boolean) =>
+    setWindows(current => (current.some(w => w.id === id && !!w.changed !== changed) ? current.map(w => (w.id === id ? { ...w, changed } : w)) : current));
+  // Save in a window: all its changes at once, one Ctrl+Z step, and the window closes
+  const saveComponent = (id: string, draft: ComponentDraft) => {
+    record();
+    const changes: Partial<ComponentData> = {
+      config: draft.config,
+      label: draft.label?.trim() || undefined,
+      outputKey: draft.outputKey?.trim() || undefined,
+      notes: draft.notes || undefined,
+    };
+    setNodes(current => current.map(n => (n.id === id && isComponent(n) ? { ...n, data: { ...n.data, ...changes } } : n)));
+    closeWindow(id);
+  };
+  const removeComponent = (id: string) => {
+    record();
+    setNodes(current => current.filter(n => n.id !== id));
+    setEdges(current => current.filter(e => e.source !== id && e.target !== id));
+    closeWindow(id);
+  };
+  // each window's own way to close (it asks first when it has unsaved changes), used by its X and Esc
+  const closers = useRef(new Map<string, () => void>());
+
+  // a deleted component (Delete, Ctrl+Z...) has no window to show
+  const shownWindows = windows.filter(w => nodes.some(n => n.id === w.id));
+  // the front window is the last one not minimized
+  const frontWindow = shownWindows.filter(w => !w.minimized).at(-1)?.id;
+  const dock = shownWindows.filter(w => w.minimized).sort((a, b) => (a.minimized ?? 0) - (b.minimized ?? 0));
+  // $PARAMETERS in a TypeScript component's code: the Start's parameters (only the text changes when they do)
+  const globals = scriptGlobals(startParameters(nodes.filter(isComponent).map(n => n.data)));
+
   return (
-    <HistoryContext.Provider value={history}>
-    <ReactFlow
-      nodes={shownNodes}
-      edges={shownEdges}
-      nodeTypes={NODE_TYPES}
-      onNodesChange={onNodesChange}
-      onEdgesChange={onEdgesChange}
-      onConnect={onConnect}
-      isValidConnection={isValidConnection}
-      onInit={setFlow}
-      onDragOver={onDragOver}
-      onDrop={onDrop}
-      onDragLeave={event => !event.currentTarget.contains(event.relatedTarget as Node | null) && setSpliceEdge(null)}
-      onNodeDragStart={onNodeDragStart}
-      onNodeDragStop={(_, __, moved) => connectFitted(moved, flow?.getNodes() ?? nodes)}
-      onSelectionDragStart={record}
-      onBeforeDelete={async () => {
-        record();
-        return true;
-      }}
-      onNodeDrag={onNodeDrag}
-      // opens with the whole flow on screen (Start and End at first), never zoomed past 100%, clear of the palette
-      fitView
-      fitViewOptions={FIT_VIEW}
-      snapToGrid
-      snapGrid={[DOT_GAP, DOT_GAP]}
-      deleteKeyCode={['Delete', 'Backspace']}
-      selectionOnDrag
-      selectionMode={SelectionMode.Partial}
-      multiSelectionKeyCode={['Meta', 'Control', 'Shift']}
-      elevateNodesOnSelect={false}
-      panOnDrag={[1, 2]}
-      panOnScroll
-      zoomActivationKeyCode={['Meta', 'Control']}
-      minZoom={0.2}
-      proOptions={{ hideAttribution: true }}
-    >
-      <Background variant={BackgroundVariant.Dots} gap={DOT_GAP} size={DOT_SIZE} color="var(--grid)" />
-      <ComponentPalette />
-      <Panel position="top-right" className="nopan nowheel nodrag flex gap-2" style={{ margin: 12 }}>
-        <div className="flex rounded-md bg-card shadow-md">
-          <Button variant="outline" size="icon-sm" className="rounded-r-none" disabled={!steps.undo} onClick={undo} title="Undo (Ctrl+Z)" aria-label="Undo">
-            <Undo2 />
-          </Button>
-          <Button variant="outline" size="icon-sm" className="-ml-px rounded-l-none" disabled={!steps.redo} onClick={redo} title="Redo (Ctrl+Y)" aria-label="Redo">
-            <Redo2 />
-          </Button>
-        </div>
-        <Button variant="outline" size="sm" className="bg-card shadow-md" onClick={arrangeFlow} title="Arrange from left to right, the cards glued">
-          <Network className="-rotate-90" /> Arrange
-        </Button>
-        <Button variant="outline" size="sm" className="bg-card shadow-md" onClick={addGroup} title="Group: a colored rectangle behind the components">
-          <SquareDashed /> Group
-        </Button>
-      </Panel>
-      <ZoomControls />
-      {/* the whole flow in small, bottom right: drag on it to pan, scroll on it to zoom */}
-      <MiniMap<FlowNode>
-        pannable
-        zoomable
-        nodeColor={minimapColor}
-        nodeBorderRadius={6}
-        bgColor="var(--card)"
-        maskColor="color-mix(in oklch, var(--canvas) 70%, transparent)"
-        className="overflow-hidden rounded-lg border shadow-md"
-        ariaLabel="Minimap"
-      />
-    </ReactFlow>
-    </HistoryContext.Provider>
+    <ProjectResourcesContext.Provider value={resources}>
+      <ScriptGlobalsContext.Provider value={globals}>
+        <HistoryContext.Provider value={history}>
+          <div className="relative h-full w-full">
+            <ReactFlow
+              nodes={shownNodes}
+              edges={shownEdges}
+              nodeTypes={NODE_TYPES}
+              onNodesChange={onNodesChange}
+              onEdgesChange={onEdgesChange}
+              onConnect={onConnect}
+              isValidConnection={isValidConnection}
+              onInit={setFlow}
+              onDragOver={onDragOver}
+              onDrop={onDrop}
+              onDragLeave={event => !event.currentTarget.contains(event.relatedTarget as Node | null) && setSpliceEdge(null)}
+              onNodeDragStart={onNodeDragStart}
+              onNodeDragStop={(_, __, moved) => connectFitted(moved, flow?.getNodes() ?? nodes)}
+              onSelectionDragStart={record}
+              onBeforeDelete={async () => {
+                record();
+                return true;
+              }}
+              onNodeDrag={onNodeDrag}
+              // opens with the whole flow on screen (Start and End at first), never zoomed past 100%, clear of the palette
+              fitView
+              fitViewOptions={FIT_VIEW}
+              snapToGrid
+              snapGrid={[DOT_GAP, DOT_GAP]}
+              deleteKeyCode={['Delete', 'Backspace']}
+              selectionOnDrag
+              selectionMode={SelectionMode.Partial}
+              multiSelectionKeyCode={['Meta', 'Control', 'Shift']}
+              elevateNodesOnSelect={false}
+              panOnDrag={[1, 2]}
+              panOnScroll
+              zoomActivationKeyCode={['Meta', 'Control']}
+              zoomOnDoubleClick={false}
+              onNodeDoubleClick={(_, node) => isComponent(node) && (!isFixedType(node.data.type) || node.data.type === START) && openWindow(node.id)}
+              minZoom={0.2}
+              proOptions={{ hideAttribution: true }}
+            >
+              <Background variant={BackgroundVariant.Dots} gap={DOT_GAP} size={DOT_SIZE} color="var(--grid)" />
+              <ComponentPalette />
+              <Panel position="top-right" className="nopan nowheel nodrag flex gap-2" style={{ margin: 12 }}>
+                <div className="flex rounded-md bg-card shadow-md">
+                  <Button variant="outline" size="icon-sm" className="rounded-r-none" disabled={!steps.undo} onClick={undo} title="Undo (Ctrl+Z)" aria-label="Undo">
+                    <Undo2 />
+                  </Button>
+                  <Button variant="outline" size="icon-sm" className="-ml-px rounded-l-none" disabled={!steps.redo} onClick={redo} title="Redo (Ctrl+Y)" aria-label="Redo">
+                    <Redo2 />
+                  </Button>
+                </div>
+                <Button variant="outline" size="sm" className="bg-card shadow-md" onClick={arrangeFlow} title="Arrange from left to right, the cards glued">
+                  <Network className="-rotate-90" /> Arrange
+                </Button>
+                <Button variant="outline" size="sm" className="bg-card shadow-md" onClick={addGroup} title="Group: a colored rectangle behind the components">
+                  <SquareDashed /> Group
+                </Button>
+              </Panel>
+              <ZoomControls />
+              {/* the whole flow in small, bottom right: drag on it to pan, scroll on it to zoom */}
+              <MiniMap<FlowNode>
+                pannable
+                zoomable
+                nodeColor={minimapColor}
+                nodeBorderRadius={6}
+                bgColor="var(--card)"
+                maskColor="color-mix(in oklch, var(--canvas) 70%, transparent)"
+                className="overflow-hidden rounded-lg border shadow-md"
+                ariaLabel="Minimap"
+              />
+            </ReactFlow>
+            {/* the windows' layer: over the canvas, letting the pointer through where there is no window */}
+            <div data-windows className="pointer-events-none absolute inset-0 overflow-hidden">
+              {shownWindows.map((w, i) => {
+                const node = nodes.find(n => n.id === w.id);
+                const info = node && isComponent(node) ? componentInfo(node.data.type) : undefined;
+                if (!node || !isComponent(node) || !info) {
+                  return null;
+                }
+
+                const color = CATEGORIES[info.category].color;
+                return (
+                  <FloatingWindow
+                    key={w.id}
+                    label={`Configuration of ${node.data.label?.trim() || info.label}`}
+                    title={node.data.label?.trim() || info.label}
+                    subtitle={info.label}
+                    icon={
+                      <span className="flex size-9 shrink-0 items-center justify-center rounded-md" style={{ color, backgroundColor: `color-mix(in oklch, ${color} 15%, transparent)` }}>
+                        <info.icon className="size-5" aria-hidden />
+                      </span>
+                    }
+                    position={w.position}
+                    initialSize={w.size}
+                    z={i + 1}
+                    active={w.id === frontWindow}
+                    minimized={w.minimized !== undefined}
+                    onMove={position => {
+                      updateWindow(w.id, { position });
+                      rememberWindow(flowId, w.id, { position });
+                    }}
+                    onResize={size => {
+                      updateWindow(w.id, { size });
+                      rememberWindow(flowId, w.id, { size });
+                    }}
+                    onFocus={() => focusWindow(w.id)}
+                    onMinimize={() => minimizeWindow(w.id)}
+                    onClose={() => (closers.current.get(w.id) ?? (() => closeWindow(w.id)))()}
+                  >
+                    <ComponentWindow
+                      id={w.id}
+                      data={node.data}
+                      onSave={draft => saveComponent(w.id, draft)}
+                      onCancel={() => closeWindow(w.id)}
+                      onRemove={() => removeComponent(w.id)}
+                      registerClose={close => {
+                        closers.current.set(w.id, close);
+                      }}
+                      onChanged={changed => markChanged(w.id, changed)}
+                    />
+                  </FloatingWindow>
+                );
+              })}
+              {/* the minimized windows: chips from left to right in the bottom-left corner; a click restores one */}
+              {dock.length > 0 && (
+                <div aria-label="Minimized windows" className="pointer-events-auto absolute bottom-3 left-3 flex max-w-[calc(100%-24px)] gap-2 overflow-x-auto">
+                  {dock.map(w => {
+                    const node = nodes.find(n => n.id === w.id);
+                    const info = node && isComponent(node) ? componentInfo(node.data.type) : undefined;
+                    if (!node || !isComponent(node) || !info) {
+                      return null;
+                    }
+
+                    const name = node.data.label?.trim() || info.label;
+                    return (
+                      <div key={w.id} className="flex h-8 max-w-52 shrink-0 items-center rounded-lg border bg-card text-xs font-medium shadow-md">
+                        {/* the X first: closing the first chip brings the next one under the pointer, so several close fast */}
+                        <button
+                          type="button"
+                          aria-label={`Close ${name}`}
+                          title="Close"
+                          onClick={() => closeMinimized(w)}
+                          className="flex h-full shrink-0 items-center rounded-l-lg px-1.5 text-muted-foreground transition-colors hover:bg-destructive/15 hover:text-destructive"
+                        >
+                          <X className="size-3.5" aria-hidden />
+                        </button>
+                        <button
+                          type="button"
+                          title={w.changed ? `${name} (unsaved changes)` : name}
+                          aria-label={`Restore ${name}`}
+                          onClick={() => openWindow(w.id)}
+                          className="flex h-full min-w-0 items-center gap-2 rounded-r-lg border-l pr-2.5 pl-2 transition-colors hover:bg-accent"
+                        >
+                          <info.icon className="size-3.5 shrink-0" style={{ color: CATEGORIES[info.category].color }} aria-hidden />
+                          <span className="truncate">{name}</span>
+                          {w.changed && <span className="size-1.5 shrink-0 rounded-full bg-amber-500" aria-label="unsaved changes" />}
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        </HistoryContext.Provider>
+      </ScriptGlobalsContext.Provider>
+    </ProjectResourcesContext.Provider>
   );
 }

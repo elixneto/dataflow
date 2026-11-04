@@ -75,7 +75,7 @@ describe('projects api', () => {
 
     expect(result).toEqual({ ok: true, value: [existing[0]!] });
     expect(calls[0]!.url).toBe('/api/projects?status=active');
-    expect(calls[0]!.init.headers).toMatchObject({ 'x-org-id': '00000000-0000-4000-8000-000000000001', 'x-user-id': 'ana' });
+    expect(calls[0]!.init.headers).toMatchObject({ 'x-org-id': '00000000-0000-4000-8000-000000000001', 'x-user-id': '00000000-0000-4000-8000-000000000002' });
   });
 
   test('a conflict comes back with its field errors', async () => {

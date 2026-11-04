@@ -4,7 +4,7 @@ import { organizations } from '#features/organizations/organization';
 import { projects } from '#features/projects/project';
 
 /**
- * Follows migrations 1_initial.sql and 3_folders.sql. name and folder_id are metadata of the row, never part of
+ * Follows migrations/1_initial.sql. name and folder_id are metadata of the row, never part of
  * flow_versions (definition, content_hash): renaming or moving a flow keeps its id and touches no version, deployment
  * or deployment history, so it needs no deploy.
  */

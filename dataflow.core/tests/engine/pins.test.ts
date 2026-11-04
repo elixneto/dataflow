@@ -1,13 +1,13 @@
 import {expect, test} from 'bun:test';
-import {workflowRunner} from '../../src/index';
-import type {ExecutableWorkflow} from '../../src/index';
+import {flowRunner} from '../../src/index';
+import type {ExecutableFlow} from '../../src/index';
 import {evaluate} from '../helpers';
 
 const edge = (source: string, target: string, sourcePort = 'out-0', targetPort = 'in-0') => ({source, sourcePort, target, targetPort});
 
 /** Start → Mapper 1 (fails without $a) → Mapper 2 (doubles) → End */
-const chain = (): ExecutableWorkflow => ({
-  project: 'Test', workflow: 'Pins', parameters: [],
+const chain = (): ExecutableFlow => ({
+  project: 'Test', flow: 'Pins', parameters: [],
   nodes: [
     {id: 'start', type: 'start', label: 'Start', config: {}},
     {id: 'm1', type: 'mapper', label: 'Mapper 1', config: {fields: [{target: 'b', value: '$a.x', expression: true}]}},
@@ -20,10 +20,10 @@ const chain = (): ExecutableWorkflow => ({
 test('in an editor run, a pinned node replays its output without executing and what comes before it still runs', async () => {
   const wf = chain();
   // without the pin, Mapper 1 fails ($a does not exist)
-  expect((await workflowRunner(wf, {mode: 'validation', id: 'p0', evaluate})).status).toBe('failed');
+  expect((await flowRunner(wf, {mode: 'validation', id: 'p0', evaluate})).status).toBe('failed');
 
   wf.nodes[1].pinned = {'out-0': [{b: 1}, {b: 2}, {b: 3}]};
-  const r = await workflowRunner(wf, {mode: 'validation', id: 'p1', evaluate});
+  const r = await flowRunner(wf, {mode: 'validation', id: 'p1', evaluate});
   expect(r.status).toBe('completed');
   const byId = (id: string) => r.components.find(c => c.nodeId === id)!;
   expect(byId('start').status).toBe('completed');
@@ -37,14 +37,14 @@ test('in an editor run, a pinned node replays its output without executing and w
 test('a real run ignores the pin and executes the node', async () => {
   const wf = chain();
   wf.nodes[1].pinned = {'out-0': [{b: 1}]};
-  const r = await workflowRunner(wf, {mode: 'execution', id: 'p3', evaluate});
+  const r = await flowRunner(wf, {mode: 'execution', id: 'p3', evaluate});
   expect(r.status).toBe('failed');
   expect(r.components.find(c => c.nodeId === 'm1')!.status).toBe('failed');
 });
 
 test('a node that feeds a pinned node and a running one still runs, and the pinned one drops its input', async () => {
-  const wf: ExecutableWorkflow = {
-    project: 'Test', workflow: 'Pins and fan-out', parameters: [],
+  const wf: ExecutableFlow = {
+    project: 'Test', flow: 'Pins and fan-out', parameters: [],
     nodes: [
       {id: 'start', type: 'start', label: 'Start', config: {acceptsInput: true}},
       {id: 'c', type: 'limit', label: 'All', config: {count: 1000}},
@@ -58,7 +58,7 @@ test('a node that feeds a pinned node and a running one still runs, and the pinn
   };
   // more envelopes than a channel holds: the pinned node must keep reading so the fan-out does not get stuck
   const input = Array.from({length: 300}, (_, i) => ({i}));
-  const r = await workflowRunner(wf, {mode: 'validation', id: 'p2', evaluate, input});
+  const r = await flowRunner(wf, {mode: 'validation', id: 'p2', evaluate, input});
   expect(r.status).toBe('completed');
   const byId = (id: string) => r.components.find(c => c.nodeId === id)!;
   expect(byId('c').status).toBe('completed');

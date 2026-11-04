@@ -3,7 +3,7 @@ import {CONNECTION_TYPES, visibleFields, type ConnectionTypeName} from './connec
 
 /*
  * A connection profile's rules, shared by the editor (errors as you type) and the server (which enforces them).
- * Secrets and variables are named by the same rule, so a flow reads them as SECRETS['name'] / ENV_VARIABLES['name'].
+ * Secrets and variables are named by the same rule, so a flow reads them as SECRETS['name'] / VARIABLES['name'].
  */
 
 export type ProfileFields = {name: string; type: ConnectionTypeName; config: Record<string, string>};

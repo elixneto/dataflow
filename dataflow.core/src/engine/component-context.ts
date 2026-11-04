@@ -1,8 +1,9 @@
 import {timed, timedRequests} from '#engine/stopwatch';
-import {invokeWorkflow} from '#engine/invoke-workflow';
+import {invokeFlow} from '#engine/invoke-flow';
 import {envelopeVariables} from '#envelope/expression-variables';
 import {toError} from '#errors/normalize-error';
-import type {WorkflowExecution} from '#engine/workflow-execution';
+import {connectionHeaders, connectionString, resolveConnection, type ConnectionUse} from '../connections/connection-access';
+import type {FlowExecution} from '#engine/flow-execution';
 import type {ComponentContext} from '#types/component-context.type';
 import type {ExecutableNode} from '#types/executable-node.type';
 
@@ -13,9 +14,9 @@ const BODY_EXCERPT = 300;
 
 /**
  * What the engine gives a component while it runs (`ctx`): expressions, scripts, waits, database, memory...
- * `dryRun`: a target in a test run; its writes send nothing (see WorkflowExecution.runNode).
+ * `dryRun`: a target in a test run; its writes send nothing (see FlowExecution.runNode).
  */
-export function componentContext(execution: WorkflowExecution, node: ExecutableNode, log: ComponentContext['log'], dryRun = false): ComponentContext {
+export function componentContext(execution: FlowExecution, node: ExecutableNode, log: ComponentContext['log'], dryRun = false): ComponentContext {
   const {run, options, parameters} = execution;
   const stopwatch = execution.stopwatchOf(node.id);
   // runs only while waiting for an outside system: a pull of the next row, a write, the next envelope of a called flow
@@ -25,14 +26,19 @@ export function componentContext(execution: WorkflowExecution, node: ExecutableN
   // secret values never go to a log: longest first, so one that contains another is hidden whole
   const secretValues = Object.values(options.secrets ?? {}).filter(v => v.length >= 4).sort((a, b) => b.length - a.length);
   const mask = (text: string) => secretValues.reduce((t, secret) => t.split(secret).join('***'), text);
+  // a database connection: its connection string, and the database a component that sets none takes from it
+  const database = (type: 'sqlserver' | 'mongodb', use: ConnectionUse) => {
+    const resolved = resolveConnection(type, use, options.connections, options.secrets);
+    return {connection: connectionString(resolved), database: resolved.config.database ?? ''};
+  };
   return {
     run, node, log,
     prepareScript: async code => {
       if (!options.prepareScript) throw new Error('This runner does not execute scripts.');
-      return options.prepareScript(code, {run, parameters, secrets: options.secrets ?? {}, log: m => log('info', m)});
+      return options.prepareScript(code, {run, parameters, secrets: options.secrets ?? {}, variables: options.variables ?? {}, log: m => log('info', m)});
     },
     fieldValue: (field, doc) => (field.expression
-      ? options.evaluate(field.value, envelopeVariables(doc, options.secrets))
+      ? options.evaluate(field.value, envelopeVariables(doc, options.secrets, options.variables))
       : field.value),
     wait: async promise => {
       stopwatch.stop();
@@ -43,31 +49,29 @@ export function componentContext(execution: WorkflowExecution, node: ExecutableN
       }
     },
     waitEach: source => timed(source, stopwatch),
-    invokeWorkflow: (workflowId, call) => {
-      const called = invokeWorkflow(execution, node, workflowId, call);
+    invokeFlow: (flowId, call) => {
+      const called = invokeFlow(execution, node, flowId, call);
       return {...called, envelopes: timedRequests(called.envelopes, waiting)};
     },
-    queryDatabase: (kind, {secret, ...query}) => {
+    queryDatabase: (kind, {connection: use, ...query}) => {
       const driver = options.databases?.[kind];
       if (!driver) throw new Error(`This runner does not query ${kind}.`);
-      const connection = options.secrets?.[secret];
-      if (!connection) throw new Error(`The secret "${secret}" does not exist in this runner.`);
+      const {connection} = database(kind, use);
       // only the pull of the next row: while the component is held by the next one (backpressure), it is not waiting here
       return timedRequests(driver({...query, connection, signal: execution.control.signal}), waiting);
     },
-    aggregateDocuments: (kind, {secret, ...query}) => {
+    aggregateDocuments: (kind, {connection: use, ...query}) => {
       const driver = options.documentQueries?.[kind];
       if (!driver) throw new Error(`This runner does not read from ${kind}.`);
-      const connection = options.secrets?.[secret];
-      if (!connection) throw new Error(`The secret "${secret}" does not exist in this runner.`);
+      const {connection, database: fallback} = database(kind, use);
       // like queryDatabase: only the pull of the next document is waiting
-      return timedRequests(driver({...query, connection, signal: execution.control.signal}), waiting);
+      return timedRequests(driver({...query, database: query.database || fallback, connection, signal: execution.control.signal}), waiting);
     },
-    upsertDocuments: async (kind, {secret, ...batch}) => {
+    upsertDocuments: async (kind, {connection: use, ...given}) => {
       const driver = options.documentStores?.[kind];
       if (!driver) throw new Error(`This runner does not write to ${kind}.`);
-      const connection = options.secrets?.[secret];
-      if (!connection) throw new Error(`The secret "${secret}" does not exist in this runner.`);
+      const {connection, database: fallback} = database(kind, use);
+      const batch = {...given, database: given.database || fallback};
       if (dryRun) {
         const target = `${batch.database}.${batch.collection}`;
         log('info', `Test run: ${batch.upserts.length} upsert(s) into ${target} not sent.`);
@@ -86,11 +90,11 @@ export function componentContext(execution: WorkflowExecution, node: ExecutableN
         stopwatch.resume();
       }
     },
-    deleteDocuments: async (kind, {secret, ...request}) => {
+    deleteDocuments: async (kind, {connection: use, ...given}) => {
       const driver = options.documentDeletes?.[kind];
       if (!driver) throw new Error(`This runner does not delete from ${kind}.`);
-      const connection = options.secrets?.[secret];
-      if (!connection) throw new Error(`The secret "${secret}" does not exist in this runner.`);
+      const {connection, database: fallback} = database(kind, use);
+      const request = {...given, database: given.database || fallback};
       const target = `${request.database}.${request.collection}`;
       stopwatch.stop();
       waiting.resume();
@@ -105,8 +109,10 @@ export function componentContext(execution: WorkflowExecution, node: ExecutableN
         stopwatch.resume();
       }
     },
-    sendHttp: async request => {
+    sendHttp: async ({auth, ...given}) => {
       if (!options.http) throw new Error('This runner does not send HTTP requests.');
+      // an API connection: its headers first, the component's own win
+      const request = auth ? {...given, headers: {...connectionHeaders(resolveConnection('http-client', auth, options.connections, options.secrets)), ...given.headers}} : given;
       if (dryRun) {
         const body = request.body === undefined ? '' : `, body ${mask(request.body.slice(0, BODY_EXCERPT))}${request.body.length > BODY_EXCERPT ? '…' : ''}`;
         log('info', `Test run: ${request.method} ${mask(request.url)} not sent${body}.`);

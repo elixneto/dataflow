@@ -9,7 +9,7 @@ import { VariableRepository } from '../variable-repository';
 
 export const ListVariablesQuery = z.object({ projectId: z.uuid('Invalid') });
 
-/** The project's variables by name, with their values (flows read them as ENV_VARIABLES['name']). */
+/** The project's variables by name, with their values (flows read them as VARIABLES['name']). */
 export class ListVariablesHandler implements UseCaseHandler<{ items: VariableView[] }> {
   async handle(input: unknown, ctx: UseCaseContext): Promise<UseCaseResult<{ items: VariableView[] }>> {
     const parsed = validate(ListVariablesQuery, input);

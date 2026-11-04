@@ -1,10 +1,10 @@
 import {expect, test} from 'bun:test';
-import {workflowRunner} from '../../src/index';
-import type {ExecutableWorkflow, SortKey} from '../../src/index';
+import {flowRunner} from '../../src/index';
+import type {ExecutableFlow, SortKey} from '../../src/index';
 import {evaluate} from '../helpers';
 
-const flow = (keys: SortKey[]): ExecutableWorkflow => ({
-  project: 'Test', workflow: 'Sort', parameters: [],
+const flow = (keys: SortKey[]): ExecutableFlow => ({
+  project: 'Test', flow: 'Sort', parameters: [],
   nodes: [
     {id: 'start', type: 'start', label: 'Start', config: {acceptsInput: true}},
     {id: 's', type: 'sort', label: 'Sort', config: {keys}},
@@ -17,7 +17,7 @@ const flow = (keys: SortKey[]): ExecutableWorkflow => ({
 });
 
 const sorted = async (keys: SortKey[], input: unknown[]) => {
-  const r = await workflowRunner(flow(keys), {mode: 'execution', id: 'sort', evaluate, input});
+  const r = await flowRunner(flow(keys), {mode: 'execution', id: 'sort', evaluate, input});
   expect(r.status).toBe('completed');
   return r.components.find(c => c.nodeId === 's')!;
 };
@@ -44,7 +44,7 @@ test('Sort compares numbers as numbers and puts null and undefined last in both 
 });
 
 test('Sort with a failing key is an error of the envelope', async () => {
-  const r = await workflowRunner(flow([{value: '$missing.x', direction: 'asc'}]), {mode: 'execution', id: 'sort2', evaluate, input: [{a: 1}]});
+  const r = await flowRunner(flow([{value: '$missing.x', direction: 'asc'}]), {mode: 'execution', id: 'sort2', evaluate, input: [{a: 1}]});
   expect(r.status).toBe('failed');
 });
 

@@ -56,6 +56,36 @@ export function outputPorts(type: string, config: Record<string, unknown> = {}):
   });
 }
 
+/** the error port's id: where a component on Divert sends the envelopes that fail in it (with DATA.errors) */
+export const ERROR_PORT = 'error';
+
+/**
+ * The error port of a component with this config: there only while its On error is Divert (config.onError), and never on
+ * the Start or the End. Like any output it takes several edges. Undefined when there is none.
+ */
+export function errorPort(type: string, config: Record<string, unknown> = {}): PortInfo | undefined {
+  if (type === START || type === END || !COMPONENTS[type]) return undefined;
+  return config.onError === 'divert' ? {id: ERROR_PORT} : undefined;
+}
+
+/**
+ * Edges out of an error port that is not there (the component is not on Divert): the runner refuses them, as the
+ * envelopes would never go that way. `nodeOf` gives a node's type and config. Without the component's name (the caller
+ * puts it in front).
+ */
+export function errorEdgeIssues(
+  edges: PortEdge[],
+  nodeOf: (nodeId: string) => {type: string; config: Record<string, unknown>} | undefined,
+): {nodeId: string; message: string}[] {
+  const sources = [...new Set(edges.filter(e => e.sourcePort === ERROR_PORT).map(e => e.source))];
+  return sources
+    .filter(id => {
+      const node = nodeOf(id);
+      return !node || !errorPort(node.type, node.config);
+    })
+    .map(nodeId => ({nodeId, message: 'has an edge out of its error port, but its On error is not Divert.'}));
+}
+
 /** whether this port of a component of this type takes several edges (all but the single ones, like Lookup's inputs) */
 export function takesSeveral(type: string | undefined, side: PortSide, port: string | null | undefined): boolean {
   if (!type) return true;

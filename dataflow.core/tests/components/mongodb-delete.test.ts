@@ -1,15 +1,15 @@
 import {expect, test} from 'bun:test';
-import {COMPONENTS, emptyFilterText, workflowRunner} from '../../src/index';
-import type {DocumentDelete, ExecutableWorkflow} from '../../src/index';
+import {COMPONENTS, emptyFilterText, flowRunner} from '../../src/index';
+import type {DocumentDelete, ExecutableFlow} from '../../src/index';
 import {evaluate} from '../helpers';
 
 /** Data Grid (2 companies) → MongoDB Delete (one deleteMany per company) → Mapper → End. */
-const flow = (filter: string, config: Record<string, unknown> = {}): ExecutableWorkflow => ({
-  project: 'Test', workflow: 'Delete', parameters: [{name: 'empresaId', type: 'number', default: '107'}],
+const flow = (filter: string, config: Record<string, unknown> = {}): ExecutableFlow => ({
+  project: 'Test', flow: 'Delete', parameters: [{name: 'empresaId', type: 'number', default: '107'}],
   nodes: [
     {id: 'start', type: 'start', label: 'Start', config: {}},
     {id: 'grid', type: 'datagrid', label: 'Companies', override: true, config: {columns: [{name: 'id', type: 'number'}], rows: [['107'], ['91']]}},
-    {id: 'del', type: 'mongodb-delete', label: 'Staging', outputKey: 'mongodb', config: {connection: 'MONGO', database: 'crm', collection: 'staging', filter, onError: 'continue', ...config}},
+    {id: 'del', type: 'mongodb-delete', label: 'Staging', outputKey: 'mongodb', config: {connectionString: 'MONGO', database: 'crm', collection: 'staging', filter, onError: 'continue', ...config}},
     {id: 'after', type: 'mapper', label: 'After', config: {fields: [{target: 'seen', value: 'yes', expression: false}]}},
     {id: 'end', type: 'end', label: 'End', config: {}},
   ],
@@ -31,13 +31,13 @@ function fakeMongo() {
   return {calls, driver};
 }
 
-const nodeOf = (r: Awaited<ReturnType<typeof workflowRunner>>, id = 'del') => r.components.find(c => c.nodeId === id)!;
+const nodeOf = (r: Awaited<ReturnType<typeof flowRunner>>, id = 'del') => r.components.find(c => c.nodeId === id)!;
 
 test('MongoDB Delete validates its configuration and refuses an empty filter unless Delete all is on', () => {
   expect(COMPONENTS['mongodb-delete'].validate({filter: '{ a: 1 }'})).toEqual([
-    'has no connection (name of the secret holding the connection string).', 'has no database.', 'has no collection.',
+    'has no connection (choose one, or fill in connection string).', 'has no database.', 'has no collection.',
   ]);
-  const base = {connection: 'M', database: 'd', collection: 'c'};
+  const base = {connectionString: 'M', database: 'd', collection: 'c'};
   expect(COMPONENTS['mongodb-delete'].validate({...base, filter: '{ }'}))
     .toEqual(['has an empty filter, which deletes the whole collection: turn on "Delete all" to allow it.']);
   expect(COMPONENTS['mongodb-delete'].validate({...base, filter: '{}', allowAll: true})).toEqual([]);
@@ -47,7 +47,7 @@ test('MongoDB Delete validates its configuration and refuses an empty filter unl
 
 test('MongoDB Delete deletes once per envelope in a real run, with the filter evaluated on it', async () => {
   const mongo = fakeMongo();
-  const r = await workflowRunner(flow('{ empresaId: $id, owner: ObjectId("64f1a2b3c4d5e6f708091a2b"), at: { $lt: new Date("2026-10-25T00:00:00Z") } }'),
+  const r = await flowRunner(flow('{ empresaId: $id, owner: ObjectId("64f1a2b3c4d5e6f708091a2b"), at: { $lt: new Date("2026-10-25T00:00:00Z") } }'),
     {mode: 'execution', id: 'd1', evaluate, documentDeletes: {mongodb: mongo.driver}, secrets: {MONGO: 'mongodb://x'}});
   expect(r.status).toBe('completed');
   expect(mongo.calls).toEqual([107, 91].map(id => ({
@@ -63,7 +63,7 @@ test('MongoDB Delete deletes once per envelope in a real run, with the filter ev
 
 test('MongoDB Delete deletes nothing in a test run: it counts what the filter matches and the envelope goes on marked as not sent', async () => {
   const mongo = fakeMongo();
-  const r = await workflowRunner(flow('{ empresaId: $PARAMETERS.empresaId }'),
+  const r = await flowRunner(flow('{ empresaId: $PARAMETERS.empresaId }'),
     {mode: 'validation', id: 'd2', evaluate, documentDeletes: {mongodb: mongo.driver}, secrets: {MONGO: 'mongodb://x'}});
   // asked only to count
   expect(mongo.calls.every(c => c.countOnly === true)).toBe(true);
@@ -78,7 +78,7 @@ test('MongoDB Delete deletes nothing in a test run: it counts what the filter ma
 test('MongoDB Delete: an empty filter at run time, a filter that is not an object or fails is an error of the envelope', async () => {
   const mongo = fakeMongo();
   const errors = async (filter: string, config: Record<string, unknown> = {}) => {
-    const r = await workflowRunner(flow(filter, config), {mode: 'execution', id: 'd3', evaluate, documentDeletes: {mongodb: mongo.driver}, secrets: {MONGO: 'mongodb://x'}});
+    const r = await flowRunner(flow(filter, config), {mode: 'execution', id: 'd3', evaluate, documentDeletes: {mongodb: mongo.driver}, secrets: {MONGO: 'mongodb://x'}});
     return nodeOf(r).logs.filter(l => l.level === 'error').map(l => l.message);
   };
   // the text is not empty, but it evaluates to {}

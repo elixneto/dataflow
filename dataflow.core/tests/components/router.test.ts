@@ -1,11 +1,11 @@
 import {expect, test} from 'bun:test';
-import {workflowRunner} from '../../src/index';
-import type {ExecutableWorkflow} from '../../src/index';
+import {flowRunner} from '../../src/index';
+import type {ExecutableFlow} from '../../src/index';
 import {evaluate} from '../helpers';
 
 test('Router sends each envelope to the first true case or to the else', async () => {
-  const withRouter: ExecutableWorkflow = {
-    project: 'Test', workflow: 'Router', parameters: [],
+  const withRouter: ExecutableFlow = {
+    project: 'Test', flow: 'Router', parameters: [],
     nodes: [
       {id: 'start', type: 'start', label: 'Start', config: {acceptsInput: true}},
       {id: 'r', type: 'router', label: 'Router', config: {cases: [
@@ -22,7 +22,7 @@ test('Router sends each envelope to the first true case or to the else', async (
     ],
   };
   const input = [{state: 'SP'}, {state: 'RS'}, {state: 'BA'}, {state: 'SC'}, {state: 'SP'}];
-  const r = await workflowRunner(withRouter, {mode: 'execution', id: 'tr', evaluate, input});
+  const r = await flowRunner(withRouter, {mode: 'execution', id: 'tr', evaluate, input});
   expect(r.status).toBe('completed');
   const router = r.components.find(c => c.nodeId === 'r')!;
   expect(router.status).toBe('completed');

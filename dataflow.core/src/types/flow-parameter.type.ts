@@ -1,6 +1,6 @@
 import type {ParameterType} from '#types/parameter.type';
 
-export type WorkflowParameter = {
+export type FlowParameter = {
   name: string;
   type: ParameterType;
   default: string;

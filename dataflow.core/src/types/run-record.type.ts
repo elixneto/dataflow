@@ -1,10 +1,10 @@
 import type {ParameterValue} from '#types/parameter.type';
 import type {ComponentRun} from '#types/component-run.type';
 import type {RunStatus} from '#types/run-status.type';
-import type {WorkflowCurrentRun} from '#types/workflow-current-run.type';
+import type {FlowCurrentRun} from '#types/flow-current-run.type';
 
 export type RunRecord = {
-  run: WorkflowCurrentRun;
+  run: FlowCurrentRun;
   parameters: Record<string, ParameterValue>;
   status: RunStatus;
   end: string;

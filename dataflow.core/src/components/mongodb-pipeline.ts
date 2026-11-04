@@ -1,3 +1,4 @@
+import {connectionIssues, connectionSettings, connectionUse, usesProfile} from '../connections/connection-access';
 import {toError} from '#errors/normalize-error';
 import {mergeFields} from '#envelope/envelope-data';
 import type {ComponentLogic} from '#types/component-logic.type';
@@ -65,12 +66,18 @@ export const mongodbPipeline: ComponentLogic = {
   type: 'mongodb-pipeline',
   inputs: 1,
   outputs: 1,
+  settings: [
+    ...connectionSettings('mongodb'),
+    {key: 'database', label: 'Database', kind: 'text', placeholder: 'From the connection'},
+    {key: 'collection', label: 'Collection', kind: 'text', required: true},
+    {key: 'pipeline', label: 'Pipeline', kind: 'code', language: 'javascript', required: true, default: DEFAULT_PIPELINE},
+    {key: 'timeoutS', label: 'Timeout (seconds)', kind: 'number', default: DEFAULT_MONGODB_TIMEOUT_S, min: 1},
+  ],
 
   validate(config) {
-    const {connection, database, collection, pipeline} = mongoPipelineConfig(config);
-    const issues: string[] = [];
-    if (!connection.trim()) issues.push('has no connection (name of the secret holding the connection string).');
-    if (!database.trim()) issues.push('has no database.');
+    const {database, collection, pipeline} = mongoPipelineConfig(config);
+    const issues: string[] = [...connectionIssues('mongodb', config)];
+    if (!database.trim() && !usesProfile('mongodb', config)) issues.push('has no database.');
     if (!collection.trim()) issues.push('has no collection.');
     if (!pipeline.trim()) issues.push('has no pipeline.');
     const issue = mongoPipelineTextIssue(pipeline);
@@ -79,7 +86,8 @@ export const mongodbPipeline: ComponentLogic = {
   },
 
   async* execute(inputs, config, ctx) {
-    const {connection, database, collection, pipeline, timeoutS} = mongoPipelineConfig(config);
+    const {database, collection, pipeline, timeoutS} = mongoPipelineConfig(config);
+    const connection = connectionUse('mongodb', config);
     let queries = 0;
     let documents = 0;
     for await (const doc of inputs['in-0'] ?? []) {
@@ -92,7 +100,7 @@ export const mongodbPipeline: ComponentLogic = {
         const issue = mongoPipelineIssue(stages);
         if (issue) throw new Error(`The pipeline ${issue}.`);
         const cursor = ctx.aggregateDocuments('mongodb', {
-          secret: connection, database, collection, pipeline: stages as Record<string, unknown>[], timeoutMs: timeoutS * 1000,
+          connection, database, collection, pipeline: stages as Record<string, unknown>[], timeoutMs: timeoutS * 1000,
         });
         // waiting for the server is not active time
         for await (const found of ctx.waitEach(serverTimed(cursor, ms => { server += ms; }))) {

@@ -1,11 +1,11 @@
 import {expect, test} from 'bun:test';
-import {COMPONENTS, workflowRunner, writesOutside} from '../../src/index';
-import type {ExecutableWorkflow, HttpRequest, HttpResponse} from '../../src/index';
+import {COMPONENTS, flowRunner, writesOutside} from '../../src/index';
+import type {ExecutableFlow, HttpRequest, HttpResponse} from '../../src/index';
 import {evaluate} from '../helpers';
 
 /** Data Grid (3 setores) → HTTP Request → End. */
-const flow = (config: Record<string, unknown>): ExecutableWorkflow => ({
-  project: 'Test', workflow: 'HTTP', parameters: [{name: 'grupoId', type: 'text', default: 'g-1'}],
+const flow = (config: Record<string, unknown>): ExecutableFlow => ({
+  project: 'Test', flow: 'HTTP', parameters: [{name: 'grupoId', type: 'text', default: 'g-1'}],
   nodes: [
     {id: 'start', type: 'start', label: 'Start', config: {}},
     {id: 'grid', type: 'datagrid', label: 'Setores', override: true, config: {columns: [{name: 'id', type: 'number'}, {name: 'nome', type: 'text'}],
@@ -41,7 +41,7 @@ const POST_SETOR = {
   body: {value: '({grupoId: $PARAMETERS.grupoId, nome: $nome})', expression: true},
 };
 const SECRETS = {GRO_URL: 'https://gro.example.com/api', GRO_TOKEN: 'segredo-123456'};
-const nodeOf = (r: Awaited<ReturnType<typeof workflowRunner>>) => r.components.find(c => c.nodeId === 'http')!;
+const nodeOf = (r: Awaited<ReturnType<typeof flowRunner>>) => r.components.find(c => c.nodeId === 'http')!;
 
 test('HTTP Request validates and writes only with POST, PUT, PATCH and DELETE', () => {
   expect(COMPONENTS['http-request'].validate({url: {value: 'gro.example.com', expression: false}, headers: [{name: 'Bad Header', value: '', expression: false}]}))
@@ -52,7 +52,7 @@ test('HTTP Request validates and writes only with POST, PUT, PATCH and DELETE', 
 
 test('HTTP Request sends one request per envelope with the evaluated URL, query, headers and JSON body', async () => {
   const http = fakeHttp();
-  const r = await workflowRunner(flow(POST_SETOR), {mode: 'execution', id: 'h1', evaluate, http: http.send, secrets: SECRETS});
+  const r = await flowRunner(flow(POST_SETOR), {mode: 'execution', id: 'h1', evaluate, http: http.send, secrets: SECRETS});
   expect(r.status).toBe('completed');
   expect(http.requests[0]).toEqual({
     method: 'POST', url: 'https://gro.example.com/api/setores?origem=infofisio', timeoutMs: 30_000,
@@ -73,13 +73,13 @@ test('HTTP Request sends one request per envelope with the evaluated URL, query,
 
 test('HTTP Request: a GET runs in a test run, a POST does not send and logs what it would', async () => {
   const http = fakeHttp(() => ({status: 200, headers: {'content-type': 'text/plain'}, body: 'pong'}));
-  const get = await workflowRunner(flow({method: 'GET', url: {value: 'https://example.com/ping', expression: false}}),
+  const get = await flowRunner(flow({method: 'GET', url: {value: 'https://example.com/ping', expression: false}}),
     {mode: 'validation', id: 'h2', evaluate, http: http.send});
   expect(http.requests).toHaveLength(3);
   // a text answer stays text
   expect(nodeOf(get).outputSample['out-0'][0].response).toEqual({status: 200, headers: {'content-type': 'text/plain'}, body: 'pong'});
 
-  const post = await workflowRunner(flow(POST_SETOR), {mode: 'validation', id: 'h3', evaluate, http: http.send, secrets: SECRETS});
+  const post = await flowRunner(flow(POST_SETOR), {mode: 'validation', id: 'h3', evaluate, http: http.send, secrets: SECRETS});
   expect(http.requests).toHaveLength(3);
   const node = nodeOf(post);
   expect(node.status).toBe('completed');
@@ -91,19 +91,19 @@ test('HTTP Request: a GET runs in a test run, a POST does not send and logs what
 
 test('HTTP Request: an error status goes to the error policy, or on to the output when Fail on non-2xx is off', async () => {
   const http = fakeHttp(r => (String(r.body).includes('Área') ? json(409, {erro: 'Setor já existe'}) : json(201, {id: 'x'})));
-  const failing = await workflowRunner(flow(POST_SETOR), {mode: 'execution', id: 'h4', evaluate, http: http.send, secrets: SECRETS});
+  const failing = await flowRunner(flow(POST_SETOR), {mode: 'execution', id: 'h4', evaluate, http: http.send, secrets: SECRETS});
   const node = nodeOf(failing);
   expect(node.logs.filter(l => l.level === 'error').map(l => l.message)).toEqual(['HTTP 409 on POST ***/setores?origem=infofisio: {"erro":"Setor já existe"}']);
   expect(node.logs.at(-1)?.message).toMatch(/^3 request\(s\): 2xx 2, 4xx 1, 5xx 0, errors 0, in \d+ ms\.$/);
 
-  const passing = await workflowRunner(flow({...POST_SETOR, failOnError: false}), {mode: 'execution', id: 'h5', evaluate, http: http.send, secrets: SECRETS});
+  const passing = await flowRunner(flow({...POST_SETOR, failOnError: false}), {mode: 'execution', id: 'h5', evaluate, http: http.send, secrets: SECRETS});
   expect(nodeOf(passing).outputSample['out-0'][1].response).toEqual({status: 409, headers: {'content-type': 'application/json; charset=utf-8'}, body: {erro: 'Setor já existe'}});
 });
 
 test('HTTP Request keeps the arrival order with several requests at once', async () => {
   // the first one answers last
   const http = fakeHttp(r => json(200, {nome: JSON.parse(String(r.body)).nome}), r => (String(r.body).includes('Produção') ? 40 : 5));
-  const r = await workflowRunner(flow({...POST_SETOR, concurrency: 3}), {mode: 'execution', id: 'h6', evaluate, http: http.send, secrets: SECRETS});
+  const r = await flowRunner(flow({...POST_SETOR, concurrency: 3}), {mode: 'execution', id: 'h6', evaluate, http: http.send, secrets: SECRETS});
   expect(nodeOf(r).outputSample['out-0'].map(d => (d.response as {body: {nome: string}}).body.nome)).toEqual(['Produção', 'Área limpa', 'Administrativo']);
 });
 
@@ -111,7 +111,7 @@ test('HTTP Request: no answer (timeout, network) is an error of the envelope, wi
   const send = async () => {
     throw new Error('No answer in 30 s (timeout) from https://gro.example.com/api/setores');
   };
-  const r = await workflowRunner(flow(POST_SETOR), {mode: 'execution', id: 'h7', evaluate, http: send, secrets: SECRETS});
+  const r = await flowRunner(flow(POST_SETOR), {mode: 'execution', id: 'h7', evaluate, http: send, secrets: SECRETS});
   const node = nodeOf(r);
   expect(node.logs.filter(l => l.level === 'error').map(l => l.message)).toEqual(Array(3).fill('No answer in 30 s (timeout) from ***/setores'));
   expect(node.logs.at(-1)?.message).toMatch(/errors 3/);

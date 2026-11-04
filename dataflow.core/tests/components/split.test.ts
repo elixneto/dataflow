@@ -1,11 +1,11 @@
 import {expect, test} from 'bun:test';
-import {workflowRunner} from '../../src/index';
-import type {ExecutableWorkflow} from '../../src/index';
+import {flowRunner} from '../../src/index';
+import type {ExecutableFlow} from '../../src/index';
 import {evaluate} from '../helpers';
 
 test('split undoes an aggregate and a value that is not a list is an error of the envelope', async () => {
-  const roundTrip: ExecutableWorkflow = {
-    project: 'Test', workflow: 'Split', parameters: [],
+  const roundTrip: ExecutableFlow = {
+    project: 'Test', flow: 'Split', parameters: [],
     nodes: [
       {id: 'start', type: 'start', label: 'Start', config: {acceptsInput: true}},
       {id: 'ag', type: 'aggregate', label: 'Aggregate', config: {size: 3}},
@@ -19,7 +19,7 @@ test('split undoes an aggregate and a value that is not a list is an error of th
     ],
   };
   const input = Array.from({length: 7}, (_, i) => ({id: i}));
-  const r = await workflowRunner(roundTrip, {mode: 'execution', id: 'split', evaluate, input});
+  const r = await flowRunner(roundTrip, {mode: 'execution', id: 'split', evaluate, input});
   expect(r.status).toBe('completed');
   const sp = r.components.find(c => c.nodeId === 'sp')!;
   expect(sp.inputs['in-0']).toBe(3);
@@ -27,8 +27,8 @@ test('split undoes an aggregate and a value that is not a list is an error of th
   expect(sp.outputSample['out-0'].slice(0, 4)).toEqual([{id: 0}, {id: 1}, {id: 2}, {id: 3}]);
 
   // a value that is not a list (or a list with something else) is an error of the envelope, diverted to the error port
-  const direct: ExecutableWorkflow = {
-    project: 'Test', workflow: 'Split errors', parameters: [],
+  const direct: ExecutableFlow = {
+    project: 'Test', flow: 'Split errors', parameters: [],
     nodes: [
       {id: 'start', type: 'start', label: 'Start', config: {acceptsInput: true}},
       {id: 'sp', type: 'split', label: 'Split', config: {onError: 'divert', list: '$items'}},
@@ -42,7 +42,7 @@ test('split undoes an aggregate and a value that is not a list is an error of th
       {source: 'handle', sourcePort: 'out-0', target: 'end', targetPort: 'in-0'},
     ],
   };
-  const diverted = await workflowRunner(direct, {mode: 'execution', id: 'split2', evaluate, input: [{items: 'x'}, {items: [{a: 1}, 2]}, {items: []}, {items: [{a: 2}]}]});
+  const diverted = await flowRunner(direct, {mode: 'execution', id: 'split2', evaluate, input: [{items: 'x'}, {items: [{a: 1}, 2]}, {items: []}, {items: [{a: 2}]}]});
   expect(diverted.status).toBe('completed');
   const handled = diverted.components.find(c => c.nodeId === 'handle')!;
   expect(handled.inputs['in-0']).toBe(2);

@@ -1,12 +1,12 @@
 import {expect, test} from 'bun:test';
-import {workflowRunner} from '../../src/index';
-import type {ExecutableWorkflow} from '../../src/index';
+import {flowRunner} from '../../src/index';
+import type {ExecutableFlow} from '../../src/index';
 import {evaluate, mapperFlow} from '../helpers';
 
 test('an expression with an error stops the run (default policy)', async () => {
   const withError = structuredClone(mapperFlow);
   withError.nodes[1].config = {fields: [{target: 'x', value: '$doesNotExist.y', expression: true}]};
-  const r = await workflowRunner(withError, {mode: 'execution', id: 't2', evaluate});
+  const r = await flowRunner(withError, {mode: 'execution', id: 't2', evaluate});
   expect(r.status).toBe('failed');
   expect(r.components.find(c => c.nodeId === 'm')!.status).toBe('failed');
 });
@@ -15,7 +15,7 @@ test('Continue: on error, the incoming envelope moves on unchanged', async () =>
   const withError = structuredClone(mapperFlow);
   withError.nodes[0].config = {acceptsInput: true};
   withError.nodes[1].config = {onError: 'continue', fields: [{target: 'x', value: '$doesNotExist.y', expression: true}]};
-  const r = await workflowRunner(withError, {mode: 'validation', id: 't9', evaluate, input: [{name: 'A'}, {name: 'B'}]});
+  const r = await flowRunner(withError, {mode: 'validation', id: 't9', evaluate, input: [{name: 'A'}, {name: 'B'}]});
   expect(r.status).toBe('with-errors');
   const m = r.components.find(c => c.nodeId === 'm')!;
   expect(m.status).toBe('with-errors');
@@ -26,8 +26,8 @@ test('Continue: on error, the incoming envelope moves on unchanged', async () =>
 });
 
 test('disabled with a loose output: bypass, dropped envelope and nothing at the End become warnings', async () => {
-  const loose: ExecutableWorkflow = {
-    project: 'Test', workflow: 'Loose', parameters: [],
+  const loose: ExecutableFlow = {
+    project: 'Test', flow: 'Loose', parameters: [],
     nodes: [
       {id: 'start', type: 'start', label: 'Start', config: {}},
       {id: 'm1', type: 'mapper', label: 'Mapper 1', disabled: true, config: {onError: 'divert', fields: [{target: 'x', value: 'a', expression: true}]}},
@@ -40,7 +40,7 @@ test('disabled with a loose output: bypass, dropped envelope and nothing at the 
       {source: 'm2', sourcePort: 'out-0', target: 'end', targetPort: 'in-0'},
     ],
   };
-  const r = await workflowRunner(loose, {mode: 'execution', id: 't10', evaluate});
+  const r = await flowRunner(loose, {mode: 'execution', id: 't10', evaluate});
   const m1 = r.components.find(c => c.nodeId === 'm1')!;
   expect(m1.status).toBe('disabled');
   expect(m1.logs.some(l => l.message.includes('dropped'))).toBe(true);
@@ -48,9 +48,9 @@ test('disabled with a loose output: bypass, dropped envelope and nothing at the 
   expect(r.status).toBe('with-warnings');
 });
 
-function flowJoiningError(): ExecutableWorkflow {
+function flowJoiningError(): ExecutableFlow {
   return {
-    project: 'Test', workflow: 'Join', parameters: [],
+    project: 'Test', flow: 'Join', parameters: [],
     nodes: [
       {id: 'start', type: 'start', label: 'Start', config: {acceptsInput: true}},
       {id: 'ok', type: 'mapper', label: 'Mapper', config: {onError: 'divert', fields: [{target: 'double', value: '$n * 2 + $failure.x', expression: true}]}},
@@ -71,7 +71,7 @@ function flowJoiningError(): ExecutableWorkflow {
 test('an input with two edges joins the normal output and the error handling one', async () => {
   const wf = flowJoiningError();
   // $failure only exists in the 2nd envelope: the 1st one fails (goes to "handle"), the 2nd passes
-  const r = await workflowRunner(wf, {mode: 'execution', id: 't11', evaluate, input: [{n: 1}, {n: 2, failure: {x: 0}}]});
+  const r = await flowRunner(wf, {mode: 'execution', id: 't11', evaluate, input: [{n: 1}, {n: 2, failure: {x: 0}}]});
   const joined = r.components.find(c => c.nodeId === 'join')!;
   expect(joined.inputs).toEqual({'in-0': 2});
   expect(joined.outputs['out-0']).toBe(2);

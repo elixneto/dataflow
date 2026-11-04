@@ -1,3 +1,4 @@
+import type {ConnectionUse} from '../connections/connection-access';
 import type {Envelope} from '#types/envelope.type';
 import type {ExecutableNode} from '#types/executable-node.type';
 import type {ExpressionField} from '#types/expression-field.type';
@@ -6,7 +7,7 @@ import type {RunRecord} from '#types/run-record.type';
 import type {ScriptFunction} from '#types/script-function.type';
 import type {DatabaseKind} from '#types/database-kind.type';
 import type {DatabaseQuery} from '#types/database-query.type';
-import type {WorkflowCurrentRun} from '#types/workflow-current-run.type';
+import type {FlowCurrentRun} from '#types/flow-current-run.type';
 import type {EnvelopeData} from '#types/envelope-data.type';
 import type {DocumentStoreKind} from '#types/document-store-kind.type';
 import type {DocumentBatch} from '#types/document-batch.type';
@@ -17,7 +18,7 @@ import type {HttpRequest} from '#types/http-request.type';
 import type {HttpResponse} from '#types/http-response.type';
 
 export type ComponentContext = {
-  run: WorkflowCurrentRun;
+  run: FlowCurrentRun;
   node: ExecutableNode;
   /** compiles the component's code and returns the process function (a compile error becomes an exception) */
   prepareScript: (code: string) => Promise<ScriptFunction>;
@@ -37,42 +38,42 @@ export type ComponentContext = {
    */
   holding: (envelopes: number, held?: Envelope) => void;
   /**
-   * Runs another workflow (Workflow Invoker) with the values of its Start parameters and, optionally, an input.
+   * Runs another flow (Flow Invoker) with the values of its Start parameters and, optionally, an input.
    * `envelopes` yields the DATA of each envelope that reaches its End, as it arrives; `result` is its record.
    * A caller that stops reading before the end calls `cancel`.
    */
-  invokeWorkflow: (workflowId: string, call: {parameters: Record<string, string>; input?: unknown}) => {
+  invokeFlow: (flowId: string, call: {parameters: Record<string, string>; input?: unknown}) => {
     envelopes: AsyncIterable<EnvelopeData>;
     result: Promise<RunRecord>;
     cancel: () => void;
   };
   /**
-   * Query on a database, through the driver the runner registered for that kind. The name of the secret holding the
-   * connection string becomes the connection string here; the run's signal cancels the query.
+   * Query on a database, through the driver the runner registered for that kind. The connection (a profile or the component's
+   * inline fields) becomes the connection string here; the run's signal cancels the query.
    */
-  queryDatabase: (kind: DatabaseKind, query: Omit<DatabaseQuery, 'connection' | 'signal'> & {secret: string}) => AsyncIterable<Record<string, unknown>>;
+  queryDatabase: (kind: DatabaseKind, query: Omit<DatabaseQuery, 'connection' | 'signal'> & {connection: ConnectionUse}) => AsyncIterable<Record<string, unknown>>;
   /**
    * Runs an aggregation pipeline (read only) through the document database driver the runner registered for that kind,
-   * and yields the documents one by one. The name of the secret becomes the connection string; the run's signal stops it.
+   * and yields the documents one by one. The connection becomes the connection string (and gives the database when the component sets none); the run's signal stops it.
    */
-  aggregateDocuments: (kind: DocumentStoreKind, query: Omit<DocumentQuery, 'connection' | 'signal'> & {secret: string}) => AsyncIterable<Record<string, unknown>>;
+  aggregateDocuments: (kind: DocumentStoreKind, query: Omit<DocumentQuery, 'connection' | 'signal'> & {connection: ConnectionUse}) => AsyncIterable<Record<string, unknown>>;
   /**
    * Writes a batch of upserts through the document database driver the runner registered for that kind; one result per
    * upsert, in order, and the count of modified documents. In a test run of a component with side effects it writes
    * nothing: it logs what it would send and answers null.
    */
-  upsertDocuments: (kind: DocumentStoreKind, batch: Omit<DocumentBatch, 'connection' | 'signal'> & {secret: string}) => Promise<UpsertAnswer | null>;
+  upsertDocuments: (kind: DocumentStoreKind, batch: Omit<DocumentBatch, 'connection' | 'signal'> & {connection: ConnectionUse}) => Promise<UpsertAnswer | null>;
   /**
    * Deletes the documents the filter matches, through the driver the runner registered for that kind, and answers how
    * many (`deleted`). In a test run of a component with side effects it deletes nothing: it counts what the filter
    * matches, logs it and answers `{notSent: true, matched}`.
    */
-  deleteDocuments: (kind: DocumentStoreKind, request: Omit<DocumentDelete, 'connection' | 'signal' | 'countOnly'> & {secret: string}) => Promise<{deleted: number} | {notSent: true; matched: number}>;
+  deleteDocuments: (kind: DocumentStoreKind, request: Omit<DocumentDelete, 'connection' | 'signal' | 'countOnly'> & {connection: ConnectionUse}) => Promise<{deleted: number} | {notSent: true; matched: number}>;
   /**
-   * Sends an HTTP request through the runner's function (fetch). In a test run of a component that writes (e.g. a POST)
+   * Sends an HTTP request through the runner's function (fetch); `auth`, an API connection, adds its headers. In a test run of a component that writes (e.g. a POST)
    * it sends nothing: it logs the method, the URL and an excerpt of the body, with the secrets hidden, and answers null.
    */
-  sendHttp: (request: Omit<HttpRequest, 'signal'>) => Promise<HttpResponse | null>;
+  sendHttp: (request: Omit<HttpRequest, 'signal'> & {auth?: ConnectionUse}) => Promise<HttpResponse | null>;
   /** the text with the run's secret values hidden (for logs and error messages) */
   mask: (text: string) => string;
 };

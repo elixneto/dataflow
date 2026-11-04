@@ -1,11 +1,11 @@
 import {expect, test} from 'bun:test';
-import {COMPONENTS, workflowRunner} from '../../src/index';
-import type {ExecutableWorkflow} from '../../src/index';
+import {COMPONENTS, flowRunner} from '../../src/index';
+import type {ExecutableFlow} from '../../src/index';
 import {evaluate} from '../helpers';
 
 test('data grid yields one envelope per row, with the columns converted by type', async () => {
-  const grid: ExecutableWorkflow = {
-    project: 'Test', workflow: 'Data Grid', parameters: [],
+  const grid: ExecutableFlow = {
+    project: 'Test', flow: 'Data Grid', parameters: [],
     nodes: [
       {id: 'start', type: 'start', label: 'Start', config: {}},
       {id: 'g', type: 'datagrid', label: 'Data Grid', config: {
@@ -19,7 +19,7 @@ test('data grid yields one envelope per row, with the columns converted by type'
       {source: 'g', sourcePort: 'out-0', target: 'end', targetPort: 'in-0'},
     ],
   };
-  const r = await workflowRunner(grid, {mode: 'execution', id: 'grid', evaluate});
+  const r = await flowRunner(grid, {mode: 'execution', id: 'grid', evaluate});
   expect(r.status).toBe('completed');
   expect(r.components.find(c => c.nodeId === 'g')!.outputSample['out-0']).toEqual([
     {code: 'A1', weight: 1.5, active: true},

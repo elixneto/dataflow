@@ -16,7 +16,7 @@ import {
   split,
   sqlserver,
   typescript,
-  workflowInvoker,
+  flowInvoker,
   END,
   START,
 } from '@dataflow/core';
@@ -88,7 +88,7 @@ const COMPONENTS: ComponentInfo[] = [
   { type: sort.type, label: 'Sort', description: 'Sorts the envelopes by keys', category: 'transformation', icon: ArrowDownUp },
   { type: split.type, label: 'Split', description: 'Yields one envelope per item of a list', category: 'transformation', icon: Ungroup },
   { type: log.type, label: 'Log', description: 'Records a message for each envelope', category: 'flow', icon: ScrollText },
-  { type: workflowInvoker.type, label: 'Workflow Invoker', description: 'Calls another workflow with the parameters of its Start', category: 'flow', icon: Workflow },
+  { type: flowInvoker.type, label: 'Flow Invoker', description: 'Calls another flow with the parameters of its Start', category: 'flow', icon: Workflow },
 ];
 
 /** the component of a type (undefined for one the editor does not know) */

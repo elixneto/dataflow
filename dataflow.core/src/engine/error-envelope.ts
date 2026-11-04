@@ -11,7 +11,7 @@ export function withError(doc: Envelope, error: Error, component: string): Envel
   return {...doc, DATA: {...doc.DATA, errors: [...previous, {error: error.name || 'Error', message: error.message, component}]}};
 }
 
-/** The node's "On error" policy (Throw by default: stops the run). */
+/** The node's "On error" policy (Throw by default: stops the run). Divert goes out through ERROR_PORT (validation/ports.ts). */
 export function errorPolicy(node: ExecutableNode): ErrorPolicy {
   const v = node.config.onError;
   return v === 'continue' || v === 'divert' ? v : 'throw';

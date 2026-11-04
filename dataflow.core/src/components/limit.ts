@@ -23,6 +23,10 @@ export const limit: ComponentLogic = {
   type: 'limit',
   inputs: 1,
   outputs: 1,
+  settings: [
+    {key: 'mode', label: 'Keep', kind: 'select', default: 'top', options: [{value: 'top', label: 'First'}, {value: 'bottom', label: 'Last'}]},
+    {key: 'count', label: 'Envelopes', kind: 'number', default: 10, min: 1, max: MAX_LIMIT},
+  ],
 
   validate() {
     return [];

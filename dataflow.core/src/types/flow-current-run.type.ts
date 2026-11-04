@@ -1,11 +1,11 @@
 import type {RunMode} from '#types/run-mode.type';
 
-export type WorkflowCurrentRun = {
+export type FlowCurrentRun = {
   id: string;
   mode: RunMode;
   project: string;
-  workflow: string;
+  flow: string;
   startedAt: string;
-  /** run that called this one (Workflow Invoker); without it, it was called from outside */
+  /** run that called this one (Flow Invoker); without it, it was called from outside */
   parentId?: string;
 };

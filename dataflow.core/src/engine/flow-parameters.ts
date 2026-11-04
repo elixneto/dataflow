@@ -1,4 +1,4 @@
-import type {ExecutableWorkflow} from '#types/executable-workflow.type';
+import type {ExecutableFlow} from '#types/executable-flow.type';
 import type {ParameterType, ParameterValue} from '#types/parameter.type';
 
 function convert(value: string, type: ParameterType): ParameterValue {
@@ -14,7 +14,7 @@ function convert(value: string, type: ParameterType): ParameterValue {
 }
 
 /** Resolves the parameters: trigger value, otherwise the default; a required one without a value prevents the run. */
-export function resolveParameters(wf: ExecutableWorkflow, values: Record<string, string> = {}) {
+export function resolveParameters(wf: ExecutableFlow, values: Record<string, string> = {}) {
     const parameters: Record<string, ParameterValue> = {};
     const missing: string[] = [];
 

@@ -40,6 +40,10 @@ export const log: ComponentLogic = {
   type: 'log',
   inputs: 1,
   outputs: 1,
+  settings: [
+    {key: 'level', label: 'Level', kind: 'select', default: 'info', options: LOG_LEVELS.map(level => ({value: level, label: level.charAt(0).toUpperCase() + level.slice(1)}))},
+    {key: 'message', label: 'Message', kind: 'expression', required: true, placeholder: '`order ${$id}`'},
+  ],
 
   validate(config) {
     return logConfig(config).message.trim() ? [] : ['has no message.'];
@@ -49,7 +53,7 @@ export const log: ComponentLogic = {
     const {level, message} = logConfig(config);
     // debug is a test-run aid: a real run does not record it
     const silent = level === 'debug' && ctx.run.mode === 'execution';
-    const where = `[${ctx.run.workflow} / ${ctx.node.label}]`;
+    const where = `[${ctx.run.flow} / ${ctx.node.label}]`;
     let lines = 0;
     for await (const doc of inputs['in-0'] ?? []) {
       if (!silent) {

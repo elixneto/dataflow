@@ -22,6 +22,10 @@ export const aggregate: ComponentLogic = {
   type: 'aggregate',
   inputs: 1,
   outputs: 1,
+  settings: [
+    {key: 'size', label: 'Batch size', kind: 'number', default: 500, min: 1, max: MAX_BATCH_SIZE},
+    {key: 'field', label: 'Field', kind: 'text', required: true, default: 'items', placeholder: 'items'},
+  ],
 
   validate(config) {
     const issue = nameIssue(aggregateConfig(config).field);
@@ -35,7 +39,7 @@ export const aggregate: ComponentLogic = {
     let received = 0;
     const flush = () => {
       batches += 1;
-      const doc: Envelope = {WORKFLOW_CURRENT_RUN: batch[0].WORKFLOW_CURRENT_RUN, PARAMETERS: batch[0].PARAMETERS, DATA: {[field]: batch.map(d => d.DATA)}};
+      const doc: Envelope = {FLOW_CURRENT_RUN: batch[0].FLOW_CURRENT_RUN, PARAMETERS: batch[0].PARAMETERS, DATA: {[field]: batch.map(d => d.DATA)}};
       batch = [];
       ctx.holding(0);
       return {port: 'out-0', doc};

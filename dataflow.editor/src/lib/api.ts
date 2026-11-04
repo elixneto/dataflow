@@ -1,4 +1,5 @@
 import { mockUser } from '@/auth/mock-user';
+import { reportUnavailable } from './server-connection';
 
 /*
  * Calls to dataflow.server. In dev Vite proxies /api to it (vite.config.ts). Who is calling goes in X-Org-Id and
@@ -30,6 +31,7 @@ export async function api<T>(path: string, init: { method?: string; body?: unkno
       body: init.body === undefined ? undefined : JSON.stringify(init.body),
     });
   } catch {
+    reportUnavailable();
     return { ok: false, error: UNAVAILABLE };
   }
 
@@ -44,5 +46,9 @@ export async function api<T>(path: string, init: { method?: string; body?: unkno
   }
 
   // the proxy answers 5xx without a body of ours when the server is down
+  if (response.status >= 500) {
+    reportUnavailable();
+  }
+
   return { ok: false, error: response.status >= 500 ? UNAVAILABLE : { code: 'http', message: `Request failed (${response.status}).` } };
 }

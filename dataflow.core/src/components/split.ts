@@ -21,6 +21,7 @@ export const split: ComponentLogic = {
   type: 'split',
   inputs: 1,
   outputs: 1,
+  settings: [{key: 'list', label: 'List', kind: 'expression', required: true, default: '$items', placeholder: '$items'}],
 
   validate(config) {
     return splitList(config).trim() ? [] : ['has no list.'];
@@ -44,7 +45,7 @@ export const split: ComponentLogic = {
       }
       for (const item of value as EnvelopeData[]) {
         items += 1;
-        yield {port: 'out-0', doc: {WORKFLOW_CURRENT_RUN: doc.WORKFLOW_CURRENT_RUN, PARAMETERS: doc.PARAMETERS, DATA: item}};
+        yield {port: 'out-0', doc: {FLOW_CURRENT_RUN: doc.FLOW_CURRENT_RUN, PARAMETERS: doc.PARAMETERS, DATA: item}};
       }
     }
     ctx.log('info', `${received} envelope(s) split into ${items}.`);

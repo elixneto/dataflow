@@ -1,11 +1,11 @@
 import {expect, test} from 'bun:test';
-import {COMPONENTS, workflowRunner} from '../../src/index';
-import type {DocumentBatch, ExecutableWorkflow, UpsertAnswer} from '../../src/index';
+import {COMPONENTS, flowRunner} from '../../src/index';
+import type {DocumentBatch, ExecutableFlow, UpsertAnswer} from '../../src/index';
 import {evaluate} from '../helpers';
 
 /** Data Grid (3 people, the 2nd without email) → MongoDB Upsert (by email) → Mapper → End. */
-const flow = (config: Record<string, unknown> = {}): ExecutableWorkflow => ({
-  project: 'Test', workflow: 'Mongo', parameters: [],
+const flow = (config: Record<string, unknown> = {}): ExecutableFlow => ({
+  project: 'Test', flow: 'Mongo', parameters: [],
   nodes: [
     {id: 'start', type: 'start', label: 'Start', config: {}},
     {id: 'grid', type: 'datagrid', label: 'People', override: true, config: {
@@ -13,7 +13,7 @@ const flow = (config: Record<string, unknown> = {}): ExecutableWorkflow => ({
       rows: [['1', 'ana@x.com', 'Ana'], ['2', '', 'Bia'], ['3', 'caio@x.com', 'Caio']],
     }},
     {id: 'mongo', type: 'mongodb-upsert', label: 'People', config: {onError: 'continue',
-      connection: 'MONGO', database: 'crm', collection: 'people',
+      connectionString: 'MONGO', database: 'crm', collection: 'people',
       filter: [{field: 'email', value: '$email || undefined', expression: true}], batchSize: 2, ...config,
     }},
     {id: 'after', type: 'mapper', label: 'After', config: {fields: [{target: 'seen', value: 'yes', expression: false}]}},
@@ -42,17 +42,17 @@ function fakeMongo(fail?: (filter: Record<string, unknown>) => string | undefine
 
 test('MongoDB Upsert validates its configuration', () => {
   expect(COMPONENTS['mongodb-upsert'].validate({})).toEqual([
-    'has no connection (name of the secret holding the connection string).', 'has no database.', 'has no collection.',
+    'has no connection (choose one, or fill in connection string).', 'has no database.', 'has no collection.',
     'has no filter field (what finds the document to update).',
   ]);
-  expect(COMPONENTS['mongodb-upsert'].validate({connection: 'M', database: 'd', collection: 'c', source: 'expression',
+  expect(COMPONENTS['mongodb-upsert'].validate({connectionString: 'M', database: 'd', collection: 'c', source: 'expression',
     filter: [{field: '$bad', value: 'x', expression: false}, {field: 'a', value: '', expression: false}, {field: 'a', value: '', expression: false}]}))
     .toEqual(['filter field "$bad" is not a valid MongoDB field.', 'has the filter field "a" more than once.', 'has no document expression.']);
 });
 
 test('MongoDB Upsert writes in batches in a real run and maps each result to its envelope', async () => {
   const mongo = fakeMongo(filter => (filter.email === 'caio@x.com' ? 'E11000 duplicate key' : undefined));
-  const r = await workflowRunner(flow(), {mode: 'execution', id: 'm1', evaluate, documentStores: {mongodb: mongo.driver}, secrets: {MONGO: 'mongodb://x'}});
+  const r = await flowRunner(flow(), {mode: 'execution', id: 'm1', evaluate, documentStores: {mongodb: mongo.driver}, secrets: {MONGO: 'mongodb://x'}});
   // the 2nd person has no email: an error of that envelope, before anything is sent
   expect(mongo.batches).toEqual([
     {connection: 'mongodb://x', database: 'crm', collection: 'people', upserts: [
@@ -82,7 +82,7 @@ test('MongoDB Upsert counts inserted, modified and unchanged documents, per batc
   ];
   let next = 0;
   const driver = async () => answers[next++];
-  const r = await workflowRunner(flow({filter: [{field: '_id', value: '$_id', expression: true}]}),
+  const r = await flowRunner(flow({filter: [{field: '_id', value: '$_id', expression: true}]}),
     {mode: 'execution', id: 'm6', evaluate, documentStores: {mongodb: driver}, secrets: {MONGO: 'mongodb://x'}});
   const logs = r.components.find(c => c.nodeId === 'mongo')!.logs.map(l => l.message);
   expect(logs.filter(m => m.startsWith('Batch')).map(m => m.replace(/in \d+ ms/, 'in N ms'))).toEqual([
@@ -94,7 +94,7 @@ test('MongoDB Upsert counts inserted, modified and unchanged documents, per batc
 
 test('MongoDB Upsert writes nothing in a test run and the envelopes go on marked as not sent, unless it is pinned', async () => {
   const mongo = fakeMongo();
-  const r = await workflowRunner(flow({filter: [{field: '_id', value: '$_id', expression: true}]}),
+  const r = await flowRunner(flow({filter: [{field: '_id', value: '$_id', expression: true}]}),
     {mode: 'validation', id: 'm2', evaluate, documentStores: {mongodb: mongo.driver}, secrets: {MONGO: 'mongodb://x'}});
   expect(mongo.batches).toEqual([]);
   const node = r.components.find(c => c.nodeId === 'mongo')!;
@@ -105,7 +105,7 @@ test('MongoDB Upsert writes nothing in a test run and the envelopes go on marked
 
   const pinned = flow();
   pinned.nodes.find(n => n.id === 'mongo')!.pinned = {'out-0': [{name: 'Pinned'}]};
-  const replay = await workflowRunner(pinned, {mode: 'validation', id: 'm3', evaluate, documentStores: {mongodb: mongo.driver}, secrets: {MONGO: 'mongodb://x'}});
+  const replay = await flowRunner(pinned, {mode: 'validation', id: 'm3', evaluate, documentStores: {mongodb: mongo.driver}, secrets: {MONGO: 'mongodb://x'}});
   expect(mongo.batches).toEqual([]);
   expect(replay.components.find(c => c.nodeId === 'after')!.outputSample['out-0']).toEqual([{name: 'Pinned', seen: 'yes'}]);
 });
@@ -114,12 +114,12 @@ test('MongoDB Upsert: a batch that fails as a whole fails each of its envelopes'
   const driver = async () => {
     throw new Error('Authentication failed.');
   };
-  const r = await workflowRunner(flow({filter: [{field: '_id', value: '$_id', expression: true}]}),
+  const r = await flowRunner(flow({filter: [{field: '_id', value: '$_id', expression: true}]}),
     {mode: 'execution', id: 'm4', evaluate, documentStores: {mongodb: driver}, secrets: {MONGO: 'mongodb://x'}});
   const node = r.components.find(c => c.nodeId === 'mongo')!;
   expect(node.logs.filter(l => l.level === 'error').map(l => l.message)).toEqual(Array(3).fill('Authentication failed.'));
 
-  const noSecret = await workflowRunner(flow(), {mode: 'validation', id: 'm5', evaluate, documentStores: {mongodb: driver}, secrets: {}});
+  const noSecret = await flowRunner(flow(), {mode: 'validation', id: 'm5', evaluate, documentStores: {mongodb: driver}, secrets: {}});
   expect(noSecret.components.find(c => c.nodeId === 'mongo')!.logs.some(l => l.message.includes('"MONGO" does not exist'))).toBe(true);
 });
 
@@ -133,7 +133,7 @@ test('MongoDB Upsert writes a Date as a date (also one made in an expression) an
   // the Data Grid gives text; a TypeScript-like expression document brings real dates
   wf.nodes.find(n => n.id === 'mongo')!.config.source = 'expression';
   wf.nodes.find(n => n.id === 'mongo')!.config.document = {value: '({name: $name, at: new Date("2026-10-25T18:00:00.000Z"), nested: {when: new Date(0)}, text: "2026-10-25"})', expression: true};
-  await workflowRunner(wf, {mode: 'execution', id: 'm7', evaluate, documentStores: {mongodb: driver}, secrets: {MONGO: 'mongodb://x'}});
+  await flowRunner(wf, {mode: 'execution', id: 'm7', evaluate, documentStores: {mongodb: driver}, secrets: {MONGO: 'mongodb://x'}});
   const set = batches[0].upserts[0].document as {at: unknown; nested: {when: unknown}; text: unknown};
   // made in node:vm (another realm), it arrives as a Date of this realm, so the driver writes a BSON date
   expect(set.at).toBeInstanceOf(Date);

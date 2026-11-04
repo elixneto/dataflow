@@ -1,6 +1,6 @@
 import type {EnvelopeData} from '#types/envelope-data.type';
 
-/** Workflow node as the runner receives it (no position or anything visual). */
+/** Flow node as the runner receives it (no position or anything visual). */
 export type ExecutableNode = {
   id: string;
   type: string;

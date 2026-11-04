@@ -6,6 +6,16 @@ CREATE TABLE organizations (
   created_at timestamptz NOT NULL DEFAULT now()
 );
 
+-- the people of an organization (no credentials yet: there is no login)
+CREATE TABLE users (
+  id uuid PRIMARY KEY,
+  org_id uuid NOT NULL REFERENCES organizations,
+  name text NOT NULL,
+  email text NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX users_email ON users (lower(email));
+
 CREATE TABLE organization_settings (
   org_id uuid NOT NULL REFERENCES organizations,
   key text NOT NULL,
@@ -22,9 +32,29 @@ CREATE TABLE projects (
   description text NOT NULL,
   created_at timestamptz NOT NULL DEFAULT now(),
   deleted_at timestamptz,         -- soft delete: rows are never DELETEd (their flows and history keep pointing here)
-  deleted_by text
+  deleted_by text,
+  -- how it shows in the editor's lists: an icon and its color, by name (the editor owns the list of names)
+  icon text NOT NULL DEFAULT 'folder',
+  color text NOT NULL DEFAULT 'blue'
 );
 CREATE INDEX projects_org ON projects (org_id) WHERE deleted_at IS NULL;
+
+-- folders: only a visual organization of a project's flows, nested to any depth. A flow's folder and name live on the
+-- flows row, never in flow_versions: moving or renaming a flow keeps its id and needs no deploy.
+CREATE TABLE folders (
+  id uuid PRIMARY KEY,
+  org_id uuid NOT NULL REFERENCES organizations,
+  project_id uuid NOT NULL REFERENCES projects,
+  parent_id uuid REFERENCES folders,  -- null = at the project's root
+  name text NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  deleted_at timestamptz,             -- soft delete; archiving a folder archives what is under it with the same time
+  deleted_by text
+);
+CREATE INDEX folders_project ON folders (org_id, project_id);
+-- names are unique among live siblings, ignoring case (the root is the all-zero uuid here)
+CREATE UNIQUE INDEX folders_live_name ON folders (project_id, COALESCE(parent_id, '00000000-0000-0000-0000-000000000000'), lower(name))
+  WHERE deleted_at IS NULL;
 
 CREATE TABLE flows (
   id uuid PRIMARY KEY,
@@ -35,9 +65,13 @@ CREATE TABLE flows (
   updated_by text,
   updated_at timestamptz NOT NULL DEFAULT now(),
   deleted_at timestamptz,         -- soft delete: versions and deployment history must keep pointing here
-  deleted_by text
+  deleted_by text,
+  folder_id uuid REFERENCES folders,  -- null = at the project's root
+  created_at timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX flows_project ON flows (org_id, project_id) WHERE deleted_at IS NULL;
+CREATE UNIQUE INDEX flows_live_name ON flows (project_id, COALESCE(folder_id, '00000000-0000-0000-0000-000000000000'), lower(name))
+  WHERE deleted_at IS NULL;
 
 -- immutable: never UPDATE; id and number arrive unchanged from the source instance in a promotion
 CREATE TABLE flow_versions (
@@ -88,7 +122,8 @@ CREATE TABLE promotions (
   at timestamptz NOT NULL DEFAULT now()
 );
 
--- values per instance: the same name has one value in DEV and another in PROD
+-- a project's secrets: values per instance (the same name has one value in DEV and another in PROD); flows read
+-- SECRETS['name'], names unique per project ignoring case
 CREATE TABLE secrets (
   id uuid PRIMARY KEY,
   org_id uuid NOT NULL REFERENCES organizations,
@@ -99,8 +134,38 @@ CREATE TABLE secrets (
   ciphertext bytea NOT NULL,      -- AES-256-GCM (tag included); AAD = id + name
   updated_by text,
   updated_at timestamptz NOT NULL DEFAULT now(),
+  created_at timestamptz NOT NULL DEFAULT now(),
   UNIQUE (org_id, project_id, name)
 );
+CREATE UNIQUE INDEX secrets_project_name ON secrets (org_id, COALESCE(project_id, '00000000-0000-0000-0000-000000000000'), lower(name));
+
+-- variables: plain values the flows read as VARIABLES['name'] (shown, unlike secrets)
+CREATE TABLE variables (
+  id uuid PRIMARY KEY,
+  org_id uuid NOT NULL REFERENCES organizations,
+  project_id uuid NOT NULL REFERENCES projects,
+  name text NOT NULL,
+  value text NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_by text,
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX variables_project_name ON variables (org_id, project_id, lower(name));
+
+-- connection profiles: how to reach a database, an API, a storage or a queue; the config holds the fields of the type
+-- (@dataflow/core connection-types) and its sensitive fields name secrets of the project, never a value
+CREATE TABLE connections (
+  id uuid PRIMARY KEY,
+  org_id uuid NOT NULL REFERENCES organizations,
+  project_id uuid NOT NULL REFERENCES projects,
+  name text NOT NULL,
+  type text NOT NULL,
+  config jsonb NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_by text,
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX connections_project_name ON connections (org_id, project_id, lower(name));
 
 -- queue + history
 CREATE TABLE runs (

@@ -1,6 +1,6 @@
 import type { Edge } from '@xyflow/react';
 import { CARD_HEIGHT, CARD_WIDTH, PORT_GAP, STACK_GAP } from './node-geometry';
-import { inputPorts, outputPorts } from '@dataflow/core';
+import { ERROR_PORT, inputPorts, outputPorts } from '@dataflow/core';
 
 /*
  * Arrange, as in the PoC but only left to right, and with the cards glued: each card goes in the column right after
@@ -80,8 +80,12 @@ export function arrange<T extends Placed>(nodes: T[], edges: Edge[]): T[] {
   };
 
   // depth first from each start, in the order they are on screen (top to bottom): a whole branch before the next
+  // the row an edge leaves from, counted from its card's top row: its output's; the error port's is under the card, so
+  // what handles the errors goes below the path that works
+  const outRow = (edge: Edge) => (edge.sourceHandle === ERROR_PORT ? span(byId.get(edge.source)!) : portIndex(edge.sourceHandle));
+
   const visit = (c: T) => {
-    for (const edge of [...outgoing(c.id)].sort((a, b) => portIndex(a.sourceHandle) - portIndex(b.sourceHandle))) {
+    for (const edge of [...outgoing(c.id)].sort((a, b) => outRow(a) - outRow(b))) {
       const next = byId.get(edge.target)!;
       if (row.has(next.id)) {
         continue;
@@ -94,7 +98,7 @@ export function arrange<T extends Placed>(nodes: T[], edges: Edge[]): T[] {
       }
 
       const first = [...feeders].sort((a, b) => portIndex(a.targetHandle) - portIndex(b.targetHandle))[0]!;
-      place(next, row.get(first.source)! + portIndex(first.sourceHandle) - portIndex(first.targetHandle));
+      place(next, row.get(first.source)! + outRow(first) - portIndex(first.targetHandle));
       visit(next);
     }
   };

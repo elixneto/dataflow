@@ -7,8 +7,8 @@ import type {ComponentLogic} from '#types/component-logic.type';
  * $input is the envelope's DATA (to process many at once, put an Aggregate before it).
  * Without Override, the return value (any value) goes to the node's output key ($result) and the envelope moves on with the rest.
  * With Override, the return value becomes the whole DATA: object = 1 envelope, list = 1 per item, null/undefined = none.
- * An exception is an error of the envelope (follows the "On error" policy). Globals: $PARAMETERS, $SECRETS,
- * $WORKFLOW_CURRENT_RUN and log().
+ * An exception is an error of the envelope (follows the "On error" policy). Globals: $PARAMETERS, $SECRETS, $VARIABLES,
+ * $FLOW_CURRENT_RUN and log().
  */
 
 export const DEFAULT_CODE = `async function process($input: Data) {
@@ -27,6 +27,7 @@ export const typescript: ComponentLogic = {
   inputs: 1,
   outputs: 1,
   defaultOutputKey: 'result',
+  settings: [{key: 'code', label: 'Code', kind: 'code', language: 'typescript', required: true, default: DEFAULT_CODE}],
 
   validate(config) {
     const {code} = typescriptConfig(config);
@@ -52,7 +53,7 @@ export const typescript: ComponentLogic = {
         if (!items.every(isObject)) throw new TypeError('With Override, process must return an object, a list of objects or null.');
         for (const DATA of items) {
           sent += 1;
-          yield {port: 'out-0', doc: {WORKFLOW_CURRENT_RUN: doc.WORKFLOW_CURRENT_RUN, PARAMETERS: doc.PARAMETERS, DATA}};
+          yield {port: 'out-0', doc: {FLOW_CURRENT_RUN: doc.FLOW_CURRENT_RUN, PARAMETERS: doc.PARAMETERS, DATA}};
         }
       } catch (e) {
         yield {error: toError(e), doc};

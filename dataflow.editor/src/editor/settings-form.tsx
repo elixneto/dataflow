@@ -1,0 +1,406 @@
+import { lazy, Suspense, type ReactNode } from 'react';
+import { useParams } from 'react-router';
+import { ArrowDown, ArrowUp, Plus, Trash } from 'lucide-react';
+import { settingDefault, settingsDefaults, settingValue, settingVisible, withSetting, type ExpressionField, type SettingField } from '@dataflow/core';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { projectTabPath } from '@/app/paths';
+import { cn } from '@/lib/utils';
+import { useProjectResources } from './project-resources';
+
+type Values = Record<string, unknown>;
+
+/** Monaco, only when a code setting shows */
+const CodeEditor = lazy(() => import('./code-editor'));
+
+const SELECT = 'h-8 w-full rounded-lg border border-input bg-transparent px-2.5 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring dark:bg-input/30';
+
+/**
+ * A component's settings, built from what the core declares (ComponentLogic.settings): one control per kind of
+ * setting, the `when`s applied. It only edits `values` (the window's draft config): Save, Cancel and the issues are
+ * the window's.
+ */
+export function SettingsForm({ id, fields, values, onChange }: { id: string; fields: SettingField[]; values: Values; onChange: (values: Values) => void }) {
+  return (
+    <div className="grid gap-4">
+      {fields
+        .filter(field => settingVisible(field, values, fields))
+        .map(field =>
+          field.kind === 'grid' ? (
+            // a table: its columns in the setting's key, its rows beside them (`rows`)
+            <GridSetting
+              key={field.key}
+              id={`${id}-${field.key}`}
+              field={field}
+              columns={Array.isArray(values[field.key]) ? (values[field.key] as GridColumn[]) : []}
+              rows={Array.isArray(values.rows) ? (values.rows as string[][]) : []}
+              onChange={(columns, rows) => onChange({ ...values, [field.key]: columns, rows })}
+            />
+          ) : (
+            <Setting key={field.key} id={`${id}-${field.key}`} field={field} value={settingValue(field, values)} onChange={value => onChange(withSetting(field, values, value))} />
+          ),
+        )}
+    </div>
+  );
+}
+
+function Setting({ id, field, value, onChange }: { id: string; field: SettingField; value: unknown; onChange: (value: unknown) => void }) {
+  if (field.kind === 'list') {
+    const list = Array.isArray(value) ? (value as unknown[]) : [];
+    // a flat list (Distinct's keys) holds the values themselves: each one is edited as an item with its single setting
+    const key = field.item?.[0]?.key ?? 'value';
+    return field.flat ? (
+      <ListSetting id={id} field={field} items={list.map(v => ({ [key]: v }))} onChange={items => onChange(items.map(item => item[key]))} />
+    ) : (
+      <ListSetting id={id} field={field} items={list as Values[]} onChange={onChange} />
+    );
+  }
+
+  if (field.kind === 'boolean') {
+    return (
+      <label className="flex items-center gap-2 text-sm">
+        <input id={id} type="checkbox" checked={value === true} className="size-4 accent-primary" onChange={event => onChange(event.target.checked)} />
+        {field.label}
+      </label>
+    );
+  }
+
+  return (
+    <div className="grid gap-1.5">
+      <Label htmlFor={id}>{field.label}</Label>
+      <Control id={id} field={field} value={value} onChange={onChange} />
+    </div>
+  );
+}
+
+/** the control of one setting, without its label (a list's items show the labels once, above the columns) */
+function Control({ id, field, value, onChange }: { id: string; field: SettingField; value: unknown; onChange: (value: unknown) => void }) {
+  const text = typeof value === 'string' ? value : value == null ? '' : String(value);
+  switch (field.kind) {
+    case 'select':
+      return (
+        <select id={id} value={text} className={SELECT} onChange={event => onChange(event.target.value)}>
+          {field.options?.map(option => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+      );
+    case 'number':
+      return (
+        <Input
+          id={id}
+          type="number"
+          min={field.min}
+          max={field.max}
+          value={text}
+          placeholder={field.placeholder}
+          onChange={event => onChange(event.target.value === '' ? '' : Number(event.target.value))}
+        />
+      );
+    case 'expression':
+      return <Textarea id={id} value={text} rows={1} placeholder={field.placeholder} spellCheck={false} className="min-h-8 py-1.5 font-mono" onChange={event => onChange(event.target.value)} />;
+    case 'code': {
+      // a plain text box while the code editor (Monaco) loads
+      const plain = <Textarea id={id} value={text} placeholder={field.placeholder} spellCheck={false} className="min-h-32 font-mono text-xs" onChange={event => onChange(event.target.value)} />;
+      return (
+        <Suspense fallback={plain}>
+          <CodeEditor id={id} value={text} language={field.language ?? 'javascript'} label={field.label} onChange={onChange} />
+        </Suspense>
+      );
+    }
+    case 'value':
+      return <ValueControl id={id} field={field} value={value} onChange={onChange} />;
+    case 'boolean':
+      // inside a list (a parameter's Required): the box alone, the label is the column's
+      return (
+        <span className="flex h-8 items-center">
+          <input id={id} type="checkbox" aria-label={field.label} checked={value === true} className="size-4 accent-primary" onChange={event => onChange(event.target.checked)} />
+        </span>
+      );
+    case 'connection':
+      return <ConnectionPicker id={id} type={field.connectionType ?? ''} value={text} onChange={onChange} />;
+    case 'secret':
+      return <SecretPicker id={id} value={text} onChange={onChange} />;
+    case 'flow':
+      return <FlowPicker id={id} value={text} onChange={onChange} />;
+    default:
+      return (
+        <Input
+          id={id}
+          value={text}
+          placeholder={field.placeholder}
+          spellCheck={false}
+          onChange={event => onChange(event.target.value)}
+        />
+      );
+  }
+}
+
+/**
+ * One of the project's connection profiles of the type, or none (then the component's own fields below apply). A new
+ * connection is made on the project's Connections tab (in a new tab, so the flow stays as it is); it shows up here when
+ * this window comes back into focus.
+ */
+function ConnectionPicker({ id, type, value, onChange }: { id: string; type: string; value: string; onChange: (value: string) => void }) {
+  const resources = useProjectResources();
+  const profiles = resources.connections.filter(c => c.type === type);
+  return (
+    <div className="flex items-center gap-2">
+      <select id={id} value={value} className={SELECT} onChange={event => onChange(event.target.value)}>
+        <option value="">None (set it here)</option>
+        {profiles.map(profile => (
+          <option key={profile.id} value={profile.id}>
+            {profile.name}
+          </option>
+        ))}
+        {value && !profiles.some(p => p.id === value) && <option value={value}>Missing connection</option>}
+      </select>
+      <NewLink href={projectTabPath(resources.projectId, 'connections')}>New connection</NewLink>
+    </div>
+  );
+}
+
+/** one of the project's secrets, by name (its value is never here) */
+function SecretPicker({ id, value, onChange }: { id: string; value: string; onChange: (value: string) => void }) {
+  const resources = useProjectResources();
+  return (
+    <div className="flex items-center gap-2">
+      <select id={id} value={value} className={cn(SELECT, 'font-mono')} onChange={event => onChange(event.target.value)}>
+        <option value="">Choose a secret</option>
+        {resources.secrets.map(name => (
+          <option key={name} value={name}>
+            {name}
+          </option>
+        ))}
+        {value && !resources.secrets.includes(value) && <option value={value}>{value} (missing)</option>}
+      </select>
+      <NewLink href={projectTabPath(resources.projectId, 'secrets')}>New secret</NewLink>
+    </div>
+  );
+}
+
+/** another flow of the project (not this one) */
+function FlowPicker({ id, value, onChange }: { id: string; value: string; onChange: (value: string) => void }) {
+  const resources = useProjectResources();
+  const { flowId } = useParams();
+  const flows = resources.flows.filter(f => f.id !== flowId);
+  return (
+    <select id={id} value={value} className={SELECT} onChange={event => onChange(event.target.value)}>
+      <option value="">Choose a flow</option>
+      {flows.map(flow => (
+        <option key={flow.id} value={flow.id}>
+          {flow.name}
+        </option>
+      ))}
+      {value && !flows.some(f => f.id === value) && <option value={value}>Missing flow</option>}
+    </select>
+  );
+}
+
+type GridColumn = { name: string; type: string };
+
+/** a Data Grid: columns (name and type) across the top, one row of text cells per record; add and remove both */
+function GridSetting(props: { id: string; field: SettingField; columns: GridColumn[]; rows: string[][]; onChange: (columns: GridColumn[], rows: string[][]) => void }) {
+  const { id, field, columns, rows, onChange } = props;
+  const types = field.options ?? [];
+  const template = { gridTemplateColumns: `repeat(${Math.max(columns.length, 1)}, minmax(7rem, 1fr)) 1.5rem` };
+  const setColumn = (index: number, column: GridColumn) => onChange(columns.map((c, i) => (i === index ? column : c)), rows);
+  const setCell = (row: number, column: number, text: string) =>
+    onChange(
+      columns,
+      rows.map((cells, i) => (i === row ? columns.map((_, j) => (j === column ? text : (cells[j] ?? ''))) : cells)),
+    );
+
+  return (
+    <fieldset className="grid gap-1.5">
+      <legend className="mb-1.5 text-sm leading-none font-medium">{field.label}</legend>
+      <div className="overflow-x-auto">
+        <div className="grid min-w-max gap-1.5">
+          {columns.length > 0 && (
+            <div role="row" className="grid items-center gap-1.5" style={template}>
+              {columns.map((column, j) => (
+                <div key={j} role="columnheader" className="grid gap-1 rounded-lg bg-muted/50 p-1">
+                  <div className="flex items-center gap-1">
+                    <Input
+                      aria-label={`Column ${j + 1} name`}
+                      id={j === 0 ? id : undefined}
+                      value={column.name}
+                      placeholder={`column${j + 1}`}
+                      spellCheck={false}
+                      className="h-7 font-mono"
+                      onChange={event => setColumn(j, { ...column, name: event.target.value })}
+                    />
+                    <IconButton
+                      label={`Remove column ${column.name || j + 1}`}
+                      onClick={() => onChange(columns.filter((_, i) => i !== j), rows.map(cells => cells.filter((_, i) => i !== j)))}
+                    >
+                      <Trash />
+                    </IconButton>
+                  </div>
+                  <select aria-label={`Column ${j + 1} type`} value={column.type} className={cn(SELECT, 'h-7')} onChange={event => setColumn(j, { ...column, type: event.target.value })}>
+                    {types.map(option => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              ))}
+              <span />
+            </div>
+          )}
+          {columns.length > 0 &&
+            rows.map((cells, i) => (
+              <div key={i} role="row" aria-label={`row ${i + 1}`} className="grid items-center gap-1.5" style={template}>
+                {columns.map((column, j) => (
+                  <Input
+                    key={j}
+                    aria-label={`Row ${i + 1}, ${column.name || `column ${j + 1}`}`}
+                    value={cells[j] ?? ''}
+                    className="h-7"
+                    onChange={event => setCell(i, j, event.target.value)}
+                  />
+                ))}
+                <IconButton label={`Remove row ${i + 1}`} onClick={() => onChange(columns, rows.filter((_, r) => r !== i))}>
+                  <Trash />
+                </IconButton>
+              </div>
+            ))}
+        </div>
+      </div>
+      <div className="flex gap-2">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => onChange([...columns, { name: '', type: types[0]?.value ?? 'text' }], rows.map(cells => [...cells, '']))}
+        >
+          <Plus /> Add column
+        </Button>
+        <Button variant="outline" size="sm" disabled={columns.length === 0} onClick={() => onChange(columns, [...rows, columns.map(() => '')])}>
+          <Plus /> Add row
+        </Button>
+      </div>
+    </fieldset>
+  );
+}
+
+function NewLink({ href, children }: { href: string; children: ReactNode }) {
+  return (
+    <a href={href} target="_blank" rel="noreferrer" className="flex shrink-0 items-center gap-1 text-xs text-primary hover:underline">
+      <Plus className="size-3" aria-hidden />
+      {children}
+    </a>
+  );
+}
+
+/** a fixed value or an expression: the fx button switches (an expression in monospace) */
+function ValueControl({ id, field, value, onChange }: { id: string; field: SettingField; value: unknown; onChange: (value: ExpressionField) => void }) {
+  const current = (value && typeof value === 'object' ? value : settingDefault(field)) as ExpressionField;
+  return (
+    <div className="flex items-start gap-1">
+      <button
+        type="button"
+        aria-label="Expression"
+        title={current.expression ? 'Expression (click for a fixed value)' : 'Fixed value (click for an expression)'}
+        aria-pressed={current.expression}
+        onClick={() => onChange({ ...current, expression: !current.expression })}
+        className={cn(
+          'flex h-8 shrink-0 items-center rounded-lg border px-1.5 font-mono text-xs italic transition-colors',
+          current.expression ? 'border-primary/40 bg-primary/10 text-primary' : 'text-muted-foreground hover:text-foreground',
+        )}
+      >
+        fx
+      </button>
+      {current.expression ? (
+        <Textarea
+          id={id}
+          value={current.value}
+          rows={1}
+          placeholder={field.placeholder}
+          spellCheck={false}
+          className="min-h-8 py-1.5 font-mono"
+          onChange={event => onChange({ ...current, value: event.target.value })}
+        />
+      ) : (
+        <Input id={id} value={current.value} onChange={event => onChange({ ...current, value: event.target.value })} />
+      )}
+    </div>
+  );
+}
+
+/** a list (a Mapper's fields, a Router's cases): one row per item, its settings side by side; add, remove, reorder */
+function ListSetting({ id, field, items, onChange }: { id: string; field: SettingField; items: Values[]; onChange: (items: Values[]) => void }) {
+  const itemFields = field.item ?? [];
+  const columns = { gridTemplateColumns: itemFields.map(f => ({ text: 'minmax(0, 2fr)', select: 'minmax(0, 1.5fr)', number: 'minmax(0, 1fr)', boolean: 'auto' })[f.kind as string] ?? 'minmax(0, 3fr)').join(' ') + ' auto' };
+  const set = (index: number, item: Values) => onChange(items.map((current, i) => (i === index ? item : current)));
+  const move = (index: number, by: number) => {
+    const next = [...items];
+    const [item] = next.splice(index, 1);
+    next.splice(index + by, 0, item as Values);
+    onChange(next);
+  };
+
+  return (
+    <fieldset className="grid gap-1.5">
+      <legend className="mb-1.5 text-sm leading-none font-medium">{field.label}</legend>
+      {items.length > 0 && (
+        <div className="grid gap-1.5 text-xs text-muted-foreground" style={columns} aria-hidden>
+          {itemFields.map(f => (
+            <span key={f.key}>{f.label}</span>
+          ))}
+          <span className="w-[4.5rem]" />
+        </div>
+      )}
+      {items.map((item, index) => (
+        <div key={index} role="group" aria-label={`${field.itemLabel ?? 'item'} ${index + 1}`} className="grid items-start gap-1.5" style={columns}>
+          {itemFields.map(f =>
+            settingVisible(f, item, itemFields) ? (
+              <Control
+                key={f.key}
+                id={`${id}-${index}-${f.key}`}
+                field={f}
+                value={settingValue(f, item)}
+                onChange={value => set(index, withSetting(f, item, value))}
+              />
+            ) : (
+              <span key={f.key} />
+            ),
+          )}
+          <div className="flex h-8 items-center">
+            <IconButton label="Move up" disabled={index === 0} onClick={() => move(index, -1)}>
+              <ArrowUp />
+            </IconButton>
+            <IconButton label="Move down" disabled={index === items.length - 1} onClick={() => move(index, 1)}>
+              <ArrowDown />
+            </IconButton>
+            <IconButton label={`Remove ${field.itemLabel ?? 'item'}`} onClick={() => onChange(items.filter((_, i) => i !== index))}>
+              <Trash />
+            </IconButton>
+          </div>
+        </div>
+      ))}
+      <Button variant="outline" size="sm" className="justify-self-start" onClick={() => onChange([...items, settingsDefaults(itemFields)])}>
+        <Plus /> Add {field.itemLabel ?? 'item'}
+      </Button>
+    </fieldset>
+  );
+}
+
+function IconButton({ label, disabled, onClick, children }: { label: string; disabled?: boolean; onClick: () => void; children: ReactNode }) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      title={label}
+      disabled={disabled}
+      onClick={onClick}
+      className="flex size-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:pointer-events-none disabled:opacity-30 [&_svg]:size-3.5"
+    >
+      {children}
+    </button>
+  );
+}

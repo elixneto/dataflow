@@ -9,7 +9,7 @@ const bytea = customType<{ data: Bytes; driverData: Uint8Array }>({
   fromDriver: value => new Uint8Array(value),
 });
 
-/** follows migrations 1_initial.sql and 4_secrets_variables_connections.sql; the value only as AES-256-GCM ciphertext */
+/** follows migrations/1_initial.sql; the value only as AES-256-GCM ciphertext */
 export const secrets = pgTable('secrets', {
   id: uuid('id').primaryKey(),
   orgId: uuid('org_id').notNull().references(() => organizations.id),

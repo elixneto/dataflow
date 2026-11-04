@@ -1,10 +1,10 @@
 import {expect, test} from 'bun:test';
-import {workflowRunner} from '../../src/index';
-import type {ExecutableWorkflow} from '../../src/index';
+import {flowRunner} from '../../src/index';
+import type {ExecutableFlow} from '../../src/index';
 import {evaluate, mapperFlow} from '../helpers';
 
 test('mapper concatenates a parameter with startedAt', async () => {
-  const r = await workflowRunner(mapperFlow, {mode: 'validation', id: 'test', evaluate, parameterValues: {prefix: 'ABC'}});
+  const r = await flowRunner(mapperFlow, {mode: 'validation', id: 'test', evaluate, parameterValues: {prefix: 'ABC'}});
   expect(r.status).toBe('completed');
   const m = r.components.find(c => c.nodeId === 'm')!;
   expect(m.inputs['in-0']).toBe(1);
@@ -16,8 +16,8 @@ test('mapper concatenates a parameter with startedAt', async () => {
 });
 
 test('mapper writes directly into the envelope and the next one sees it', async () => {
-  const twoMappers: ExecutableWorkflow = {
-    project: 'Test', workflow: 'Two mappers', parameters: [],
+  const twoMappers: ExecutableFlow = {
+    project: 'Test', flow: 'Two mappers', parameters: [],
     nodes: [
       {id: 'start', type: 'start', label: 'Start', config: {}},
       {id: 'm1', type: 'mapper', label: 'Mapper 1', config: {fields: [{target: 'field', value: 'PINEAPPLE', expression: false}]}},
@@ -30,12 +30,12 @@ test('mapper writes directly into the envelope and the next one sees it', async 
       {source: 'm2', sourcePort: 'out-0', target: 'end', targetPort: 'in-0'},
     ],
   };
-  const r = await workflowRunner(twoMappers, {mode: 'validation', id: 't4', evaluate});
+  const r = await flowRunner(twoMappers, {mode: 'validation', id: 't4', evaluate});
   expect(r.status).toBe('completed');
   expect(r.components.find(c => c.nodeId === 'm2')!.outputSample['out-0'][0]).toEqual({field: 'PINEAPPLE', otherField: 'PINEAPPLE 123'});
 
   // Override on the second one: only what it mapped
   twoMappers.nodes[2].override = true;
-  const r2 = await workflowRunner(twoMappers, {mode: 'validation', id: 't5', evaluate});
+  const r2 = await flowRunner(twoMappers, {mode: 'validation', id: 't5', evaluate});
   expect(r2.components.find(c => c.nodeId === 'm2')!.outputSample['out-0'][0]).toEqual({otherField: 'PINEAPPLE 123'});
 });

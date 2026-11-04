@@ -16,6 +16,7 @@ export const filter: ComponentLogic = {
   outputs: 2,
   outputLabels: ['true', 'false'],
   optionalOutputs: ['out-1'],
+  settings: [{key: 'condition', label: 'Condition', kind: 'expression', required: true, placeholder: '$price > 10'}],
 
   validate(config) {
     return filterCondition(config).trim() ? [] : ['has no condition.'];

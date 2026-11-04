@@ -1,3 +1,4 @@
+import {connectionIssues, connectionSettings, connectionUse} from '../connections/connection-access';
 import {withKey} from '#envelope/envelope-data';
 import {toError} from '#errors/normalize-error';
 import type {ComponentLogic} from '#types/component-logic.type';
@@ -6,7 +7,7 @@ import type {ExpressionField} from '#types/expression-field.type';
 import type {HttpResponse} from '#types/http-response.type';
 
 /**
- * HTTP Request: one request per envelope (method, URL, query params, headers and body are expressions on it; $SECRETS
+ * HTTP Request: one request per envelope (the authentication from a project's API connection, or set in the component) (method, URL, query params, headers and body are expressions on it; $SECRETS
  * works, e.g. `'Bearer ' + $SECRETS.TOKEN`), and the envelope goes on with `{status, headers, body}` in its output key
  * (the body parsed when the response is JSON). With "Fail on non-2xx", an error status is an error of the envelope.
  * A GET only reads; POST, PUT, PATCH and DELETE write, so in a test run they send nothing and the envelope goes on with
@@ -63,10 +64,33 @@ export const httpRequest: ComponentLogic = {
   outputs: 1,
   defaultOutputKey: 'response',
   sideEffects: httpWrites,
+  settings: [
+    ...connectionSettings('http-client'),
+    {key: 'method', label: 'Method', kind: 'select', default: 'GET', options: HTTP_METHODS.map(m => ({value: m, label: m}))},
+    {key: 'url', label: 'URL', kind: 'value', required: true, default: {value: '', expression: false}, placeholder: 'https://api.example.com/orders'},
+    {
+      key: 'query', label: 'Query params', kind: 'list', itemLabel: 'param',
+      item: [
+        {key: 'name', label: 'Name', kind: 'text', required: true},
+        {key: 'value', label: 'Value', kind: 'value', spread: true, default: {value: '', expression: false}},
+      ],
+    },
+    {
+      key: 'headers', label: 'Headers', kind: 'list', itemLabel: 'header',
+      item: [
+        {key: 'name', label: 'Name', kind: 'text', required: true, placeholder: 'Accept'},
+        {key: 'value', label: 'Value', kind: 'value', spread: true, default: {value: '', expression: false}},
+      ],
+    },
+    {key: 'body', label: 'Body', kind: 'value', default: {value: '', expression: true}, placeholder: '$DATA', when: {key: 'method', values: ['POST', 'PUT', 'PATCH', 'DELETE']}},
+    {key: 'timeoutS', label: 'Timeout (seconds)', kind: 'number', default: DEFAULT_HTTP_TIMEOUT_S, min: 1},
+    {key: 'concurrency', label: 'Requests at once', kind: 'number', default: 1, min: 1, max: MAX_HTTP_CONCURRENCY},
+    {key: 'failOnError', label: 'Fail on non-2xx', kind: 'boolean', default: true},
+  ],
 
   validate(config) {
     const {url, query, headers} = httpConfig(config);
-    const issues: string[] = [];
+    const issues: string[] = [...connectionIssues('http-client', config)];
     if (!url.value.trim()) issues.push('has no URL.');
     else if (!url.expression && !/^https?:\/\//i.test(url.value.trim())) issues.push('has a URL that does not start with http:// or https://.');
     query.forEach((p, i) => p.name?.trim() || issues.push(`query param ${i + 1} has no name.`));
@@ -79,6 +103,7 @@ export const httpRequest: ComponentLogic = {
 
   async* execute(inputs, config, ctx) {
     const {method, url, query, headers, body, timeoutS, concurrency, failOnError} = httpConfig(config);
+    const auth = connectionUse('http-client', config);
     const key = ctx.node.outputKey || 'response';
     const counts = {ok: 0, client: 0, server: 0, other: 0, errors: 0, notSent: 0};
     const t0 = performance.now();
@@ -107,7 +132,7 @@ export const httpRequest: ComponentLogic = {
             }
           }
         }
-        const response = await ctx.sendHttp({method, url: target, headers: sentHeaders, body: sentBody, timeoutMs: timeoutS * 1000});
+        const response = await ctx.sendHttp({method, url: target, headers: sentHeaders, body: sentBody, timeoutMs: timeoutS * 1000, auth});
         return {doc, response, request: {method, url: target}};
       } catch (e) {
         return {doc, error: toError(e)};

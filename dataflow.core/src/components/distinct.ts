@@ -18,6 +18,9 @@ export const distinct: ComponentLogic = {
   outputs: 2,
   outputLabels: ['unique', 'duplicates'],
   optionalOutputs: ['out-1'],
+  settings: [
+    {key: 'keys', label: 'Keys', kind: 'list', itemLabel: 'key', flat: true, item: [{key: 'key', label: 'Key', kind: 'expression', required: true, placeholder: '$email'}]},
+  ],
 
   validate(config) {
     const issues: string[] = [];

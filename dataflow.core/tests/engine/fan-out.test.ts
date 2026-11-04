@@ -1,11 +1,11 @@
 import {expect, test} from 'bun:test';
-import {workflowRunner} from '../../src/index';
-import type {ExecutableWorkflow} from '../../src/index';
+import {flowRunner} from '../../src/index';
+import type {ExecutableFlow} from '../../src/index';
 import {evaluate} from '../helpers';
 
 test('an output with several edges sends each envelope to every path, and one path does not touch the other', async () => {
-  const fanOut: ExecutableWorkflow = {
-    project: 'Test', workflow: 'Fan out', parameters: [],
+  const fanOut: ExecutableFlow = {
+    project: 'Test', flow: 'Fan out', parameters: [],
     nodes: [
       {id: 'start', type: 'start', label: 'Start', config: {acceptsInput: true}},
       {id: 'x', type: 'limit', label: 'All', config: {count: 100}},
@@ -29,7 +29,7 @@ test('an output with several edges sends each envelope to every path, and one pa
     (input as {person: {name: string}}).person.name = 'CHANGED';
     return input;
   };
-  const r = await workflowRunner(fanOut, {
+  const r = await flowRunner(fanOut, {
     mode: 'execution', id: 'fan-out', evaluate, prepareScript, input: [{person: {name: 'ana'}}, {person: {name: 'bia'}}],
   });
   expect(r.status).toBe('completed');
@@ -44,8 +44,8 @@ test('an output with several edges sends each envelope to every path, and one pa
 });
 
 test('an input with several edges joins the paths, in arrival order, and ends when all of them end', async () => {
-  const fanIn: ExecutableWorkflow = {
-    project: 'Test', workflow: 'Fan in', parameters: [],
+  const fanIn: ExecutableFlow = {
+    project: 'Test', flow: 'Fan in', parameters: [],
     nodes: [
       {id: 'start', type: 'start', label: 'Start', config: {acceptsInput: true}},
       {id: 'f', type: 'filter', label: 'Filter', config: {condition: '$price > 10'}},
@@ -59,7 +59,7 @@ test('an input with several edges joins the paths, in arrival order, and ends wh
       {source: 'sort', sourcePort: 'out-0', target: 'end', targetPort: 'in-0'},
     ],
   };
-  const r = await workflowRunner(fanIn, {mode: 'execution', id: 'fan-in', evaluate, input: [{price: 5}, {price: 20}, {price: 30}, {price: 0}]});
+  const r = await flowRunner(fanIn, {mode: 'execution', id: 'fan-in', evaluate, input: [{price: 5}, {price: 20}, {price: 30}, {price: 0}]});
   expect(r.status).toBe('completed');
   const sort = r.components.find(x => x.nodeId === 'sort')!;
   expect(sort.inputs['in-0']).toBe(4);

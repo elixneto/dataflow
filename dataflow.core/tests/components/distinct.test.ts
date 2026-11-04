@@ -1,10 +1,10 @@
 import {expect, test} from 'bun:test';
-import {workflowRunner} from '../../src/index';
-import type {ExecutableWorkflow} from '../../src/index';
+import {flowRunner} from '../../src/index';
+import type {ExecutableFlow} from '../../src/index';
 import {evaluate} from '../helpers';
 
-const flow = (keys: string[], withDuplicates = true): ExecutableWorkflow => ({
-  project: 'Test', workflow: 'Distinct', parameters: [],
+const flow = (keys: string[], withDuplicates = true): ExecutableFlow => ({
+  project: 'Test', flow: 'Distinct', parameters: [],
   nodes: [
     {id: 'start', type: 'start', label: 'Start', config: {acceptsInput: true}},
     {id: 'd', type: 'distinct', label: 'Distinct', config: {keys}},
@@ -26,7 +26,7 @@ const people = [
 ];
 
 test('Distinct lets the first envelope of each key through and sends the repeated ones to duplicates', async () => {
-  const r = await workflowRunner(flow(['$email']), {mode: 'execution', id: 'd1', evaluate, input: people});
+  const r = await flowRunner(flow(['$email']), {mode: 'execution', id: 'd1', evaluate, input: people});
   expect(r.status).toBe('completed');
   const d = r.components.find(c => c.nodeId === 'd')!;
   expect(d.outputSample['out-0'].map(p => p.n)).toEqual([1, 2, 4]);
@@ -35,13 +35,13 @@ test('Distinct lets the first envelope of each key through and sends the repeate
   expect(d.memory?.peakEnvelopes).toBe(3);
 
   // more than one key: all of them make the combination
-  const byTwo = await workflowRunner(flow(['$email', '$city']), {mode: 'execution', id: 'd2', evaluate, input: people});
+  const byTwo = await flowRunner(flow(['$email', '$city']), {mode: 'execution', id: 'd2', evaluate, input: people});
   expect(byTwo.components.find(c => c.nodeId === 'd')!.outputSample['out-0'].map(p => p.n)).toEqual([1, 2, 3, 4]);
 });
 
 test('Distinct without keys compares the whole DATA, as JSON, and drops the duplicates when unconnected', async () => {
   const input = [{a: 1, b: {c: 2}}, {a: '1', b: {c: 2}}, {a: 1, b: {c: 2}}, {a: 1}];
-  const r = await workflowRunner(flow([], false), {mode: 'execution', id: 'd3', evaluate, input});
+  const r = await flowRunner(flow([], false), {mode: 'execution', id: 'd3', evaluate, input});
   expect(r.status).toBe('completed');
   const d = r.components.find(c => c.nodeId === 'd')!;
   expect(d.outputSample['out-0']).toEqual([{a: 1, b: {c: 2}}, {a: '1', b: {c: 2}}, {a: 1}]);
@@ -49,6 +49,6 @@ test('Distinct without keys compares the whole DATA, as JSON, and drops the dupl
 });
 
 test('Distinct with a failing key is an error of the envelope', async () => {
-  const r = await workflowRunner(flow(['$missing.x']), {mode: 'execution', id: 'd4', evaluate, input: people});
+  const r = await flowRunner(flow(['$missing.x']), {mode: 'execution', id: 'd4', evaluate, input: people});
   expect(r.status).toBe('failed');
 });

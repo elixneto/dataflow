@@ -1,3 +1,4 @@
+import {connectionIssues, connectionSettings, connectionUse} from '../connections/connection-access';
 import {toError} from '#errors/normalize-error';
 import {mergeFields} from '#envelope/envelope-data';
 import type {ExpressionField} from '#types/expression-field.type';
@@ -9,7 +10,7 @@ import {serverTimed} from './server-timed';
  * columns written into DATA (like the Data Grid; Override = only the columns). Runs once for each incoming envelope
  * (usually the only one the Start yields). E.g.: reading the orders of an ERP.
  *
- * The connection is the name of a secret holding the connection string (it never shows in the flow or in the logs). The `@name`s of
+ * The connection is a project profile or the component's own fields, the password a secret (it never shows in the flow or in the logs). The `@name`s of
  * the query are parameters with an expression evaluated on the incoming envelope, sent to the database as parameters (never
  * pasted into the text). Read-only in three layers: here only SELECT/WITH gets through (see `sqlServerReadOnlyIssue`),
  * and the runner runs it inside a transaction that always rolls back, with ApplicationIntent=ReadOnly.
@@ -102,11 +103,22 @@ export const sqlserver: ComponentLogic = {
   type: 'sqlserver',
   inputs: 1,
   outputs: 1,
+  settings: [
+    ...connectionSettings('sqlserver'),
+    {key: 'sql', label: 'Query', kind: 'code', language: 'sql', required: true, placeholder: 'SELECT id, name FROM Customer WHERE id > @since'},
+    {
+      key: 'parameters', label: 'Parameters', kind: 'list', itemLabel: 'parameter',
+      item: [
+        {key: 'name', label: 'Name', kind: 'text', required: true, placeholder: 'since'},
+        {key: 'value', label: 'Value', kind: 'value', spread: true, default: {value: '', expression: true}, placeholder: '$PARAMETERS.since'},
+      ],
+    },
+    {key: 'timeoutS', label: 'Timeout (seconds)', kind: 'number', default: DEFAULT_SQL_SERVER_TIMEOUT_S, min: 1},
+  ],
 
   validate(config) {
-    const {connection, sql, parameters} = sqlServerConfig(config);
-    const issues: string[] = [];
-    if (!connection.trim()) issues.push('has no connection (name of the secret holding the connection string).');
+    const {sql, parameters} = sqlServerConfig(config);
+    const issues: string[] = [...connectionIssues('sqlserver', config)];
     const issue = sqlServerReadOnlyIssue(sql);
     if (issue) issues.push(`${issue}.`);
     const names = new Set<string>();
@@ -122,7 +134,8 @@ export const sqlserver: ComponentLogic = {
   },
 
   async* execute(inputs, config, ctx) {
-    const {connection, sql, parameters, timeoutS} = sqlServerConfig(config);
+    const {sql, parameters, timeoutS} = sqlServerConfig(config);
+    const connection = connectionUse('sqlserver', config);
     const issue = sqlServerReadOnlyIssue(sql);
     if (issue) throw new Error(`The query ${issue}.`);
     let queries = 0;
@@ -135,7 +148,7 @@ export const sqlserver: ComponentLogic = {
       try {
         const values = Object.fromEntries(parameters.map(p => [p.name, ctx.fieldValue(p, doc)]));
         // waiting for the database is not active time
-        const query = serverTimed(ctx.queryDatabase('sqlserver', {secret: connection, sql, parameters: values, timeoutMs: timeoutS * 1000}), ms => { server += ms; });
+        const query = serverTimed(ctx.queryDatabase('sqlserver', {connection, sql, parameters: values, timeoutMs: timeoutS * 1000}), ms => { server += ms; });
         for await (const row of ctx.waitEach(query)) {
           thisQuery += 1;
           yield {port: 'out-0', doc: mergeFields(doc, row, ctx.node.override)};

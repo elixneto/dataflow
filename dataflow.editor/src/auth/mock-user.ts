@@ -13,11 +13,11 @@ export type CurrentUser = {
 };
 
 export const mockUser: CurrentUser = {
-  // the organization the api creates on start in DEV (dataflow.server/shared/database/seed-dev.ts: keep both the same)
+  // the organization and user the api creates on start in DEV (dataflow.server/shared/database/seed-dev.ts: keep both the same)
   orgId: '00000000-0000-4000-8000-000000000001',
-  id: 'ana',
-  name: 'Ana Silva',
-  email: 'ana@example.com',
+  id: '00000000-0000-4000-8000-000000000002',
+  name: 'Dev',
+  email: 'dev@example.com',
 };
 
 /** placeholder: there is no session to end yet */

@@ -3,7 +3,7 @@ import { organizations } from '#features/organizations/organization';
 import { projects } from '#features/projects/project';
 
 /**
- * Follows migrations/4_secrets_variables_connections.sql. The config holds the fields of the type (@dataflow/core
+ * Follows migrations/1_initial.sql. The config holds the fields of the type (@dataflow/core
  * connection-types); its sensitive fields name secrets of the project, never a value.
  */
 export const connections = pgTable('connections', {

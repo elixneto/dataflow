@@ -16,7 +16,7 @@ import {split} from './split';
 import {sort} from './sort';
 import {sqlserver} from './sqlserver';
 import {typescript} from './typescript';
-import {workflowInvoker} from './workflow';
+import {flowInvoker} from './flow';
 
 /** Logic of each component, by type. New component = add it here (and its visual part in the editor). */
 export const COMPONENTS: Record<string, ComponentLogic> = {
@@ -36,6 +36,6 @@ export const COMPONENTS: Record<string, ComponentLogic> = {
   [mongodbUpsert.type]: mongodbUpsert,
   [mongodbDelete.type]: mongodbDelete,
   [httpRequest.type]: httpRequest,
-  [workflowInvoker.type]: workflowInvoker,
+  [flowInvoker.type]: flowInvoker,
   [log.type]: log,
 };

@@ -1,3 +1,4 @@
+import {connectionIssues, connectionSettings, connectionUse, usesProfile} from '../connections/connection-access';
 import {withKey} from '#envelope/envelope-data';
 import {isDate} from '#envelope/dates';
 import {toError} from '#errors/normalize-error';
@@ -64,12 +65,26 @@ export const mongodbUpsert: ComponentLogic = {
   outputs: 1,
   defaultOutputKey: 'mongodb',
   sideEffects: true,
+  settings: [
+    ...connectionSettings('mongodb'),
+    {key: 'database', label: 'Database', kind: 'text', placeholder: 'From the connection'},
+    {key: 'collection', label: 'Collection', kind: 'text', required: true},
+    {
+      key: 'filter', label: 'Match on', kind: 'list', itemLabel: 'field', required: true,
+      item: [
+        {key: 'field', label: 'Field', kind: 'text', required: true, placeholder: 'email'},
+        {key: 'value', label: 'Value', kind: 'value', spread: true, default: {value: '', expression: true}, placeholder: '$email'},
+      ],
+    },
+    {key: 'source', label: 'Document', kind: 'select', default: 'data', options: [{value: 'data', label: 'The whole DATA'}, {value: 'expression', label: 'An expression'}]},
+    {key: 'document', label: 'Expression', kind: 'value', default: {value: '', expression: true}, when: {key: 'source', values: ['expression']}},
+    {key: 'batchSize', label: 'Batch size', kind: 'number', default: DEFAULT_MONGODB_BATCH_SIZE, min: 1, max: MAX_MONGODB_BATCH_SIZE},
+  ],
 
   validate(config) {
-    const {connection, database, collection, filter, source, document} = mongoUpsertConfig(config);
-    const issues: string[] = [];
-    if (!connection.trim()) issues.push('has no connection (name of the secret holding the connection string).');
-    if (!database.trim()) issues.push('has no database.');
+    const {database, collection, filter, source, document} = mongoUpsertConfig(config);
+    const issues: string[] = [...connectionIssues('mongodb', config)];
+    if (!database.trim() && !usesProfile('mongodb', config)) issues.push('has no database.');
     if (!collection.trim()) issues.push('has no collection.');
     if (filter.length === 0) issues.push('has no filter field (what finds the document to update).');
     const fields = new Set<string>();
@@ -85,7 +100,8 @@ export const mongodbUpsert: ComponentLogic = {
   },
 
   async* execute(inputs, config, ctx) {
-    const {connection, database, collection, filter, source, document, batchSize} = mongoUpsertConfig(config);
+    const {database, collection, filter, source, document, batchSize} = mongoUpsertConfig(config);
+    const connection = connectionUse('mongodb', config);
     const key = ctx.node.outputKey || 'mongodb';
     let batch: {doc: Envelope; upsert: DocumentUpsert}[] = [];
     let written = 0;
@@ -118,7 +134,7 @@ export const mongodbUpsert: ComponentLogic = {
       let answer;
       const t0 = performance.now();
       try {
-        answer = await ctx.upsertDocuments('mongodb', {secret: connection, database, collection, upserts: current.map(b => b.upsert)});
+        answer = await ctx.upsertDocuments('mongodb', {connection, database, collection, upserts: current.map(b => b.upsert)});
       } catch (e) {
         // the whole batch failed (connection, authentication): each of its envelopes goes to the error policy
         failed += current.length;
