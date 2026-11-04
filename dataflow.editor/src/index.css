@@ -139,6 +139,27 @@
 /* React Flow's own background follows the canvas color */
 .react-flow {
     --xy-background-color: var(--canvas);
+    /* the box drawn while selecting with the mouse, and around a selection of several (as in the PoC) */
+    --xy-selection-background-color: color-mix(in oklch, var(--primary) 10%, transparent);
+    --xy-selection-border: 1px dashed var(--primary);
+}
+
+/*
+ * A group (group-node.tsx) draws its own rectangle: React Flow's default look for a 'group' node (dark border, padding,
+ * background, the selection shadow) goes. Two classes, as its stylesheet loads after this one.
+ */
+.react-flow .react-flow__node-group,
+.react-flow .react-flow__node-group.selected,
+.react-flow .react-flow__node-group.selectable:hover,
+.react-flow .react-flow__node-group.selectable.selected,
+.react-flow .react-flow__node-group:focus,
+.react-flow .react-flow__node-group:focus-visible {
+    padding: 0;
+    border: none;
+    border-radius: 0.75rem;
+    background: transparent;
+    box-shadow: none;
+    outline: none;
 }
 
 /* the edges between ports, as in the PoC: a dashed curve; selected (or focused) and while running, in the primary color */
