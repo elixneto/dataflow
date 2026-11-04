@@ -1,1 +1,0 @@
-Worker process entrypoint (Bun.spawn with ipc), started and managed by the supervisor. Executes one run at a time: receives it, calls flowRunner from @dataflow/core and returns the RunRecord.

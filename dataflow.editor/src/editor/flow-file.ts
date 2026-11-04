@@ -22,7 +22,7 @@ export function canvasToFlowFile(flow: { id?: string; name: string }, nodes: Nod
           config: data.config,
           ...(data.outputKey ? { outputKey: data.outputKey } : {}),
           ...(data.disabled ? { disabled: true } : {}),
-          ...(data.pinned ? { pinned: true } : {}),
+          ...(data.pinned ? { pinned: data.pinned } : {}),
           ...(data.notes ? { notes: data.notes } : {}),
         };
       }),
@@ -66,7 +66,8 @@ export function flowFileToCanvas(file: FlowFile): { nodes: (ComponentNode | Grou
       ...(n.label ? { label: n.label } : {}),
       ...(n.outputKey ? { outputKey: n.outputKey } : {}),
       ...(n.disabled ? { disabled: true } : {}),
-      ...(n.pinned ? { pinned: true } : {}),
+      // a pin keeps its envelopes per port; a bare `true` of earlier versions had none: not pinned
+      ...(n.pinned && typeof n.pinned === 'object' ? { pinned: n.pinned } : {}),
       ...(n.notes ? { notes: n.notes } : {}),
     },
   }));

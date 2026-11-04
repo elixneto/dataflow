@@ -7,7 +7,7 @@ import { parseKeys, type KeyEntry } from '../crypto/keyring';
  */
 
 export type AppSettings = {
-  /** Postgres connection; undefined = embedded PGlite in dataflow.server/data.local/, 'memory://' = PGlite in memory (tests) */
+  /** Postgres connection (docker-compose.yml in development); 'memory://' = PGlite in memory (tests); required to start */
   databaseUrl?: string;
   /** name of this instance's environment, e.g. DEV, STAGING, PRODUCTION */
   environment: string;

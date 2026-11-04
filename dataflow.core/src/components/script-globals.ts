@@ -8,11 +8,15 @@ import type {FlowParameter} from '#types/flow-parameter.type';
 
 const TS_TYPE = {text: 'string', number: 'number', boolean: 'boolean'} as const;
 
-/** the globals with $PARAMETERS typed from the flow's own parameters (its Start): autocomplete for their names */
-export function scriptGlobals(parameters: FlowParameter[] = []): string {
-  if (parameters.length === 0) return SCRIPT_GLOBALS;
+/**
+ * the globals with $PARAMETERS typed from the flow's own parameters (its Start) and, when known, `Data` (what reaches
+ * the component, from the runs: dataTypeFromSamples): autocomplete for their names
+ */
+export function scriptGlobals(parameters: FlowParameter[] = [], dataType?: string): string {
+  const globals = dataType ? SCRIPT_GLOBALS.replace('type Data = Record<string, any>', `type Data = ${dataType}`) : SCRIPT_GLOBALS;
+  if (parameters.length === 0) return globals;
   const typed = parameters.filter(p => p.name).map(p => `  ${JSON.stringify(p.name)}: ${TS_TYPE[p.type]}`).join('\n');
-  return SCRIPT_GLOBALS.replace('declare const $PARAMETERS: Record<string, string | number | boolean>', `declare const $PARAMETERS: {\n${typed}\n}`);
+  return globals.replace('declare const $PARAMETERS: Record<string, string | number | boolean>', `declare const $PARAMETERS: {\n${typed}\n}`);
 }
 
 export const SCRIPT_GLOBALS = `

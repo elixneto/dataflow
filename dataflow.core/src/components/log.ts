@@ -3,8 +3,8 @@ import type {ComponentLogic} from '#types/component-logic.type';
 import type {LogLevel} from '#types/log-level.type';
 
 /**
- * Log: for each envelope, evaluates a message (an expression on the envelope) and records it, in the run's log of the
- * component and on the runner's console (console.debug/info/warn/error, with the flow and the component). The envelope
+ * Log: for each envelope, evaluates a message (an expression on the envelope) and records it in the run's log of the
+ * component (only there: never on the console of whoever runs it, the core writes nothing to the console). The envelope
  * goes on unchanged. `debug` only in editor test runs: in a real run (Run for real, and the scheduled runs of a
  * published flow) a debug Log only passes the envelopes on. A message that fails is an error of the envelope.
  */
@@ -53,7 +53,6 @@ export const log: ComponentLogic = {
     const {level, message} = logConfig(config);
     // debug is a test-run aid: a real run does not record it
     const silent = level === 'debug' && ctx.run.mode === 'execution';
-    const where = `[${ctx.run.flow} / ${ctx.node.label}]`;
     let lines = 0;
     for await (const doc of inputs['in-0'] ?? []) {
       if (!silent) {
@@ -61,7 +60,6 @@ export const log: ComponentLogic = {
           const line = text(ctx.fieldValue({value: message, expression: true}, doc));
           lines += 1;
           if (lines <= MAX_LOG_LINES) ctx.log(RUN_LEVEL[level], line);
-          console[level](`${where} ${line}`);
         } catch (e) {
           yield {error: toError(e), doc};
           continue;

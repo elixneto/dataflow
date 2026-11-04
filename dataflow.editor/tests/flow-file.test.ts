@@ -7,7 +7,7 @@ import { draftFingerprint } from '../src/editor/flow-save';
 describe("the canvas as the core's flow file (Download)", () => {
   const nodes: Node[] = [
     { id: 'start', type: 'component', position: { x: 0, y: 0 }, data: { type: 'start', config: { parameters: [{ name: 'since', type: 'number', default: '1' }] } } },
-    { id: 'm', type: 'component', position: { x: 160, y: 16 }, data: { type: 'mapper', config: { fields: [], onError: 'divert' }, label: ' Prices ', pinned: true, notes: 'n' } },
+    { id: 'm', type: 'component', position: { x: 160, y: 16 }, data: { type: 'mapper', config: { fields: [], onError: 'divert' }, label: ' Prices ', pinned: { 'out-0': [{ a: 1 }] }, notes: 'n' } },
     { id: 'end', type: 'component', position: { x: 320, y: 0 }, data: { type: 'end', config: {} } },
     { id: 'g', type: 'group', position: { x: -32, y: -48 }, measured: { width: 500, height: 200 }, data: { title: 'Read', color: '#3b82f6' } },
   ];
@@ -19,7 +19,7 @@ describe("the canvas as the core's flow file (Download)", () => {
   test('components with their config and place, edges with their ports (the error port too), groups with their size', () => {
     const file = canvasToFlowFile({ id: 'f1', name: 'Prices' }, nodes, edges);
     expect(file.nodes.map(n => n.id)).toEqual(['start', 'm', 'end']);
-    expect(file.nodes[1]).toEqual({ id: 'm', type: 'mapper', label: 'Prices', position: { x: 160, y: 16 }, config: { fields: [], onError: 'divert' }, pinned: true, notes: 'n' });
+    expect(file.nodes[1]).toEqual({ id: 'm', type: 'mapper', label: 'Prices', position: { x: 160, y: 16 }, config: { fields: [], onError: 'divert' }, pinned: { 'out-0': [{ a: 1 }] }, notes: 'n' });
     expect(file.edges[1]).toEqual({ source: 'm', sourcePort: 'error', target: 'end', targetPort: 'in-0' });
     expect(file.groups).toEqual([{ id: 'g', title: 'Read', color: '#3b82f6', position: { x: -32, y: -48 }, size: { width: 500, height: 200 } }]);
   });
@@ -45,4 +45,12 @@ describe("the canvas as the core's flow file (Download)", () => {
     const moved = nodes.map(n => (n.id === 'm' ? { ...n, position: { x: 200, y: 16 } } : n));
     expect(draftFingerprint(canvasToFlowFile({ id: 'f1', name: 'Prices' }, moved, edges))).not.toBe(draftFingerprint(file));
   });
+});
+
+test('a pin of earlier versions (a bare `true`, no envelopes) loads as not pinned', async () => {
+  const { flowFileToCanvas } = await import('../src/editor/flow-file');
+  const { newFlowFile } = await import('@dataflow/core');
+  const file = { ...newFlowFile('Old'), nodes: [...newFlowFile('Old').nodes, { id: 'h', type: 'http-request', position: { x: 0, y: 0 }, config: {}, pinned: true as never }] };
+  const canvas = flowFileToCanvas(file);
+  expect((canvas.nodes.find(n => n.id === 'h')!.data as { pinned?: unknown }).pinned).toBeUndefined();
 });

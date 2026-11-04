@@ -1,4 +1,4 @@
-import { useContext, useEffect, useState } from 'react';
+import { useCallback, useContext, useEffect, useRef, useState } from 'react';
 import Editor, { loader } from '@monaco-editor/react';
 import * as monaco from 'monaco-editor';
 import editorWorker from 'monaco-editor/editor/editor.worker?worker';
@@ -38,13 +38,19 @@ export type CodeLanguage = keyof typeof EXTENSION;
  * Code: TypeScript with the runner's globals (autocomplete, errors), JavaScript, SQL or JSON highlighted; follows the
  * light/dark theme.
  */
-export default function CodeEditor({ id, value, language, label, onChange }: { id: string; value: string; language: CodeLanguage; label: string; onChange: (value: string) => void }) {
+export default function CodeEditor(props: { id: string; nodeId?: string; value: string; language: CodeLanguage; label: string; onChange: (value: string) => void }) {
+  const { id, nodeId, value, language, label, onChange } = props;
   const [dark, setDark] = useState(isDark);
   // the runner's globals ($PARAMETERS typed from this flow's Start, $SECRETS, $VARIABLES, $FLOW_CURRENT_RUN, log), from the core
-  const globals = useContext(ScriptGlobalsContext);
+  // and its `Data`, what reached this component in the runs: one set of globals at a time in Monaco, so the editor in
+  // use (mounted, focused) puts its own
+  const globals = useContext(ScriptGlobalsContext)(nodeId);
+  const latest = useRef(globals);
+  const apply = useCallback(() => ts.typescriptDefaults.setExtraLibs([{ content: latest.current, filePath: 'file:///dataflow-globals.d.ts' }]), []);
   useEffect(() => {
-    ts.typescriptDefaults.setExtraLibs([{ content: globals, filePath: 'file:///dataflow-globals.d.ts' }]);
-  }, [globals]);
+    latest.current = globals;
+    apply();
+  }, [globals, apply]);
   useEffect(() => {
     const observer = new MutationObserver(() => setDark(isDark()));
     observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
@@ -60,6 +66,9 @@ export default function CodeEditor({ id, value, language, label, onChange }: { i
         value={value}
         theme={dark ? 'vs-dark' : 'light'}
         onChange={next => onChange(next ?? '')}
+        onMount={editor => {
+          editor.onDidFocusEditorText(apply);
+        }}
         options={{
           minimap: { enabled: false },
           fontSize: 12,

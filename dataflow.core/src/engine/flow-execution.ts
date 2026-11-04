@@ -8,7 +8,8 @@ import {flowOrder} from '#engine/flow-order';
 import {errorPolicy, withError} from '#engine/error-envelope';
 import {mergeSources} from '#engine/merge-sources';
 import {ERROR_PORT} from '#validation/ports';
-import {componentContext} from '#engine/component-context';
+import {componentContext, hiddenValues, maskText} from '#engine/component-context';
+import {skippedNodes} from '#engine/run-from';
 import {RunInterrupted} from '#errors/run-interrupted';
 import type {ComponentRun} from '#types/component-run.type';
 import type {Envelope} from '#types/envelope.type';
@@ -18,8 +19,11 @@ import type {ExecutableFlow} from '#types/executable-flow.type';
 import type {LogLevel} from '#types/log-level.type';
 import type {ParameterValue} from '#types/parameter.type';
 import type {RunOptions} from '#types/run-options.type';
-import type {RunRecord} from '#types/run-record.type';
+import type {RunProgress, RunRecord} from '#types/run-record.type';
 import type {FlowCurrentRun} from '#types/flow-current-run.type';
+
+/** how often a run's progress goes out (RunOptions.onProgress) */
+const PROGRESS_MS = 250;
 
 async function drain(source: AsyncIterable<Envelope>) {
   for await (const _ of source) { /* dropped */ }
@@ -50,6 +54,8 @@ export class FlowExecution {
   /** envelopes that went out through an unconnected port (they vanish from the flow): per node and port */
   private readonly dropped = new Map<string, Record<string, number>>();
   private initialEnvelopes: EnvelopeData[] = [];
+  /** what only feeds pinned (or replaying) components: not run */
+  private readonly skipped: Set<string>;
   private failure?: string;
 
   constructor(readonly wf: ExecutableFlow, readonly options: RunOptions, readonly parameters: Record<string, ParameterValue>) {
@@ -66,9 +72,27 @@ export class FlowExecution {
     this.waits = new Map(wf.nodes.map(node => [node.id, new Stopwatch()]));
     // one channel per edge
     this.channels = wf.edges.map(e => ({...e, channel: new Channel<Envelope>()}));
+    this.skipped = skippedNodes(wf, options.mode);
   }
 
   recordOf(nodeId: string) { return this.records.get(nodeId)!; }
+  /** Run from here: the component the run started from */
+  fromOf() {
+    const from = this.options.runFrom;
+    return from ? {from: {nodeId: from.nodeId, label: from.label}} : {};
+  }
+  /** how many inputs of the node are fed in this run (asked for each envelope that comes in: counted once) */
+  private inputPortsOf(nodeId: string) {
+    let count = this.portCounts.get(nodeId);
+    if (count === undefined) {
+      const ports = new Set(this.channels.filter(c => c.target === nodeId).map(c => c.targetPort));
+      if (this.options.runFrom?.nodeId === nodeId) Object.keys(this.options.runFrom.inputs).forEach(p => ports.add(p));
+      count = ports.size;
+      this.portCounts.set(nodeId, count);
+    }
+    return count;
+  }
+  private readonly portCounts = new Map<string, number>();
   stopwatchOf(nodeId: string) { return this.stopwatches.get(nodeId)!; }
   memoryOf(nodeId: string) { return this.memories.get(nodeId)!; }
   /** time waiting for outside systems (the context helpers that talk to them run it) */
@@ -86,7 +110,10 @@ export class FlowExecution {
       ? setTimeout(() => this.interrupt(`Run interrupted: exceeded the maximum time (${Math.round(timeoutMs / 1000)} s).`), timeoutMs)
       : undefined;
 
+    // the run as it goes, for whoever follows it (the editor): every PROGRESS_MS while it runs
+    const progress = this.options.onProgress ? setInterval(() => this.options.onProgress?.(this.progress()), PROGRESS_MS) : undefined;
     await Promise.all(this.wf.nodes.map(node => this.runNode(node)));
+    clearInterval(progress);
 
     clearTimeout(limit);
     signal?.removeEventListener('abort', onCancel);
@@ -95,7 +122,9 @@ export class FlowExecution {
     // nothing reached the End: the flow ran, but delivered nothing
     const end = this.wf.nodes.find(n => n.type === END);
     const endRecord = end && this.records.get(end.id);
-    if (endRecord && endRecord.status === 'completed' && !endRecord.inputs['in-0']) {
+    // ...unless envelopes went to a Discard: dropped on purpose
+    const discarded = this.wf.nodes.some(n => n.type === 'discard' && Object.values(this.records.get(n.id)?.inputs ?? {}).some(count => count > 0));
+    if (endRecord && endRecord.status === 'completed' && !endRecord.inputs['in-0'] && !discarded) {
       endRecord.status = 'with-warnings';
       endRecord.logs.push({at: new Date().toISOString(), level: 'warning', message: 'No envelope reached the End.'});
     }
@@ -116,7 +145,17 @@ export class FlowExecution {
     });
     return {
       run: this.run, parameters: this.parameters, status, error, end: new Date().toISOString(), durationMs,
+      ...this.fromOf(),
       components: flowOrder(this.wf).map(id => this.records.get(id)!),
+    };
+  }
+
+  /** The run so far: a copy of each component's record, in flow order (see RunOptions.onProgress). */
+  progress(): RunProgress {
+    return {
+      run: this.run, parameters: this.parameters, status: 'running', durationMs: Date.now() - this.start,
+      ...this.fromOf(),
+      components: structuredClone(flowOrder(this.wf).map(id => this.records.get(id)!)),
     };
   }
 
@@ -131,15 +170,38 @@ export class FlowExecution {
     this.control.abort();
   }
 
-  /** Sources of each node input. Several edges into the same input (e.g. End) become one, in arrival order. */
+  /**
+   * Sources of each node input. Several edges into the same input (e.g. End) become one, in arrival order. Run from
+   * here: the component it starts from gets what reached it in the last run.
+   */
   private inputsOf(nodeId: string) {
     const perPort: Record<string, AsyncIterable<Envelope>[]> = {};
     for (const e of this.channels.filter(c => c.target === nodeId)) (perPort[e.targetPort] ??= []).push(e.channel);
+    const from = this.options.runFrom;
+    if (from?.nodeId === nodeId) {
+      for (const [port, items] of Object.entries(from.inputs)) (perPort[port] ??= []).push(this.envelopesOf(items));
+    }
     return Object.fromEntries(Object.entries(perPort).map(([port, sources]) => [port, sources.length === 1 ? sources[0] : mergeSources(sources)]));
+  }
+
+  private async* envelopesOf(items: EnvelopeData[]): AsyncIterable<Envelope> {
+    for (const DATA of items) yield {FLOW_CURRENT_RUN: this.run, PARAMETERS: this.parameters, DATA: clone(DATA)};
   }
 
   private outputsOf(nodeId: string, port: string) {
     return this.channels.filter(c => c.source === nodeId && c.sourcePort === port).map(c => c.channel);
+  }
+
+  /**
+   * A copy of an envelope's data for the record's samples, without the run's secrets and tokens: a response that
+   * echoes one (an OAuth token in a body) is kept with *** in its place. The envelope itself goes on unchanged.
+   */
+  private sampled<T>(value: T): T {
+    const hidden = hiddenValues(this.options);
+    const text = JSON.stringify(value);
+    if (text === undefined) return value;
+    // as each value appears inside JSON text (quotes and backslashes escaped)
+    return JSON.parse(maskText(text, hidden.map(v => JSON.stringify(v).slice(1, -1)))) as T;
   }
 
   private async send(node: ExecutableNode, port: string, doc: Envelope) {
@@ -155,7 +217,7 @@ export class FlowExecution {
       this.dropped.set(node.id, perPort);
     }
     const sample = (rec.outputSample[port] ??= []);
-    if (sample.length < SAMPLE_SIZE) sample.push(clone(doc.DATA));
+    if (sample.length < SAMPLE_SIZE) sample.push(this.sampled(doc.DATA));
     // a port with several edges gives each its own copy: a path that changes the envelope does not touch what another
     // one received. One edge: the envelope itself.
     const channels = this.outputsOf(node.id, port);
@@ -174,8 +236,15 @@ export class FlowExecution {
     stopwatch.stop();
     for await (const doc of source) {
       rec.start ??= new Date().toISOString();
+      if (rec.status === 'not-run') rec.status = 'running';
       rec.inputs[port] = (rec.inputs[port] ?? 0) + 1;
-      if (rec.inputSample.length < SAMPLE_SIZE) rec.inputSample.push(clone(doc.DATA));
+      if (rec.inputSample.length < SAMPLE_SIZE) rec.inputSample.push(this.sampled(doc.DATA));
+      // several inputs: each one's first envelopes too (Run from here feeds them back to the right input)
+      if (this.inputPortsOf(node.id) > 1) {
+        const byPort = (rec.inputSampleByPort ??= {});
+        const sample = (byPort[port] ??= []);
+        if (sample.length < SAMPLE_SIZE) sample.push(this.sampled(doc.DATA));
+      }
       stopwatch.resume();
       yield doc;
       stopwatch.stop();
@@ -184,12 +253,32 @@ export class FlowExecution {
 
   private async runNode(node: ExecutableNode) {
     const rec = this.recordOf(node.id);
-    const log = (level: LogLevel, message: string) => rec.logs.push({at: new Date().toISOString(), level, message});
+    // what the record keeps never shows a secret or a token, whatever the component wrote
+    const log = (level: LogLevel, message: string) => rec.logs.push({at: new Date().toISOString(), level, message: maskText(message, hiddenValues(this.options))});
     const outputPorts = [...new Set(this.channels.filter(c => c.source === node.id).map(c => c.sourcePort))];
     const stopwatch = this.stopwatchOf(node.id);
     const t0 = Date.now();
     let errors = 0;
     let dryRun = false;
+    let replayed = false;
+    // Run from here: the run starts at this component, with what reached it in the last run
+    const from = this.options.runFrom?.nodeId === node.id ? this.options.runFrom : undefined;
+    if (from) {
+      log('info', `Run from here: ${from.label}.`);
+      for (const [port, items] of Object.entries(from.inputs)) {
+        const total = from.totals[port] ?? items.length;
+        if (total > items.length) log('warning', `Only the first ${items.length} of the ${total} envelopes that reached ${port} in the last run came in: a run keeps ${items.length} per port.`);
+      }
+    }
+    if (this.skipped.has(node.id)) {
+      // it only feeds components that replay: nothing to do; what reaches it is read and dropped
+      rec.status = 'skipped';
+      await Promise.all(Object.values(this.inputsOf(node.id)).map(drain));
+      for (const port of outputPorts) for (const channel of this.outputsOf(node.id, port)) channel.close();
+      return;
+    }
+    // a component without inputs (the Start) runs from the beginning; the others once their first envelope arrives
+    if (node.type === START) rec.status = 'running';
     try {
       const inputs = Object.fromEntries(Object.entries(this.inputsOf(node.id)).map(([port, source]) => [port, this.watchInput(node, port, source)]));
 
@@ -197,6 +286,7 @@ export class FlowExecution {
       const pinned = this.options.mode === 'validation' ? node.pinned : undefined;
       if (node.pinned && !pinned) log('info', 'Pinned output ignored: in a real run the component always executes.');
       if (pinned) {
+        replayed = true;
         log('info', 'Pinned output: did not execute, the input was dropped and the pinned envelopes went out.');
         // the ports at the same time: a component after it may read one input only after the other
         await Promise.all([
@@ -211,7 +301,7 @@ export class FlowExecution {
         for (const envelope of this.initialEnvelopes) {
           if (this.options.input !== undefined) {
             rec.inputs['in-0'] = (rec.inputs['in-0'] ?? 0) + 1;
-            if (rec.inputSample.length < SAMPLE_SIZE) rec.inputSample.push(clone(envelope));
+            if (rec.inputSample.length < SAMPLE_SIZE) rec.inputSample.push(this.sampled(envelope));
           }
           const doc: Envelope = {FLOW_CURRENT_RUN: this.run, PARAMETERS: this.parameters, DATA: envelope};
           for (const port of outputPorts) await this.send(node, port, doc);
@@ -255,7 +345,7 @@ export class FlowExecution {
         if (dryRun) log('info', 'Test run: nothing was written; the envelopes went on marked notSent. Run for real to write.');
       }
       const lost = this.reportDropped(node, log);
-      rec.status = errors > 0 ? 'with-errors' : node.pinned && this.options.mode === 'validation' ? 'pinned' : node.disabled ? 'disabled' : lost ? 'with-warnings' : 'completed';
+      rec.status = errors > 0 ? 'with-errors' : replayed ? 'pinned' : node.disabled ? 'disabled' : lost ? 'with-warnings' : 'completed';
     } catch (e) {
       rec.status = 'failed';
       const message = e instanceof Error ? e.message : String(e);

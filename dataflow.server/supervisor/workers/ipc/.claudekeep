@@ -1,1 +1,0 @@
-Types of the messages between the supervisor and its workers (run-start, metrics, cancel, run-finished).

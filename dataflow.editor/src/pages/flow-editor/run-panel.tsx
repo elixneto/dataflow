@@ -1,14 +1,20 @@
 import { useMemo, useState, type PointerEvent, type ReactNode } from 'react';
-import { ChevronDown, ChevronUp, CircleAlert, CircleCheck, CircleMinus, CircleX, LoaderCircle, Pin, Power, X } from 'lucide-react';
-import type { EnvelopeData, LogLine, RunRecord } from '@dataflow/core';
+import { ChevronDown, ChevronUp, CircleAlert, CircleCheck, CircleDashed, CircleMinus, CircleStop, CircleX, Clock, LoaderCircle, Pin, Power, Square, X } from 'lucide-react';
+import { ERROR_PORT, inputPorts, type ComponentRun, type EnvelopeData, type LogLine, type RunProgress, type RunRecord } from '@dataflow/core';
+
+/** the record shown: the run so far while it goes on, then the final one */
+type Shown = RunRecord | RunProgress;
 import { Button } from '@/components/ui/button';
+import type { RunUsage } from '@/data/flows/flows-api';
 import { componentInfo } from '@/editor/catalog';
 import { cn } from '@/lib/utils';
 import { readChoice, rememberChoice } from '@/editor/run/run-choices';
+import { portLabel } from '@/editor/run/port-label';
 import { runActions } from '@/editor/run/run-marks';
+import { JsonTree } from '@/editor/run/json-tree';
 
 /*
- * MOCK: a run's result under the canvas, as in the PoC (Logs, Metrics, Data), from the core's RunRecord. Its height is
+ * A run's result under the canvas, live while it runs, as in the PoC (Logs, Metrics, Data), from the core's RunRecord. Its height is
  * dragged by the top edge and kept in this browser tab; it collapses to its header (status, time, envelopes).
  */
 
@@ -47,6 +53,12 @@ const time = (iso: string) => {
   return `${d.toLocaleTimeString('en-US', { hour12: false })}.${String(d.getMilliseconds()).padStart(3, '0')}`;
 };
 
+/** a component's name in the run: the one given on the canvas, or the component's own (HTTP Request, not http-request) */
+const nameOf = (c: { label: string; type: string }) => (c.label && c.label !== c.type ? c.label : (componentInfo(c.type)?.label ?? c.type));
+
+/** without the node's config: the core's default names */
+const defaultPortName: PortName = (_nodeId, type, port) => portLabel(type, {}, port);
+
 const STATUS: Record<string, { icon: typeof CircleCheck; color: string; label: string }> = {
   completed: { icon: CircleCheck, color: 'text-emerald-600 dark:text-emerald-400', label: 'Completed' },
   'with-warnings': { icon: CircleAlert, color: 'text-amber-600 dark:text-amber-400', label: 'With warnings' },
@@ -55,6 +67,8 @@ const STATUS: Record<string, { icon: typeof CircleCheck; color: string; label: s
   pinned: { icon: Pin, color: 'text-blue-600 dark:text-blue-400', label: 'Pinned output' },
   disabled: { icon: Power, color: 'text-muted-foreground', label: 'Disabled' },
   'not-run': { icon: CircleMinus, color: 'text-muted-foreground', label: 'Not run' },
+  skipped: { icon: CircleDashed, color: 'text-muted-foreground', label: 'Skipped: it only feeds pinned components' },
+  running: { icon: LoaderCircle, color: 'text-muted-foreground animate-spin', label: 'Running' },
 };
 
 function StatusIcon({ status, className }: { status: string; className?: string }) {
@@ -63,9 +77,18 @@ function StatusIcon({ status, className }: { status: string; className?: string 
 }
 
 export type RunPanelProps = {
-  record: RunRecord | null;
+  /** a port's name (true, false, a Router's case): from the core and the node's config */
+  portName?: PortName;
+  record: Shown | null;
+  /** what the run's worker process used (once it ended; none for older runs) */
+  usage?: RunUsage | null;
   /** a run is in progress (a test run or for real) */
   running: 'test' | 'real' | null;
+  /** it waits for a free worker (queued) */
+  queued?: boolean;
+  /** Stop the run going on; `stopping` once asked */
+  onStop?: () => void;
+  stopping?: boolean;
   onFocus: (nodeId: string) => void;
   /** the nodes whose output is pinned, and the action to pin or unpin one */
   pinned: Set<string>;
@@ -73,9 +96,11 @@ export type RunPanelProps = {
   onClose: () => void;
   /** a port's count was clicked: the Data tab on that component, that port in view (`at` tells two clicks apart) */
   show?: { nodeId: string; port: string; at: number } | null;
+  /** the run could not start or be followed (not saved, the server said no) */
+  error?: string;
 };
 
-export function RunPanel({ record, running, onFocus, pinned, onPin, onClose, show }: RunPanelProps) {
+export function RunPanel({ record, usage, running, queued, onStop, stopping, onFocus, pinned, onPin, onClose, show, error, portName = defaultPortName }: RunPanelProps) {
   const [height, setHeight] = useState(readHeight);
   const [collapsed, setCollapsed] = useState(false);
   const [tab, setTabState] = useState<Tab>(() => readChoice(TAB_KEY, TABS, 'logs'));
@@ -125,25 +150,47 @@ export function RunPanel({ record, running, onFocus, pinned, onPin, onClose, sho
         />
       )}
       <header className="flex h-10 shrink-0 items-center gap-3 border-b px-3 text-sm">
-        {running ? (
+        {running && queued ? (
+          <span className="flex items-center gap-2 font-medium" title="Waiting for a free worker">
+            <Clock className="size-4 text-muted-foreground" aria-hidden />
+            Queued…
+          </span>
+        ) : running ? (
           <span className="flex items-center gap-2 font-medium">
             <LoaderCircle className="size-4 animate-spin text-muted-foreground" aria-hidden />
-            {running === 'real' ? 'Running for real…' : 'Running…'}
+            {stopping ? 'Stopping…' : running === 'real' ? 'Running for real…' : 'Running…'}
+            {record && <span className="font-mono text-xs font-normal text-muted-foreground">{ms(record.durationMs)}</span>}
+          </span>
+        ) : error ? (
+          <span className="flex items-center gap-2 font-medium text-destructive">
+            <CircleX className="size-4" aria-hidden />
+            Could not run: {error}
           </span>
         ) : record ? (
           <>
-            <span className="flex items-center gap-2 font-medium">
-              <StatusIcon status={record.status} />
-              {STATUS[record.status]?.label}
+            {stoppedRun(record) ? (
+              <span className="flex items-center gap-2 font-medium" title={(record as RunRecord).error}>
+                <CircleStop className="size-4 text-muted-foreground" aria-hidden />
+                Stopped
+              </span>
+            ) : (
+              <span className="flex items-center gap-2 font-medium">
+                <StatusIcon status={record.status} />
+                {STATUS[record.status]?.label}
+              </span>
+            )}
+            <span className="text-xs text-muted-foreground">
+              {record.run.mode === 'execution' ? 'Run for real' : 'Test run'}
+              {record.from && ` · from ${nameOf(record.components.find(c => c.nodeId === record.from?.nodeId) ?? { label: record.from.label, type: record.from.label })}`}
             </span>
-            <span className="text-xs text-muted-foreground">{record.run.mode === 'execution' ? 'Run for real' : 'Test run'}</span>
             <span className="font-mono text-xs text-muted-foreground">{ms(record.durationMs)}</span>
+            <RunUsageText usage={usage} />
             <span className="font-mono text-xs text-muted-foreground" title="Envelopes the Start sent → envelopes that reached the End">
               {start ? total(start.outputs) : 0} → {end ? total(end.inputs) : 0} envelopes
             </span>
           </>
         ) : null}
-        {!collapsed && record && !running && (
+        {!collapsed && record && !error && (
           <div role="tablist" className="ml-4 flex gap-1">
             {TABS.map(t => (
               <button
@@ -160,6 +207,12 @@ export function RunPanel({ record, running, onFocus, pinned, onPin, onClose, sho
           </div>
         )}
         <div className="ml-auto flex items-center gap-1">
+          {running && onStop && (
+            <Button variant="outline" size="sm" className="h-7" onClick={onStop} disabled={stopping} title="Stop the run">
+              <Square className="size-3 fill-current" aria-hidden />
+              Stop
+            </Button>
+          )}
           <Button variant="ghost" size="icon-sm" aria-label={collapsed ? 'Expand' : 'Collapse'} title={collapsed ? 'Expand' : 'Collapse'} onClick={() => setCollapsed(c => !c)}>
             {collapsed ? <ChevronUp /> : <ChevronDown />}
           </Button>
@@ -168,11 +221,11 @@ export function RunPanel({ record, running, onFocus, pinned, onPin, onClose, sho
           </Button>
         </div>
       </header>
-      {!collapsed && record && !running && (
+      {!collapsed && record && !error && (
         <div className="min-h-0 flex-1 overflow-auto">
           {tab === 'logs' && <LogsTab record={record} onFocus={onFocus} />}
-          {tab === 'metrics' && <MetricsTab record={record} onFocus={onFocus} />}
-          {tab === 'data' && <DataTab key={show?.at} record={record} onFocus={onFocus} pinned={pinned} onPin={onPin} show={show ?? undefined} />}
+          {tab === 'metrics' && <MetricsTab record={record} onFocus={onFocus} portName={portName} />}
+          {tab === 'data' && <DataTab key={show?.at} record={record} onFocus={onFocus} pinned={pinned} onPin={onPin} show={show ?? undefined} portName={portName} />}
         </div>
       )}
     </section>
@@ -183,13 +236,13 @@ const LEVELS = ['debug', 'info', 'warning', 'error'] as const;
 const LEVEL_COLOR: Record<string, string> = { debug: 'text-muted-foreground', info: 'text-sky-600 dark:text-sky-400', warning: 'text-amber-600 dark:text-amber-400', error: 'text-destructive' };
 
 /** every log line of the run, by time; a click focuses its component */
-function LogsTab({ record, onFocus }: { record: RunRecord; onFocus: (nodeId: string) => void }) {
+function LogsTab({ record, onFocus }: { record: Shown; onFocus: (nodeId: string) => void }) {
   const [level, setLevel] = useState<string>('all');
   const [node, setNode] = useState<string>('all');
   const lines = useMemo(
     () =>
       record.components
-        .flatMap(c => c.logs.map((line: LogLine) => ({ ...line, nodeId: c.nodeId, label: c.label })))
+        .flatMap(c => c.logs.map((line: LogLine) => ({ ...line, nodeId: c.nodeId, label: nameOf(c) })))
         .filter(l => (level === 'all' || LEVELS.indexOf(l.level as never) >= LEVELS.indexOf(level as never)) && (node === 'all' || l.nodeId === node))
         .sort((a, b) => a.at.localeCompare(b.at)),
     [record, level, node],
@@ -210,7 +263,7 @@ function LogsTab({ record, onFocus }: { record: RunRecord; onFocus: (nodeId: str
           <option value="all">All components</option>
           {record.components.map(c => (
             <option key={c.nodeId} value={c.nodeId}>
-              {c.label}
+              {nameOf(c)}
             </option>
           ))}
         </select>
@@ -232,37 +285,111 @@ function LogsTab({ record, onFocus }: { record: RunRecord; onFocus: (nodeId: str
   );
 }
 
-const ports = (counts: Record<string, number>) =>
-  Object.keys(counts).length > 1 ? Object.entries(counts).map(([p, n]) => `${p}: ${n}`).join(' · ') : String(total(counts));
+/** the order of a component's ports: out-0, out-1… (in-0, in-1…), the error port last */
+const portRank = (port: string) => (port === ERROR_PORT ? Number.MAX_SAFE_INTEGER : Number(port.replace(/\D/g, '')) || 0);
 
-/** one row per component: status, envelopes in and out per port, the times */
-function MetricsTab({ record, onFocus }: { record: RunRecord; onFocus: (nodeId: string) => void }) {
+/** envelopes per port, by the ports' names (true: 5 · false: 95), or the total when there is one port */
+const ports = (counts: Record<string, number>, name: (port: string) => string) =>
+  Object.keys(counts).length > 1
+    ? Object.entries(counts)
+        .sort(([a], [b]) => portRank(a) - portRank(b))
+        .map(([p, n]) => `${name(p)}: ${n}`)
+        .join(' · ')
+    : String(total(counts));
+
+/** an input's name (Lookup's input, lookup), from the core */
+const inputName = (type: string, port: string) => inputPorts(type).find(p => p.id === port)?.label ?? port;
+
+/** a time a component worked or waited: below 10 ms the fraction is worth showing (most components take tenths of a ms) */
+const shortMs = (value?: number) => (value === undefined ? '—' : value < 10 ? `${value.toLocaleString('en-US', { maximumFractionDigits: 2 })} ms` : ms(value));
+const bytes = (value: number) => (value < 1024 ? `${value} B` : value < 1024 ** 2 ? `${(value / 1024).toFixed(1)} KB` : `${(value / 1024 ** 2).toFixed(1)} MB`);
+
+/** the Metrics columns, with what each one measures */
+const METRICS: { label: string; hint: string; right?: boolean }[] = [
+  { label: 'Component', hint: 'Its name on the canvas and what it is' },
+  { label: 'In', hint: 'Envelopes that came in (per input, when it has several)', right: true },
+  { label: 'Out', hint: 'Envelopes that went out (per output, when it has several)', right: true },
+  { label: 'Open', hint: 'From its first envelope until it finished: its active and waiting time, and the time it spent waiting for envelopes or for the next component to take them', right: true },
+  { label: 'Active', hint: 'Time processing, its own work only (practically the CPU it used): not waiting for anything', right: true },
+  { label: 'Waiting', hint: 'Time waiting for an outside system: an HTTP call (and its OAuth 2.0 token), database rows, a MongoDB write, a called flow', right: true },
+  { label: 'Memory', hint: 'Most it held at once (the Lookup table, an Aggregate batch, a Sort): envelopes and an estimate of their size', right: true },
+  { label: 'Start', hint: 'When its first envelope arrived', right: true },
+  { label: 'Timeline', hint: 'When it was open in the run: light = open, middle = waiting for an outside system, dark = working' },
+];
+
+/**
+ * When the component was open, on the run's time axis (as in the PoC): light from its first envelope until it finished;
+ * inside, how much of that it spent waiting for an outside system and, darker, working (their share of the open time).
+ */
+function Timeline({ c, runStart, runMs }: { c: ComponentRun; runStart: number; runMs: number }) {
+  if (!c.start || runMs <= 0) {
+    return <span className="text-muted-foreground">—</span>;
+  }
+
+  const pct = (value: number) => `${Math.min(100, Math.max(0, (value / runMs) * 100))}%`;
+  // a component still running: open until now
+  const open = Math.max(c.durationMs ?? runMs - (Date.parse(c.start) - runStart), 0);
+  const active = Math.min(c.activeTimeMs ?? 0, open);
+  const waiting = Math.min(c.waitingMs ?? 0, open - active);
+  const title = `Open ${ms(open)} (from ${time(c.start)}) · active ${shortMs(active)}${c.waitingMs !== undefined ? ` · waiting ${shortMs(waiting)}` : ''}`;
   return (
-    <table className="w-full text-xs">
-      <thead className="sticky top-0 bg-card text-left text-muted-foreground">
+    <span className="relative block h-3 w-full min-w-40 rounded-sm bg-muted/60" title={title} aria-label={title}>
+      <span
+        className="absolute inset-y-0 flex min-w-0.5 overflow-hidden rounded-sm bg-primary/25"
+        // one that opened at the very end still shows a sliver inside the axis
+        style={{ left: `min(${pct(Date.parse(c.start) - runStart)}, calc(100% - 2px))`, width: pct(open) }}
+      >
+        <span className="h-full bg-primary" style={{ width: open ? `${(active / open) * 100}%` : 0 }} />
+        <span className="h-full bg-primary/55" style={{ width: open ? `${(waiting / open) * 100}%` : 0 }} />
+      </span>
+    </span>
+  );
+}
+
+/** one row per component: status, envelopes in and out per port, its times, memory and timeline; a click shows it */
+function MetricsTab({ record, onFocus, portName }: { record: Shown; onFocus: (nodeId: string) => void; portName: PortName }) {
+  const runStart = Date.parse(record.run.startedAt);
+  const cell = 'px-3 py-1.5';
+  return (
+    <table className="w-full min-w-[1100px] text-xs">
+      <thead className="sticky top-0 z-10 bg-card text-left text-muted-foreground">
         <tr className="border-b">
-          {['Component', 'In', 'Out', 'Active', 'Waiting', 'Duration'].map(h => (
-            <th key={h} className="px-3 py-1.5 font-medium">
-              {h}
+          {METRICS.map(h => (
+            <th key={h.label} title={h.hint} className={cn(cell, 'cursor-help font-medium', h.right && 'text-right', h.label === 'Timeline' && 'w-1/4')}>
+              {h.label}
             </th>
           ))}
         </tr>
       </thead>
       <tbody>
         {record.components.map(c => (
-          <tr key={c.nodeId} onClick={() => onFocus(c.nodeId)} className="cursor-pointer border-b hover:bg-accent">
-            <td className="px-3 py-1.5">
+          <tr key={c.nodeId} onClick={() => onFocus(c.nodeId)} title="Show on the canvas" className="cursor-pointer border-b hover:bg-accent">
+            <td className={cell}>
               <span className="flex items-center gap-2">
                 <StatusIcon status={c.status} />
-                <span className="font-medium">{c.label}</span>
-                <span className="text-muted-foreground">{componentInfo(c.type)?.label}</span>
+                <span className="font-medium">{nameOf(c)}</span>
+                {nameOf(c) !== componentInfo(c.type)?.label && <span className="text-muted-foreground">{componentInfo(c.type)?.label}</span>}
               </span>
             </td>
-            <td className="px-3 py-1.5 font-mono">{ports(c.inputs)}</td>
-            <td className="px-3 py-1.5 font-mono">{ports(c.outputs)}</td>
-            <td className="px-3 py-1.5 font-mono">{ms(c.activeTimeMs)}</td>
-            <td className="px-3 py-1.5 font-mono">{ms(c.waitingMs)}</td>
-            <td className="px-3 py-1.5 font-mono">{ms(c.durationMs)}</td>
+            <td className={cn(cell, 'text-right font-mono')}>{c.type === 'start' && total(c.inputs) === 0 ? '—' : ports(c.inputs, port => inputName(c.type, port))}</td>
+            <td className={cn(cell, 'text-right font-mono')}>{c.type === 'end' ? '—' : ports(c.outputs, port => portName(c.nodeId, c.type, port))}</td>
+            <td className={cn(cell, 'text-right font-mono')}>{ms(c.durationMs)}</td>
+            <td className={cn(cell, 'text-right font-mono')}>{shortMs(c.activeTimeMs)}</td>
+            <td className={cn(cell, 'text-right font-mono', c.waitingMs === undefined && 'text-muted-foreground')}>{shortMs(c.waitingMs)}</td>
+            <td className={cn(cell, 'text-right font-mono')}>
+              {c.memory && c.memory.peakEnvelopes > 0 ? (
+                <span className="flex flex-col items-end">
+                  <span>{bytes(c.memory.peakBytes)}</span>
+                  <span className="text-muted-foreground">{c.memory.peakEnvelopes.toLocaleString('en-US')} env.</span>
+                </span>
+              ) : (
+                <span className="text-muted-foreground">—</span>
+              )}
+            </td>
+            <td className={cn(cell, 'text-right font-mono text-muted-foreground')}>{c.start ? time(c.start) : '—'}</td>
+            <td className={cell}>
+              <Timeline c={c} runStart={runStart} runMs={record.durationMs} />
+            </td>
           </tr>
         ))}
       </tbody>
@@ -272,13 +399,14 @@ function MetricsTab({ record, onFocus }: { record: RunRecord; onFocus: (nodeId: 
 
 /** a component's input and output envelopes (the first ones), side by side, as a table or JSON; Pin output here */
 function DataTab(props: {
-  record: RunRecord;
+  record: Shown;
   onFocus: (nodeId: string) => void;
   pinned: Set<string>;
   onPin: (nodeId: string, pinned: boolean) => void;
   show?: { nodeId: string; port: string };
+  portName: PortName;
 }) {
-  const { record, onFocus, pinned, onPin, show } = props;
+  const { record, onFocus, pinned, onPin, show, portName } = props;
   const shown = record.components.filter(c => c.type !== 'end' || total(c.inputs) > 0);
   const [selected, setSelected] = useState<string | undefined>(show?.nodeId ?? shown.find(c => c.type !== 'start')?.nodeId ?? shown[0]?.nodeId);
   // Table or JSON: the same for every component, kept in this browser tab
@@ -302,7 +430,7 @@ function DataTab(props: {
               className={cn('flex w-full items-center gap-2 px-3 py-1 text-left hover:bg-accent', x.nodeId === selected && 'bg-accent font-medium')}
             >
               <StatusIcon status={x.status} className="size-3.5" />
-              <span className="truncate">{x.label}</span>
+              <span className="truncate">{nameOf(x)}</span>
             </button>
           </li>
         ))}
@@ -324,26 +452,15 @@ function DataTab(props: {
                 </button>
               ))}
             </div>
-            {c.type !== 'start' && c.type !== 'end' && runActions(c, pinned.has(c.nodeId)).pin && (
+            {record.status !== 'running' && c.type !== 'start' && c.type !== 'end' && runActions(c, pinned.has(c.nodeId)).pin && (
               <Button variant="outline" size="sm" className="ml-auto h-7 text-xs" onClick={() => onPin(c.nodeId, !pinned.has(c.nodeId))}>
                 <Pin className={cn(pinned.has(c.nodeId) && 'rotate-45 text-blue-600 dark:text-blue-400')} /> {pinned.has(c.nodeId) ? 'Unpin output' : 'Pin output'}
               </Button>
             )}
           </div>
           <div className="grid min-h-0 flex-1 grid-cols-2 divide-x overflow-hidden">
-            <Envelopes title={`Input (${total(c.inputs)})`} envelopes={c.inputSample} view={view} />
-            <div className="flex min-h-0 flex-col overflow-auto">
-              {Object.keys(c.outputSample).length === 0 && <Envelopes title="Output (0)" envelopes={[]} view={view} />}
-              {Object.entries(c.outputSample).map(([port, envelopes]) => (
-                <Envelopes
-                  key={port}
-                  title={`Output ${Object.keys(c.outputSample).length > 1 ? port + ' ' : ''}(${c.outputs[port] ?? envelopes.length})`}
-                  envelopes={envelopes}
-                  view={view}
-                  inView={show?.nodeId === c.nodeId && show.port === port}
-                />
-              ))}
-            </div>
+            <Envelopes title={`Input (${total(c.inputs)})`} envelopes={c.inputSample} view={view} treeKey={`${c.nodeId}:in`} />
+            <OutputPorts key={c.nodeId} c={c} view={view} portName={portName} show={show?.nodeId === c.nodeId ? show.port : undefined} />
           </div>
         </div>
       )}
@@ -351,9 +468,69 @@ function DataTab(props: {
   );
 }
 
+/** a port's name for the Data tab (true, false, a Router's case, error), from the core and the node's config */
+export type PortName = (nodeId: string, type: string, port: string) => string;
+
+/** the port shown last for each component, while the page is open */
+const shownPort = new Map<string, string>();
+
+/**
+ * A component's output, one port at a time: the ports as tabs with their names and counts (true (5), false (95),
+ * error (1)); the one chosen fills the column with its own scroll. First: the port clicked on the canvas, the one shown
+ * last for this component, or the first that sent envelopes.
+ */
+function OutputPorts({ c, view, portName, show }: { c: ComponentRun; view: 'table' | 'json'; portName: PortName; show?: string }) {
+  // in the component's order (out-0, out-1… as the core lists them), the error port last
+  const ports = [...new Set([...Object.keys(c.outputs), ...Object.keys(c.outputSample)])].sort((a, b) => portRank(a) - portRank(b));
+  const count = (port: string) => c.outputs[port] ?? c.outputSample[port]?.length ?? 0;
+  const [port, setPortState] = useState(() => show ?? shownPort.get(c.nodeId) ?? ports.find(p => count(p) > 0) ?? ports[0]);
+  const setPort = (next: string) => {
+    setPortState(next);
+    shownPort.set(c.nodeId, next);
+  };
+  if (ports.length === 0 || port === undefined) {
+    return <Envelopes title="Output (0)" envelopes={[]} view={view} treeKey={`${c.nodeId}:out`} />;
+  }
+
+  if (ports.length === 1) {
+    return <Envelopes title={`Output (${count(port)})`} envelopes={c.outputSample[port] ?? []} view={view} inView={show === port} treeKey={`${c.nodeId}:${port}`} />;
+  }
+
+  return (
+    <div className="flex min-h-0 flex-col">
+      <div role="tablist" aria-label="Output ports" className="flex shrink-0 flex-wrap gap-1 border-b px-2 py-1">
+        {ports.map(p => (
+          <button
+            key={p}
+            type="button"
+            role="tab"
+            aria-selected={p === port}
+            onClick={() => setPort(p)}
+            className={cn(
+              'rounded-md px-2 py-0.5 font-mono text-[11px]',
+              p === port ? 'bg-accent font-medium' : 'text-muted-foreground hover:text-foreground',
+              p === 'error' && 'text-destructive',
+            )}
+          >
+            {portName(c.nodeId, c.type, p)} ({count(p)})
+          </button>
+        ))}
+      </div>
+      <Envelopes
+        title={`Output${portName(c.nodeId, c.type, port) === 'output' ? '' : ` ${portName(c.nodeId, c.type, port)}`} (${count(port)})`}
+        envelopes={c.outputSample[port] ?? []}
+        view={view}
+        inView={show === port}
+        treeKey={`${c.nodeId}:${port}`}
+      />
+    </div>
+  );
+}
+
 const cell = (value: unknown): ReactNode => (value === null || value === undefined ? <span className="text-muted-foreground">null</span> : typeof value === 'object' ? JSON.stringify(value) : String(value));
 
-function Envelopes({ title, envelopes, view, inView }: { title: string; envelopes: EnvelopeData[]; view: 'table' | 'json'; inView?: boolean }) {
+function Envelopes(props: { title: string; envelopes: EnvelopeData[]; view: 'table' | 'json'; inView?: boolean; treeKey: string }) {
+  const { title, envelopes, view, inView, treeKey } = props;
   const columns = [...new Set(envelopes.flatMap(e => Object.keys(e)))];
   return (
     <section
@@ -364,13 +541,14 @@ function Envelopes({ title, envelopes, view, inView }: { title: string; envelope
         }
       }}
       data-shown={inView || undefined}
-      className={cn('flex min-h-0 flex-col overflow-auto', inView && 'ring-1 ring-primary/40 ring-inset')}
+      className={cn('flex min-h-0 flex-1 flex-col overflow-auto', inView && 'ring-1 ring-primary/40 ring-inset')}
     >
       <h4 className="sticky top-0 border-b bg-card px-3 py-1 text-[10px] font-medium tracking-wide text-muted-foreground uppercase">{title}</h4>
       {envelopes.length === 0 ? (
         <p className="p-3 text-xs text-muted-foreground">No envelopes.</p>
       ) : view === 'json' ? (
-        <pre className="p-3 font-mono text-xs whitespace-pre-wrap">{JSON.stringify(envelopes, null, 2)}</pre>
+        // its own state per component and port (key: another port starts from what it had)
+        <JsonTree key={treeKey} value={envelopes} memoryKey={treeKey} />
       ) : (
         <table className="w-max min-w-full font-mono text-xs">
           <thead className="text-left text-muted-foreground">
@@ -396,5 +574,26 @@ function Envelopes({ title, envelopes, view, inView }: { title: string; envelope
         </table>
       )}
     </section>
+  );
+}
+
+/** a run that Stop ended (the server stores it cancelled; its record says it failed with this) */
+const stoppedRun = (record: Shown): boolean => record.status === 'failed' && /^Run cancelled/.test((record as RunRecord).error ?? '');
+
+const USAGE_HINT =
+  "What the run's worker process used. Memory: its peak, Bun included (about 50 MB before any run); in brackets, " +
+  'how much it grew during the run, close to what the run itself used. CPU: its processing time (counted in steps of ' +
+  'about 16 ms on Windows, so a short run may show 0).';
+
+/** "Memory 98 MB peak (+50 MB) · CPU 94 ms", or dashes for a run without them (older runs) */
+function RunUsageText({ usage }: { usage?: RunUsage | null }) {
+  const peak = usage?.peakRssBytes ?? null;
+  const start = usage?.startRssBytes ?? null;
+  const cpu = usage?.cpuMs ?? null;
+  const grew = peak !== null && start !== null ? `(+${bytes(Math.max(peak - start, 0))})` : '';
+  return (
+    <span className="cursor-help font-mono text-xs text-muted-foreground" title={USAGE_HINT}>
+      Memory {peak === null ? '—' : `${bytes(peak)} peak ${grew}`.trim()} · CPU {cpu === null ? '—' : `${Math.round(cpu)} ms`}
+    </span>
   );
 }

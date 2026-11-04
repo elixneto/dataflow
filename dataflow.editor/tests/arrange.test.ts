@@ -40,12 +40,14 @@ describe('arrange (left to right, glued)', () => {
     expect(at(placed)).toEqual({ f: [0, 0], t: [CARD_WIDTH + 64, 0], x: [CARD_WIDTH + 64, PORT_GAP] });
   });
 
-  test('not glued after an output with several edges: room for its 2x, 3x', () => {
+  test('not glued after an output with several edges: room for its 2x, 3x; the other branches stacked above the main one', () => {
     const placed = arrange(
       [card('s', 'mapper', 0, 0), card('a', 'sort', 0, 0), card('b', 'log', 0, 0), card('c', 'limit', 0, 0)],
       [edge('s', 'a'), edge('s', 'b'), edge('s', 'c')],
     );
-    expect(at(placed)).toMatchObject({ s: [0, 0], a: [CARD_WIDTH + 48, 0], b: [CARD_WIDTH + 48, PORT_GAP], c: [CARD_WIDTH + 48, 2 * PORT_GAP] });
+    // the main branch (the first of the longest) level with s; the others above it, in their order (what goes below a
+    // card is its error port's)
+    expect(at(placed)).toMatchObject({ s: [0, 2 * PORT_GAP], a: [CARD_WIDTH + 48, 2 * PORT_GAP], b: [CARD_WIDTH + 48, 0], c: [CARD_WIDTH + 48, PORT_GAP] });
   });
 
   test('room for the longest name of the card (Distinct: duplicates), also after the unnamed-looking first output', () => {
@@ -57,7 +59,8 @@ describe('arrange (left to right, glued)', () => {
   test("a Lookup lines up with its first input; the second source's card on the next row", () => {
     const nodes = [card('a', 'mapper', 0, 0), card('b', 'sort', 0, 100), card('u', 'lookup', 0, 0)];
     const placed = arrange(nodes, [edge('a', 'u'), edge('b', 'u', 'out-0', 'in-1')]);
-    expect(at(placed)).toEqual({ a: [0, 0], b: [0, PORT_GAP], u: [CARD_WIDTH, 0] });
+    // room before the Lookup for its inputs' names (input, lookup)
+    expect(at(placed)).toEqual({ a: [0, 0], b: [0, PORT_GAP], u: [CARD_WIDTH + 64, 0] });
   });
 
   test('a group is resized around the cards that were inside it, with room for its title', () => {
@@ -198,4 +201,57 @@ describe('arrange (left to right, glued)', () => {
     const placed = arrange([card('a', 'mapper', 0, 0), card('b', 'sort', 0, 50), group], []);
     expect(at(placed)).toEqual({ a: [0, 0], b: [0, PORT_GAP], g: [7, 7] });
   });
+
+  test("a Lookup fed by a branch of the Start: its ports level with what feeds them; the branch above the main path, error targets below their card", () => {
+    // as in a real flow: Start → HTTP → Split → Filter → Log → End, and Start → Mapper → (2x) two grids → Lookup → End
+    const group = { id: 'g', type: 'group', position: { x: -320, y: -4032 }, width: 816, height: 384, data: {} };
+    const nodes = [
+      group,
+      card('start', 'start', -496, -3584),
+      card('end', 'end', 464, -3584),
+      card('http', 'http-request', -288, -3584),
+      card('split', 'split', -80, -3584),
+      card('filter', 'filter', 80, -3584),
+      card('log', 'log', 304, -3584),
+      card('gridA', 'datagrid', -80, -3984),
+      card('gridB', 'datagrid', -80, -3904),
+      card('lookup', 'lookup', 176, -3984),
+      card('mapper', 'mapper', -288, -3984),
+      card('discard', 'discard', 304, -3744),
+    ];
+    const edges = [
+      edge('start', 'http'),
+      edge('split', 'filter'),
+      edge('filter', 'log'),
+      edge('log', 'end'),
+      edge('gridA', 'lookup'),
+      edge('gridB', 'lookup', 'out-0', 'in-1'),
+      edge('mapper', 'gridA'),
+      edge('mapper', 'gridB'),
+      edge('start', 'mapper'),
+      edge('lookup', 'end'),
+      edge('http', 'split'),
+      edge('lookup', 'discard', 'error', 'in-0'),
+    ];
+    for (const order of [edges, [...edges].reverse()]) {
+      const placed = at(arrange(nodes, order));
+      const [lx, ly] = placed.lookup!;
+      // the Lookup's input (its top port) level with the grid feeding it, its lookup port (a row down) with the other one
+      expect(ly).toBe(placed.gridA![1]);
+      expect(placed.gridB![1]).toBe(ly + PORT_GAP);
+      // room before the Lookup for its inputs' names
+      expect(lx - placed.gridA![0]).toBeGreaterThanOrEqual(CARD_WIDTH + 64);
+      // no two cards on the same spot
+      const spots = Object.values(placed).map(([x, y]) => `${x},${y}`);
+      expect(new Set(spots).size).toBe(spots.length);
+      // the main path (Start → HTTP → … → End) on one row; the Mapper branch above it; what Lookup's error port feeds
+      // right below the Lookup (under its two-row strip), so no red edge crosses the branch
+      expect(placed.http![1]).toBe(placed.start![1]);
+      expect(placed.split![1]).toBe(placed.start![1]);
+      expect(placed.mapper![1]).toBeLessThan(placed.start![1]);
+      expect(placed.discard![1]).toBe(ly + 2 * PORT_GAP);
+      expect(placed.discard![1]).toBeLessThan(placed.start![1]);
+    }
+  });
 });
+

@@ -27,7 +27,13 @@ export type SaveState =
 export const draftFingerprint = (file: FlowFile) => JSON.stringify({ nodes: file.nodes, edges: file.edges, groups: file.groups ?? [] });
 
 /** the draft's state and what can be done with it (the top bar shows it) */
-export type DraftSave = { state: SaveState; saveNow: () => void; reload: () => void };
+export type DraftSave = {
+  state: SaveState;
+  saveNow: () => void;
+  reload: () => void;
+  /** saves what is pending now; true once the server has the canvas as it is (a run runs what is saved) */
+  flush: () => Promise<boolean>;
+};
 
 export function useFlowDraft(flowId: string, canvas: { nodes: Node[]; edges: Edge[] }, load: (canvas: ReturnType<typeof flowFileToCanvas>) => void): DraftSave {
   const [state, setState] = useState<SaveState>({ status: 'loading' });
@@ -157,6 +163,10 @@ export function useFlowDraft(flowId: string, canvas: { nodes: Node[]; edges: Edg
 
   // the same object while nothing changes (the page keeps it in its state)
   const saveNow = useCallback(() => void save(), [save]);
+  const flush = useCallback(async () => {
+    await save();
+    return server.current !== null && draftFingerprint(fileNow()) === server.current.saved;
+  }, [save, fileNow]);
   const reload = useCallback(() => void open(), [open]);
-  return useMemo(() => ({ state, saveNow, reload }), [state, saveNow, reload]);
+  return useMemo(() => ({ state, saveNow, reload, flush }), [state, saveNow, reload, flush]);
 }

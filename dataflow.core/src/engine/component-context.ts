@@ -24,6 +24,18 @@ const tokensOf = (options: object) => {
 };
 
 /**
+ * The values a run never shows (in a log, an error, a sample): its secrets and the OAuth 2.0 access tokens it got,
+ * longest first (one that contains another is hidden whole).
+ */
+export const hiddenValues = (options: {secrets?: Record<string, string>}): string[] =>
+  [...Object.values(options.secrets ?? {}), ...[...tokensOf(options).values()].map(t => t.accessToken)]
+    .filter(v => v.length >= 4)
+    .sort((a, b) => b.length - a.length);
+
+/** `text` with every hidden value of the run replaced by *** */
+export const maskText = (text: string, hidden: string[]) => hidden.reduce((t, secret) => t.split(secret).join('***'), text);
+
+/**
  * What the engine gives a component while it runs (`ctx`): expressions, scripts, waits, database, memory...
  * `dryRun`: a target in a test run; its writes send nothing (see FlowExecution.runNode).
  */
@@ -34,11 +46,8 @@ export function componentContext(execution: FlowExecution, node: ExecutableNode,
   const waiting = execution.waitingOf(node.id);
   let logged = 0;
   let inFlight = 0;
-  // secret values never go to a log: longest first, so one that contains another is hidden whole
-  const secretValues = Object.values(options.secrets ?? {}).filter(v => v.length >= 4).sort((a, b) => b.length - a.length);
-  // an OAuth 2.0 access token is a secret too, once fetched
-  const hidden = () => [...secretValues, ...[...tokensOf(options).values()].map(t => t.accessToken)].sort((a, b) => b.length - a.length);
-  const mask = (text: string) => hidden().reduce((t, secret) => t.split(secret).join('***'), text);
+  // secret values never go to a log; an OAuth 2.0 access token is a secret too, once fetched
+  const mask = (text: string) => maskText(text, hiddenValues(options));
   // a database connection: its connection string, and the database a component that sets none takes from it
   const database = (type: 'sqlserver' | 'mongodb', use: ConnectionUse) => {
     const resolved = resolveConnection(type, use, options.connections, options.secrets);
@@ -124,40 +133,42 @@ export function componentContext(execution: FlowExecution, node: ExecutableNode,
     },
     sendHttp: async ({auth, ...given}) => {
       if (!options.http) throw new Error('This runner does not send HTTP requests.');
-      // an API connection: its headers first (an OAuth 2.0 token asked once per run and connection), the component's own win
-      let request = given;
-      if (auth) {
-        const http = options.http;
-        const resolved = resolveConnection('http-client', auth, options.connections, options.secrets, API_CONNECTION_TYPES);
-        let token: string | undefined;
-        if (resolved.type === 'rest-oauth2' && !dryRun) {
-          const key = 'profile' in auth ? auth.profile : JSON.stringify(resolved.config);
-          const tokens = tokensOf(options);
-          let cached = tokens.get(key);
-          if (!tokenStillGood(cached)) {
-            cached = await oauthToken(resolved, async r => http({...r, timeoutMs: request.timeoutMs, signal: execution.control.signal}));
-            tokens.set(key, cached);
-          }
-          token = cached.accessToken;
-        }
-        request = {...given, headers: {...connectionHeaders(resolved, token), ...given.headers}};
-      }
-      if (dryRun) {
-        const body = request.body === undefined ? '' : `, body ${mask(request.body.slice(0, BODY_EXCERPT))}${request.body.length > BODY_EXCERPT ? '…' : ''}`;
-        log('info', `Test run: ${request.method} ${mask(request.url)} not sent${body}.`);
-        return null;
-      }
-      // several requests at once: waiting runs while at least one is in flight
-      if (inFlight++ === 0) waiting.resume();
-      const t0 = performance.now();
+      const http = options.http;
+      // waiting (for an outside system) while at least one request is in flight, the OAuth 2.0 token's included
+      if (!dryRun && inFlight++ === 0) waiting.resume();
       try {
-        const response = await options.http({...request, signal: execution.control.signal});
+        // an API connection: its headers first (an OAuth 2.0 token asked once per run and connection), the component's own win
+        let request = given;
+        if (auth) {
+          const resolved = resolveConnection('http-client', auth, options.connections, options.secrets, API_CONNECTION_TYPES);
+          let token: string | undefined;
+          if (resolved.type === 'rest-oauth2' && !dryRun) {
+            const key = 'profile' in auth ? auth.profile : JSON.stringify(resolved.config);
+            const tokens = tokensOf(options);
+            let cached = tokens.get(key);
+            if (!tokenStillGood(cached)) {
+              const t0 = performance.now();
+              cached = await oauthToken(resolved, async r => http({...r, timeoutMs: request.timeoutMs, signal: execution.control.signal}));
+              tokens.set(key, cached);
+              log('debug', `OAuth 2.0 token from ${mask(resolved.config.tokenUrl ?? '')} in ${Math.round(performance.now() - t0)} ms.`);
+            }
+            token = cached.accessToken;
+          }
+          request = {...given, headers: {...connectionHeaders(resolved, token), ...given.headers}};
+        }
+        if (dryRun) {
+          const body = request.body === undefined ? '' : `, body ${mask(request.body.slice(0, BODY_EXCERPT))}${request.body.length > BODY_EXCERPT ? '…' : ''}`;
+          log('info', `Test run: ${request.method} ${mask(request.url)} not sent${body}.`);
+          return null;
+        }
+        const t0 = performance.now();
+        const response = await http({...request, signal: execution.control.signal});
         log('debug', `${request.method} ${mask(request.url)} → ${response.status} in ${Math.round(performance.now() - t0)} ms.`);
         return response;
       } catch (e) {
         throw new Error(mask(toError(e).message));
       } finally {
-        if (--inFlight === 0) waiting.stop();
+        if (!dryRun && --inFlight === 0) waiting.stop();
       }
     },
     mask,

@@ -53,6 +53,8 @@
     --canvas: oklch(0.937 0 0);
     /* the line around a component on the canvas: none in light (white on the gray canvas), a soft one in dark */
     --node-outline: transparent;
+    /* the Start and End cards: a faint slate tint, so the flow's ends stand out from its components */
+    --node-fixed: oklch(0.965 0.008 250);
     /* component categories (palette, cards), as in the PoC */
     --category-database: oklch(0.68 0.15 65);
     --category-api: oklch(0.58 0.12 165);
@@ -97,6 +99,7 @@
 .dark {
     --canvas: oklch(0.27 0.01 250);
     --node-outline: oklch(1 0 0 / 14%);
+    --node-fixed: oklch(0.245 0.014 250);
     --category-database: oklch(0.8 0.14 75);
     --category-api: oklch(0.76 0.12 165);
     --category-code: oklch(0.74 0.15 300);

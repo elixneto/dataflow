@@ -1,1 +1,0 @@
-Second host of the server: the supervisor process. Starts WORKERS=N workers (child processes), claim loop (SKIP LOCKED), heartbeat, reaper, cancellation and worker recycling. Uses the runs/* features the way the api uses features.

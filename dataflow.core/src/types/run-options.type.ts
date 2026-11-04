@@ -1,3 +1,5 @@
+import type {RunProgress} from '#types/run-record.type';
+import type {RunFromPlan} from '#engine/run-from';
 import type {ConnectionProfileData} from '../connections/connection-access';
 import type {Envelope} from '#types/envelope.type';
 import type {EvaluateExpression} from '#types/evaluate-expression.type';
@@ -44,10 +46,20 @@ export type RunOptions = {
   /** each envelope that reaches the End (the Flow Invoker uses it to pass them on); the End awaits the promise */
   onReachEnd?: (doc: Envelope) => Promise<void>;
   secrets?: Record<string, string>;
+  /**
+   * the run as it goes, a few times a second: each component's status (running, then how it ended), counts, samples
+   * and logs so far (what the editor shows live). A copy: changing it changes nothing in the run.
+   */
+  onProgress?: (progress: RunProgress) => void;
   /** the project's variables (plain values, not masked): $VARIABLES */
   variables?: Record<string, string>;
   /** the project's connection profiles, by id (their secret fields name entries of `secrets`) */
   connections?: Record<string, ConnectionProfileData>;
+  /**
+   * Run from here: the run is the component and what follows it (applyRunFrom), and these envelopes go into its inputs
+   * (the record says so; its first log line too)
+   */
+  runFrom?: RunFromPlan;
   /** to cancel from outside (Stop button) */
   signal?: AbortSignal;
   /** maximum run time; past that, the run is interrupted */

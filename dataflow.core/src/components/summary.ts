@@ -75,6 +75,8 @@ function sections(type: string, config: Record<string, unknown>, nameOf?: (id: s
         }))),
       ];
     }
+    case 'discard':
+      return [{title: 'Discard', lines: [{value: 'Drops every envelope'}]}];
     case 'mapper':
       return section('Fields', mapperFields(config).map(f => ({label: `$${f.target}`, value: shown(f.value, f.expression), code: true})));
     case 'filter':

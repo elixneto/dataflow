@@ -1,8 +1,10 @@
 import {parse, stringify} from 'yaml';
 import {END, START} from '#engine/constants';
 import type {ExecutableEdge} from '#types/executable-edge.type';
+import type {EnvelopeData} from '#types/envelope-data.type';
 import type {ExecutableFlow} from '#types/executable-flow.type';
 import {startParameters} from '../components/start';
+import {COMPONENTS} from '../components';
 import {errorEdgeIssues} from '#validation/ports';
 import {portConnectionIssues} from '#validation/port-connections';
 
@@ -27,7 +29,8 @@ export type FlowFileNode = {
   config: Record<string, unknown>;
   outputKey?: string;
   disabled?: boolean;
-  pinned?: boolean;
+  /** pinned output: the DATA of the envelopes per output port, replayed in test runs instead of executing */
+  pinned?: Record<string, EnvelopeData[]>;
   notes?: string;
 };
 
@@ -62,7 +65,7 @@ export function flowToYaml(file: FlowFile): string {
       config: n.config,
       ...(n.outputKey ? {outputKey: n.outputKey} : {}),
       ...(n.disabled ? {disabled: true} : {}),
-      ...(n.pinned ? {pinned: true} : {}),
+      ...(n.pinned ? {pinned: n.pinned} : {}),
       ...(n.notes ? {notes: n.notes} : {}),
     })),
     edges: file.edges.map(e => ({source: e.source, sourcePort: e.sourcePort, target: e.target, targetPort: e.targetPort})),
@@ -72,6 +75,13 @@ export function flowToYaml(file: FlowFile): string {
 }
 
 const isObject = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
+
+/** the most a flow's pinned outputs may take (they are saved with the flow) */
+export const MAX_PINNED_BYTES = 2 * 1024 ** 2;
+
+/** envelopes per port, as a pin keeps them */
+const isPinned = (v: unknown): v is Record<string, EnvelopeData[]> =>
+  isObject(v) && Object.values(v).every(items => Array.isArray(items) && items.every(isObject));
 const isPoint = (v: unknown): v is Point => isObject(v) && Number.isFinite(v.x) && Number.isFinite(v.y);
 
 export type FlowFileResult = {ok: true; value: FlowFile} | {ok: false; errors: string[]};
@@ -137,6 +147,10 @@ export function validateFlowFile(data: unknown): FlowFileResult {
   };
   const ports = [...portConnectionIssues(plainEdges, typeOf), ...errorEdgeIssues(plainEdges, nodeOf)];
   if (ports.length) return {ok: false, errors: ports.map(i => `Node "${i.nodeId}" ${i.message}`)};
+  const pinnedBytes = (nodes as Record<string, unknown>[]).reduce((n, node) => n + (isPinned(node.pinned) ? JSON.stringify(node.pinned).length : 0), 0);
+  if (pinnedBytes > MAX_PINNED_BYTES) {
+    return {ok: false, errors: [`The pinned outputs take ${(pinnedBytes / 1024 ** 2).toFixed(1)} MB (at most ${MAX_PINNED_BYTES / 1024 ** 2} MB): unpin a component.`]};
+  }
 
   const value: FlowFile = {
     version: FLOW_FILE_VERSION,
@@ -150,7 +164,8 @@ export function validateFlowFile(data: unknown): FlowFileResult {
       config: (n.config as Record<string, unknown> | undefined) ?? {},
       ...(typeof n.outputKey === 'string' && n.outputKey ? {outputKey: n.outputKey} : {}),
       ...(n.disabled === true ? {disabled: true} : {}),
-      ...(n.pinned === true ? {pinned: true} : {}),
+      // pinned output: envelopes per port (a bare `true` of earlier versions had none: not pinned)
+      ...(isPinned(n.pinned) ? {pinned: n.pinned} : {}),
       ...(typeof n.notes === 'string' && n.notes ? {notes: n.notes} : {}),
     })),
     edges: edges.map((e: Record<string, string>) => ({source: e.source, sourcePort: e.sourcePort, target: e.target, targetPort: e.targetPort})),
@@ -179,6 +194,17 @@ export function newFlowFile(name: string, id?: string): FlowFile {
   };
 }
 
+/**
+ * the enabled components that write outside the flow (a database, an API): what Run for real lists before it runs
+ * (a test run does not write); a component's sideEffects may depend on its config (an HTTP GET only reads)
+ */
+export function writingComponents(file: FlowFile): FlowFileNode[] {
+  return file.nodes.filter(n => {
+    const effects = COMPONENTS[n.type]?.sideEffects;
+    return !n.disabled && (typeof effects === 'function' ? effects(n.config) : effects === true);
+  });
+}
+
 /** the flow as the runner takes it: no positions, groups or notes; the parameters from its Start */
 export function toExecutableFlow(file: FlowFile, project: string): ExecutableFlow {
   return {
@@ -193,6 +219,7 @@ export function toExecutableFlow(file: FlowFile, project: string): ExecutableFlo
       config: n.config,
       ...(n.outputKey ? {outputKey: n.outputKey} : {}),
       ...(n.disabled ? {disabled: true} : {}),
+      ...(n.pinned ? {pinned: n.pinned} : {}),
     })),
     edges: file.edges,
   };

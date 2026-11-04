@@ -17,6 +17,9 @@ export type ApiResult<T> = { ok: true; value: T } | { ok: false; error: ApiError
 
 const UNAVAILABLE: ApiError = { code: 'unavailable', message: 'Server unavailable' };
 
+/** who is calling, as every request to the api says it (until there is authentication) */
+export const apiHeaders = (): Record<string, string> => ({ 'x-org-id': mockUser.orgId, 'x-user-id': mockUser.id });
+
 /** a request to the api: the value, or the error the server answered ({ error: { code, message, fields } }) */
 export async function api<T>(path: string, init: { method?: string; body?: unknown; keepalive?: boolean } = {}): Promise<ApiResult<T>> {
   let response: Response;

@@ -17,6 +17,7 @@ import {
   sqlserver,
   typescript,
   flowInvoker,
+  discard,
   END,
   START,
 } from '@dataflow/core';
@@ -35,6 +36,7 @@ import {
   Shuffle,
   Split,
   Table,
+  Trash2,
   Ungroup,
   Workflow,
   Flag,
@@ -88,6 +90,7 @@ const COMPONENTS: ComponentInfo[] = [
   { type: sort.type, label: 'Sort', description: 'Sorts the envelopes by keys', category: 'transformation', icon: ArrowDownUp },
   { type: split.type, label: 'Split', description: 'Yields one envelope per item of a list', category: 'transformation', icon: Ungroup },
   { type: log.type, label: 'Log', description: 'Records a message for each envelope', category: 'flow', icon: ScrollText },
+  { type: discard.type, label: 'Discard', description: 'Drops every envelope that reaches it (no output)', category: 'flow', icon: Trash2 },
   { type: flowInvoker.type, label: 'Flow Invoker', description: 'Calls another flow with the parameters of its Start', category: 'flow', icon: Workflow },
 ];
 

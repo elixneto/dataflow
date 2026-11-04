@@ -12,6 +12,7 @@
   "scripts": {
     "dev": "bun scripts/dev.ts",
     "start": "bun scripts/dev.ts",
+    "editor": "bun run --cwd=dataflow.editor dev",
     "test": "bun test --cwd=dataflow.core && bun test --cwd=dataflow.server && bun test --cwd=dataflow.editor",
     "typecheck": "bun run --cwd=dataflow.core typecheck && bun run --cwd=dataflow.server typecheck && bun run --cwd=dataflow.editor typecheck",
     "migrate": "bun run --cwd=dataflow.server migrate"

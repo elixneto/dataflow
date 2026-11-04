@@ -1,4 +1,5 @@
 import {API_CONNECTION_TYPES, connectionIssues, connectionSettings, connectionUse} from '../connections/connection-access';
+import {RESPONSE_HEADER_MODES, responseHeaders, type ResponseHeaderMode} from '../connections/sensitive-headers';
 import {withKey} from '#envelope/envelope-data';
 import {toError} from '#errors/normalize-error';
 import type {ComponentLogic} from '#types/component-logic.type';
@@ -40,6 +41,7 @@ export function httpConfig(config: Record<string, unknown>) {
     timeoutS: Number.isFinite(timeout) && timeout > 0 ? timeout : DEFAULT_HTTP_TIMEOUT_S,
     concurrency: Number.isFinite(concurrency) ? Math.min(MAX_HTTP_CONCURRENCY, Math.max(1, concurrency)) : 1,
     failOnError: config.failOnError !== false,
+    responseHeaders: (RESPONSE_HEADER_MODES.includes(config.responseHeaders as ResponseHeaderMode) ? config.responseHeaders : 'safe') as ResponseHeaderMode,
   };
 }
 
@@ -86,6 +88,14 @@ export const httpRequest: ComponentLogic = {
     {key: 'timeoutS', label: 'Timeout (seconds)', kind: 'number', default: DEFAULT_HTTP_TIMEOUT_S, min: 1},
     {key: 'concurrency', label: 'Requests at once', kind: 'number', default: 1, min: 1, max: MAX_HTTP_CONCURRENCY},
     {key: 'failOnError', label: 'Fail on non-2xx', kind: 'boolean', default: true},
+    {
+      key: 'responseHeaders', label: 'Response headers', kind: 'select', default: 'safe',
+      options: [
+        {value: 'safe', label: 'Safe (credentials hidden)'},
+        {value: 'none', label: 'None'},
+        {value: 'all', label: 'All (unsafe: cookies and tokens kept)'},
+      ],
+    },
   ],
 
   validate(config) {
@@ -102,7 +112,7 @@ export const httpRequest: ComponentLogic = {
   },
 
   async* execute(inputs, config, ctx) {
-    const {method, url, query, headers, body, timeoutS, concurrency, failOnError} = httpConfig(config);
+    const {method, url, query, headers, body, timeoutS, concurrency, failOnError, responseHeaders: headerMode} = httpConfig(config);
     const auth = connectionUse('http-client', config);
     const key = ctx.node.outputKey || 'response';
     const counts = {ok: 0, client: 0, server: 0, other: 0, errors: 0, notSent: 0};
@@ -165,7 +175,7 @@ export const httpRequest: ComponentLogic = {
         yield {error: Object.assign(new Error(ctx.mask(`HTTP ${s} on ${request.method} ${request.url}${excerpt ? `: ${excerpt}` : ''}`)), {name: 'HttpError'}), doc};
         return;
       }
-      yield {port: 'out-0', doc: withKey(doc, key, {status: s, headers: response.headers, body: responseBody(response)}, ctx.node.override)};
+      yield {port: 'out-0', doc: withKey(doc, key, {status: s, headers: responseHeaders(response.headers, headerMode), body: responseBody(response)}, ctx.node.override)};
     }
 
     for await (const doc of inputs['in-0'] ?? []) {

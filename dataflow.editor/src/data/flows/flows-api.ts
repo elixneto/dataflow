@@ -1,4 +1,4 @@
-import type { FlowFile } from '@dataflow/core';
+import type { FlowFile, RunProgress, RunRecord } from '@dataflow/core';
 import { api, type ApiResult } from '@/lib/api';
 import type { Flow, Folder, ProjectContents } from './flow';
 
@@ -105,4 +105,38 @@ export function archiveFlow(id: string): Promise<ApiResult<{ id: string }>> {
 /** brings the flow back into its folder; to the root when that folder is archived or gone */
 export async function restoreFlow(id: string): Promise<ApiResult<Flow>> {
   return map(await api<FlowDto>(`/flows/${id}/restore`, { method: 'POST' }), toFlow);
+}
+
+// ---- runs
+
+/** a run as the editor follows it: its status, and its record once it ended */
+export type RunView = {
+  id: string;
+  flowId: string;
+  mode: 'validation' | 'execution';
+  status: 'queued' | 'running' | 'completed' | 'with-warnings' | 'with-errors' | 'failed' | 'cancelled';
+  record: RunRecord | RunProgress | null;
+  /** what its worker process used, once it ended (none for older runs) */
+  usage: RunUsage | null;
+};
+
+/** a run's worker process: its memory at the start and its peak (the whole process, Bun included), its CPU time */
+export type RunUsage = { startRssBytes: number | null; peakRssBytes: number | null; cpuMs: number | null };
+
+/**
+ * queues a run of the flow's saved draft: a test run (validation; it replaces this user's previous test run of the flow)
+ * or for real (execution); with fromNodeId, Run from here: that component and what follows it, from what reached it in
+ * the last run (the server takes it from the run it kept); the run's id right away
+ */
+export function startRun(flowId: string, mode: 'validation' | 'execution', from?: { nodeId: string; label: string }): Promise<ApiResult<{ id: string }>> {
+  return api<{ id: string }>(`/flows/${flowId}/runs`, { method: 'POST', body: { mode, ...(from ? { fromNodeId: from.nodeId, fromLabel: from.label } : {}) } });
+}
+
+/** Stop: a queued run is cancelled at once, a running one stops at its next step; its status now */
+export function cancelRun(id: string): Promise<ApiResult<{ id: string; status: RunView['status'] }>> {
+  return api<{ id: string; status: RunView['status'] }>(`/runs/${id}/cancel`, { method: 'POST' });
+}
+
+export function getRun(id: string): Promise<ApiResult<RunView>> {
+  return api<RunView>(`/runs/${id}`);
 }

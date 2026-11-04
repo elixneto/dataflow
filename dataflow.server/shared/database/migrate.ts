@@ -40,11 +40,16 @@ export async function readMigrations(folder = MIGRATIONS_FOLDER): Promise<Migrat
 /** Applies the migrations that are missing. Returns the names it applied. */
 export async function migrate(db: Database, migrations?: Migration[]): Promise<string[]> {
   const steps = migrations ?? await readMigrations();
-  await db.exec(`CREATE TABLE IF NOT EXISTS schema_migrations (
-    name text PRIMARY KEY,
-    checksum text NOT NULL,
-    applied_at timestamptz NOT NULL DEFAULT now()
-  )`);
+  // under the lock too: two processes creating it at once (the api and the supervisor starting together) collide even
+  // with IF NOT EXISTS
+  await db.transaction(async tx => {
+    await tx.query('SELECT pg_advisory_xact_lock($1)', [MIGRATION_LOCK]);
+    await tx.exec(`CREATE TABLE IF NOT EXISTS schema_migrations (
+      name text PRIMARY KEY,
+      checksum text NOT NULL,
+      applied_at timestamptz NOT NULL DEFAULT now()
+    )`);
+  });
   const appliedNow: string[] = [];
   for (const step of steps) {
     const done = await db.transaction(async tx => {

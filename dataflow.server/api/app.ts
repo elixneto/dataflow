@@ -3,13 +3,14 @@ import type { Keyring } from '#shared/crypto/keyring';
 import type { Database } from '#shared/database/database';
 import type { AppEnv } from './app-env';
 import { requestContext } from './middlewares/request-context';
-import { flowsRoutes } from './routes/flows.routes';
+import { flowsRoutes, runsRoutes } from './routes/flows.routes';
 import { foldersRoutes } from './routes/folders.routes';
 import { projectResourcesRoutes } from './routes/project-resources.routes';
 import { projectsRoutes } from './routes/projects.routes';
 
 /**
- * The api's routes, without starting a server: server.ts serves it, tests call app.request() directly.
+ * The api's routes, without starting a server: server.ts serves it, tests call app.request() directly. The runs go
+ * on in the supervisor; what they do reaches the routes through followRunEvents (server.ts).
  */
 export function createApp(db: Database, environment: string, keyring?: Keyring) {
   const app = new Hono<AppEnv>();
@@ -19,6 +20,7 @@ export function createApp(db: Database, environment: string, keyring?: Keyring) 
   app.route('/projects', projectsRoutes());
   app.route('/folders', foldersRoutes());
   app.route('/flows', flowsRoutes());
+  app.route('/runs', runsRoutes());
   app.route('/', projectResourcesRoutes());
 
   // an unexpected failure (not a UseCaseResult): logged, and the caller gets a 500 without the details

@@ -13,7 +13,7 @@ import {
 } from '@dataflow/core';
 
 /*
- * MOCK: a run's record (the core's RunRecord) made up from the flow as it is, to build the results screen before the
+ * A run's record (the core's RunRecord) made up from the flow as it is, to build the results screen before the
  * server runs flows. The envelopes follow the edges: the Start sends one (its default input when it accepts one), each
  * component passes them on (a Filter splits them, a Router spreads them over its cases, an Aggregate packs them), an
  * HTTP Request answers 200 with a JSON body. Nothing runs and nothing is sent. Same flow, same numbers.

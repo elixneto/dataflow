@@ -5,5 +5,4 @@ dist
 .vscode
 .env
 
-# server's embedded database (PGlite), when DATABASE_URL is not set
 dataflow.server/data.local*

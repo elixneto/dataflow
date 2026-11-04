@@ -1,4 +1,4 @@
-import { lazy, Suspense, type ReactNode } from 'react';
+import { createContext, lazy, Suspense, useContext, type ReactNode } from 'react';
 import { useParams } from 'react-router';
 import { ArrowDown, ArrowUp, Plus, Trash } from 'lucide-react';
 import { settingDefault, settingsDefaults, settingValue, settingVisible, withSetting, type ExpressionField, type SettingField } from '@dataflow/core';
@@ -9,8 +9,12 @@ import { Textarea } from '@/components/ui/textarea';
 import { projectTabPath } from '@/app/paths';
 import { cn } from '@/lib/utils';
 import { useProjectResources } from './project-resources';
+import { ExpressionBox } from './expression-box';
 
 type Values = Record<string, unknown>;
+
+/** the component whose settings these are: its expression fields suggest what reaches it */
+const NodeContext = createContext<string | undefined>(undefined);
 
 /** Monaco, only when a code setting shows */
 const CodeEditor = lazy(() => import('./code-editor'));
@@ -22,27 +26,30 @@ const SELECT = 'h-8 w-full rounded-lg border border-input bg-transparent px-2.5 
  * setting, the `when`s applied. It only edits `values` (the window's draft config): Save, Cancel and the issues are
  * the window's.
  */
-export function SettingsForm({ id, fields, values, onChange }: { id: string; fields: SettingField[]; values: Values; onChange: (values: Values) => void }) {
+export function SettingsForm(props: { id: string; nodeId?: string; fields: SettingField[]; values: Values; onChange: (values: Values) => void }) {
+  const { id, nodeId, fields, values, onChange } = props;
   return (
-    <div className="grid gap-4">
-      {fields
-        .filter(field => settingVisible(field, values, fields))
-        .map(field =>
-          field.kind === 'grid' ? (
-            // a table: its columns in the setting's key, its rows beside them (`rows`)
-            <GridSetting
-              key={field.key}
-              id={`${id}-${field.key}`}
-              field={field}
-              columns={Array.isArray(values[field.key]) ? (values[field.key] as GridColumn[]) : []}
-              rows={Array.isArray(values.rows) ? (values.rows as string[][]) : []}
-              onChange={(columns, rows) => onChange({ ...values, [field.key]: columns, rows })}
-            />
-          ) : (
-            <Setting key={field.key} id={`${id}-${field.key}`} field={field} value={settingValue(field, values)} onChange={value => onChange(withSetting(field, values, value))} />
-          ),
-        )}
-    </div>
+    <NodeContext.Provider value={nodeId}>
+      <div className="grid gap-4">
+        {fields
+          .filter(field => settingVisible(field, values, fields))
+          .map(field =>
+            field.kind === 'grid' ? (
+              // a table: its columns in the setting's key, its rows beside them (`rows`)
+              <GridSetting
+                key={field.key}
+                id={`${id}-${field.key}`}
+                field={field}
+                columns={Array.isArray(values[field.key]) ? (values[field.key] as GridColumn[]) : []}
+                rows={Array.isArray(values.rows) ? (values.rows as string[][]) : []}
+                onChange={(columns, rows) => onChange({ ...values, [field.key]: columns, rows })}
+              />
+            ) : (
+              <Setting key={field.key} id={`${id}-${field.key}`} field={field} value={settingValue(field, values)} onChange={value => onChange(withSetting(field, values, value))} />
+            ),
+          )}
+      </div>
+    </NodeContext.Provider>
   );
 }
 
@@ -77,6 +84,7 @@ function Setting({ id, field, value, onChange }: { id: string; field: SettingFie
 
 /** the control of one setting, without its label (a list's items show the labels once, above the columns) */
 function Control({ id, field, value, onChange }: { id: string; field: SettingField; value: unknown; onChange: (value: unknown) => void }) {
+  const nodeId = useContext(NodeContext);
   const text = typeof value === 'string' ? value : value == null ? '' : String(value);
   switch (field.kind) {
     case 'select':
@@ -102,13 +110,13 @@ function Control({ id, field, value, onChange }: { id: string; field: SettingFie
         />
       );
     case 'expression':
-      return <Textarea id={id} value={text} rows={1} placeholder={field.placeholder} spellCheck={false} className="min-h-8 py-1.5 font-mono" onChange={event => onChange(event.target.value)} />;
+      return <NodeExpressionBox id={id} value={text} placeholder={field.placeholder} onChange={onChange} />;
     case 'code': {
       // a plain text box while the code editor (Monaco) loads
       const plain = <Textarea id={id} value={text} placeholder={field.placeholder} spellCheck={false} className="min-h-32 font-mono text-xs" onChange={event => onChange(event.target.value)} />;
       return (
         <Suspense fallback={plain}>
-          <CodeEditor id={id} value={text} language={field.language ?? 'javascript'} label={field.label} onChange={onChange} />
+          <CodeEditor id={id} nodeId={nodeId} value={text} language={field.language ?? 'javascript'} label={field.label} onChange={onChange} />
         </Suspense>
       );
     }
@@ -297,6 +305,11 @@ function NewLink({ href, children }: { href: string; children: ReactNode }) {
   );
 }
 
+/** an expression field of this form's component: it suggests what reaches the component (expression-box.tsx) */
+function NodeExpressionBox({ id, value, placeholder, onChange }: { id: string; value: string; placeholder?: string; onChange: (value: string) => void }) {
+  return <ExpressionBox id={id} nodeId={useContext(NodeContext)} value={value} placeholder={placeholder} onChange={onChange} />;
+}
+
 /** a fixed value or an expression: the fx button switches (an expression in monospace) */
 function ValueControl({ id, field, value, onChange }: { id: string; field: SettingField; value: unknown; onChange: (value: ExpressionField) => void }) {
   const current = (value && typeof value === 'object' ? value : settingDefault(field)) as ExpressionField;
@@ -316,15 +329,9 @@ function ValueControl({ id, field, value, onChange }: { id: string; field: Setti
         fx
       </button>
       {current.expression ? (
-        <Textarea
-          id={id}
-          value={current.value}
-          rows={1}
-          placeholder={field.placeholder}
-          spellCheck={false}
-          className="min-h-8 py-1.5 font-mono"
-          onChange={event => onChange({ ...current, value: event.target.value })}
-        />
+        <div className="grid min-w-0 flex-1 gap-1">
+          <NodeExpressionBox id={id} value={current.value} placeholder={field.placeholder} onChange={text => onChange({ ...current, value: text })} />
+        </div>
       ) : (
         <Input id={id} value={current.value} onChange={event => onChange({ ...current, value: event.target.value })} />
       )}

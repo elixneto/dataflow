@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { newFlowFile, type FlowFile } from '@dataflow/core';
-import { mockRunRecord } from '../src/editor/run/mock-run';
+import { mockRunRecord } from './fixtures/mock-run';
 
 describe('the mock run (until the server runs flows)', () => {
   const flow: FlowFile = {

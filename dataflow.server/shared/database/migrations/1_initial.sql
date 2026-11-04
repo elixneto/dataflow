@@ -174,8 +174,8 @@ CREATE TABLE runs (
   flow_id uuid NOT NULL,
   parent_id uuid,
   mode text NOT NULL CHECK (mode IN ('execution', 'validation')),
-  flow_version_id uuid,           -- required in execution (reads deployments)
-  draft_hash text,                -- required in validation (reads the draft in flows)
+  flow_version_id uuid,           -- the deployed version run (a scheduled or published run)
+  draft_hash text,                -- the draft run (the editor's Run and Run for real): required in validation
   status text NOT NULL CHECK (status IN ('queued', 'running', 'completed', 'with-warnings', 'with-errors', 'failed', 'cancelled')),
   trigger text NOT NULL CHECK (trigger IN ('manual', 'webhook', 'schedule', 'api')),
   worker_tag text NOT NULL DEFAULT 'default',
@@ -193,7 +193,8 @@ CREATE TABLE runs (
   cpu_ms bigint,
   duration_ms bigint,
   record jsonb,                   -- the RunRecord from @dataflow/core, with the components
-  CHECK (mode <> 'execution' OR flow_version_id IS NOT NULL),
+  -- execution: a deployed version, or the editor's draft (Run for real)
+  CHECK (mode <> 'execution' OR flow_version_id IS NOT NULL OR draft_hash IS NOT NULL),
   CHECK (mode <> 'validation' OR draft_hash IS NOT NULL)
 );
 CREATE INDEX runs_queue ON runs (worker_tag, priority, queued_at) WHERE status = 'queued';

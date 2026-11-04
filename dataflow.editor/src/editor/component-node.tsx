@@ -1,21 +1,21 @@
 import { memo, useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { Handle, NodeToolbar, Position, useNodeConnections, useReactFlow, useUpdateNodeInternals, type Node, type NodeProps } from '@xyflow/react';
-import { CircleAlert, CircleCheck, CircleMinus, CircleX, CornerDownRight, Eye, LogIn, LoaderCircle, OctagonX, Pin, Play, Power, SkipForward, SlidersHorizontal, X, type LucideIcon } from 'lucide-react';
+import { Circle, CircleAlert, CircleCheck, CircleDashed, CircleMinus, CircleX, CornerDownRight, Eye, LogIn, LoaderCircle, OctagonX, Pin, Play, Power, SkipForward, SlidersHorizontal, X, type LucideIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { CATEGORIES, componentInfo, isFixedType } from './catalog';
 import { CARD_HEIGHT, CARD_WIDTH, portTop, SIDE_GAP } from './node-geometry';
 import { useHistory } from './history';
-import { runActions, useRunMark } from './run/run-marks';
+import { pinnedOutput, runActions, useRunMark } from './run/run-marks';
 import { nameIn, useProjectResources } from './project-resources';
-import { componentSummary, START, startConfig, ERROR_PORT, type ComponentRun, errorPort, inputPorts, outputPorts, type ErrorPolicy, type PortInfo } from '@dataflow/core';
+import { componentSummary, START, startConfig, ERROR_PORT, type ComponentRun, type EnvelopeData, errorPort, inputPorts, outputPorts, type ErrorPolicy, type PortInfo } from '@dataflow/core';
 
 export type ComponentData = {
   type: string;
   config: Record<string, unknown>;
   /** skipped in runs (shown faded, the name struck through) */
   disabled?: boolean;
-  /** MOCK: the output is pinned (in editor runs it would replay it instead of running) */
-  pinned?: boolean;
+  /** pinned output: the envelopes per port it sends in test runs instead of executing (what the Data tab showed) */
+  pinned?: Record<string, EnvelopeData[]>;
   /** its name on the canvas (empty: the component's own, like Mapper) */
   label?: string;
   /** the key it writes in the envelope (empty: the component's default) */
@@ -54,6 +54,8 @@ function ComponentNodeView({ id, data, selected }: NodeProps<ComponentNode>) {
   // the last run on this component: a spinner while it runs, then its status and the envelopes per port
   const mark = useRunMark(id);
   const run = mark?.run;
+  // it ran in this run: its counts show
+  const ran = run !== undefined && run.status !== 'not-run' && run.status !== 'skipped';
   const failed = run?.status === 'failed' || run?.status === 'with-errors';
   const closeInfo = useCallback(() => setInfoOpen(false), []);
   const updateNodeInternals = useUpdateNodeInternals();
@@ -94,7 +96,7 @@ function ComponentNodeView({ id, data, selected }: NodeProps<ComponentNode>) {
       )}
       {infoOpen && <InfoPanel data={data} onClose={closeInfo} />}
       <div {...hover.props} style={{ '--category': color, width: CARD_WIDTH - SIDE_GAP } as CSSProperties} className={cn('relative transition-opacity', data.disabled && 'opacity-50')}>
-        <Plate inputs={inputs.length} outputs={outputs.length} errorPort={hasErrorPort} selected={selected} failed={failed} />
+        <Plate inputs={inputs.length} outputs={outputs.length} errorPort={hasErrorPort} selected={selected} failed={failed} fixed={isFixedType(data.type)} />
         {mark && <RunBadge running={mark.running} run={run} />}
         {/* what is set on the node (Continue, pinned), above it where the bar appears, in the plain color (the bar's
             buttons are the colored ones): the bar covers it on hover and the name keeps the whole card */}
@@ -140,7 +142,7 @@ function ComponentNodeView({ id, data, selected }: NodeProps<ComponentNode>) {
               kind="source"
               style={{ top: portTop(i) }}
               edges={outgoing.filter(c => c.sourceHandle === port.id).length}
-              envelopes={run && !mark?.running ? (run.outputs[port.id] ?? 0) : undefined}
+              envelopes={ran ? (run.outputs[port.id] ?? 0) : undefined}
               onShow={() => mark?.show(port.id)}
             />
           ))}
@@ -158,7 +160,7 @@ function ComponentNodeView({ id, data, selected }: NodeProps<ComponentNode>) {
             </Handle>
           )}
           {/* after a run: the envelopes that went out through the error port, beside its bump (the badge is on the right) */}
-          {hasErrorPort && run && !mark?.running && (
+          {hasErrorPort && ran && (
             <EnvelopeCount
               count={run.outputs[ERROR_PORT] ?? 0}
               onShow={() => mark?.show(ERROR_PORT)}
@@ -199,7 +201,10 @@ function inputHoles(inputs: number): CSSProperties {
  * pieces have no borders of their own; the line around (--node-outline, none in light) and the shadow are drawn on the
  * whole shape, so there is no seam and the holes and bumps get the same line. Selected, it takes the category's color.
  */
-function Plate({ inputs, outputs, errorPort, selected, failed }: { inputs: number; outputs: number; errorPort: boolean; selected: boolean; failed?: boolean }) {
+function Plate(props: { inputs: number; outputs: number; errorPort: boolean; selected: boolean; failed?: boolean; fixed?: boolean }) {
+  const { inputs, outputs, errorPort, selected, failed, fixed } = props;
+  // Start and End: a slightly different plate, so the flow's ends stand out from its components
+  const fill = fixed ? 'bg-[var(--node-fixed)]' : 'bg-card';
   const strip = (ports: number) => ({ width: EXTENSION_WIDTH, height: portTop(ports - 1) + CARD_HEIGHT / 2 });
   const height = Math.max(portTop(Math.max(inputs, outputs, 1) - 1) + CARD_HEIGHT / 2, errorPort ? CARD_HEIGHT + ERROR_BUMP.height : 0);
   // failed in the last run: a red line around it
@@ -210,19 +215,19 @@ function Plate({ inputs, outputs, errorPort, selected, failed }: { inputs: numbe
     <div aria-hidden className="pointer-events-none absolute top-0 left-0" style={{ filter, height, width: `calc(100% + ${BUMP_WIDTH}px)` }}>
       {/* the mask is on this inner layer, so the line of the filter above also follows the holes */}
       <div className="absolute inset-0" style={inputHoles(inputs)}>
-        <div className="absolute top-0 left-0 rounded-xl bg-card" style={{ height: CARD_HEIGHT, width: `calc(100% - ${BUMP_WIDTH}px)` }} />
-        {inputs > 1 && <div className="absolute top-0 left-0 rounded-xl bg-card" style={strip(inputs)} />}
-        {outputs > 1 && <div className="absolute top-0 rounded-xl bg-card" style={{ ...strip(outputs), right: BUMP_WIDTH }} />}
+        <div className={`absolute top-0 left-0 rounded-xl ${fill}`} style={{ height: CARD_HEIGHT, width: `calc(100% - ${BUMP_WIDTH}px)` }} />
+        {inputs > 1 && <div className={`absolute top-0 left-0 rounded-xl ${fill}`} style={strip(inputs)} />}
+        {outputs > 1 && <div className={`absolute top-0 rounded-xl ${fill}`} style={{ ...strip(outputs), right: BUMP_WIDTH }} />}
         {errorPort && (
           <div
-            className="absolute rounded-b-full bg-card"
+            className={`absolute rounded-b-full ${fill}`}
             style={{ top: CARD_HEIGHT - 1, left: `calc((100% - ${BUMP_WIDTH}px) / 2 - ${ERROR_BUMP.width / 2}px)`, ...ERROR_BUMP }}
           />
         )}
         {Array.from({ length: outputs }, (_, i) => (
           <div
             key={i}
-            className="absolute rounded-r-full bg-card"
+            className={`absolute rounded-r-full ${fill}`}
             style={{ top: portTop(i) - HOLE_RADIUS, right: 1, width: BUMP_WIDTH, height: HOLE_RADIUS * 2 }}
           />
         ))}
@@ -313,14 +318,20 @@ export function EnvelopeCount(props: { count: number; onShow?: () => void; class
 
 /** the component's status in the last run, on its bottom right corner (the top is the hover bar's) */
 function RunBadge({ running, run }: { running: boolean; run?: ComponentRun }) {
-  const [Icon, color, text] = running
+  // while the run goes on: a spinner on what is running, a faint circle on what has not started (all of them while
+  // the run waits for a worker)
+  const [Icon, color, text] = run?.status === 'running'
     ? [LoaderCircle, 'text-muted-foreground animate-spin', 'Running']
     : !run || run.status === 'not-run'
-      ? [CircleMinus, 'text-muted-foreground', 'Not run']
+      ? running
+        ? [Circle, 'text-muted-foreground/50', 'Waiting']
+        : [CircleMinus, 'text-muted-foreground', 'Not run']
       : run.status === 'completed'
         ? [CircleCheck, 'text-emerald-600 dark:text-emerald-400', 'Completed']
         : run.status === 'pinned'
           ? [Pin, 'text-blue-600 dark:text-blue-400', 'Pinned output']
+          : run.status === 'skipped'
+            ? [CircleDashed, 'text-muted-foreground', 'Skipped: it only feeds pinned components']
           : run.status === 'disabled'
             ? [Power, 'text-muted-foreground', 'Disabled']
             : run.status === 'with-warnings'
@@ -371,7 +382,12 @@ function NodeActions(props: {
   const { id, data, visible, hoverProps } = props;
   // Run from here and Pin output come after a run, by what went in and out of this component (run-marks.ts)
   const mark = useRunMark(id);
-  const offers = runActions(mark?.running ? undefined : mark?.run, data.pinned ?? false);
+  // a component without outputs (Discard) has nothing to pin, nothing after it to run, no error to divert
+  const hasOutputs = outputPorts(data.type, data.config).length > 0;
+  const actions = runActions(mark?.running ? undefined : mark?.run, Boolean(data.pinned));
+  // Run from here starts from the last full test run: it is offered by what reached the component there
+  const fromFull = runActions(mark?.running ? undefined : mark?.full, false);
+  const offers = { pin: hasOutputs && actions.pin, runFromHere: hasOutputs && fromFull.runFromHere };
   const { updateNodeData, setEdges } = useReactFlow<ComponentNode>();
   const { record } = useHistory();
   const onError = onErrorOf(data);
@@ -387,16 +403,15 @@ function NodeActions(props: {
 
     updateNodeData(id, { config: { ...data.config, onError: next } });
   };
-  const [running, setRunning] = useState(false);
+  // a run going on: Run from here waits for it
+  const running = mark?.running ?? false;
   const change = (changes: Partial<ComponentData>) => {
     record();
     updateNodeData(id, changes);
   };
 
-  const runFromHere = () => {
-    setRunning(true);
-    setTimeout(() => setRunning(false), 800);
-  };
+  // a test run of this component and what follows it, from what reached it in the last run
+  const runFromHere = () => mark?.runFrom();
 
   // NodeToolbar is drawn outside the canvas' zoom: the bar keeps its size at any zoom, right above the card's left
   return (
@@ -420,34 +435,39 @@ function NodeActions(props: {
             {offers.pin && (
               <ActionButton
                 label={data.pinned ? 'Unpin output' : 'Pin output'}
-                pressed={data.pinned ?? false}
+                pressed={Boolean(data.pinned)}
                 className={data.pinned ? 'text-blue-600 hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-400' : undefined}
-                onClick={() => change({ pinned: !data.pinned })}
+                // pinned: what went out of it in the last run, as the Data tab shows it
+                onClick={() => change({ pinned: data.pinned ? undefined : pinnedOutput(mark?.run) })}
               >
                 <Pin className={cn('transition-transform', data.pinned && 'rotate-45')} />
               </ActionButton>
             )}
-            <span className="mx-0.5 h-4 w-px bg-border" aria-hidden />
-            <div role="radiogroup" aria-label="On error" className="flex items-center gap-0.5">
-              {ON_ERROR.map(option => (
-                <button
-                  key={option.value}
-                  type="button"
-                  role="radio"
-                  aria-checked={option.value === onError}
-                  aria-label={`On error: ${option.label}`}
-                  title={`On error: ${option.label}. ${option.hint}`}
-                  onClick={() => setOnError(option.value)}
-                  className={cn(
-                    'flex size-5 items-center justify-center rounded transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring [&_svg]:size-3',
-                    option.value !== onError && 'text-muted-foreground hover:bg-accent hover:text-foreground',
-                    option.value === onError && option.active,
-                  )}
-                >
-                  <option.icon aria-hidden />
-                </button>
-              ))}
-            </div>
+            {hasOutputs && (
+              <>
+                <span className="mx-0.5 h-4 w-px bg-border" aria-hidden />
+                <div role="radiogroup" aria-label="On error" className="flex items-center gap-0.5">
+                  {ON_ERROR.map(option => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      role="radio"
+                      aria-checked={option.value === onError}
+                      aria-label={`On error: ${option.label}`}
+                      title={`On error: ${option.label}. ${option.hint}`}
+                      onClick={() => setOnError(option.value)}
+                      className={cn(
+                        'flex size-5 items-center justify-center rounded transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring [&_svg]:size-3',
+                        option.value !== onError && 'text-muted-foreground hover:bg-accent hover:text-foreground',
+                        option.value === onError && option.active,
+                      )}
+                    >
+                      <option.icon aria-hidden />
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
             <span className="mx-0.5 h-4 w-px bg-border" aria-hidden />
           </>
         )}

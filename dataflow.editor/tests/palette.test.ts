@@ -35,3 +35,13 @@ describe('palette open preference', () => {
     expect(readPaletteOpen(storage)).toBe(false);
   });
 });
+
+describe('Discard', () => {
+  test('is in the palette (flow category) and, with no output, is never dropped into an edge', async () => {
+    const { componentInfo } = await import('../src/editor/catalog');
+    const { canSplice } = await import('../src/editor/edge-splice');
+    expect(componentInfo('discard')).toMatchObject({ label: 'Discard', category: 'flow' });
+    expect(canSplice({ id: 'd', data: { type: 'discard', config: {} } }, [])).toBe(false);
+    expect(canSplice({ id: 'm', data: { type: 'mapper', config: {} } }, [])).toBe(true);
+  });
+});

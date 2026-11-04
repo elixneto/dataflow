@@ -52,6 +52,7 @@ describe("a component's settings form, from the core's settings", () => {
         { id: 'atlas', name: 'Atlas', type: 'mongodb' },
       ],
       secrets: ['ERP_PW'],
+      variables: [],
       flows: [],
     };
     const form = (values: Record<string, unknown>) =>
@@ -81,7 +82,7 @@ describe("a component's settings form, from the core's settings", () => {
   });
 
   test("a Flow Invoker: the project's flows to pick and its parameters; a TypeScript: its code", () => {
-    const resources = { projectId: 'p1', connections: [], secrets: [], flows: [{ id: 'f2', name: 'Load orders' }] };
+    const resources = { projectId: 'p1', connections: [], secrets: [], variables: [], flows: [{ id: 'f2', name: 'Load orders' }] };
     const html = renderToStaticMarkup(
       <ProjectResourcesContext.Provider value={resources}>
         <SettingsForm id="n" fields={componentSettings('flow')} values={{ flowId: 'f2' }} onChange={() => {}} />
@@ -123,6 +124,7 @@ describe("a component's settings form, from the core's settings", () => {
         { id: 'erp', name: 'ERP', type: 'sqlserver' },
       ],
       secrets: [],
+      variables: [],
       flows: [],
     };
     const html = renderToStaticMarkup(

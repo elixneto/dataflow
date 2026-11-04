@@ -8,7 +8,7 @@ const FLOW: FlowFile = {
   nodes: [
     {id: 'start', type: 'start', position: {x: 0, y: 0}, config: {acceptsInput: true, parameters: [{name: 'since', type: 'number', default: '10'}]}},
     {id: 'sql', type: 'sqlserver', label: 'Orders', position: {x: 160.4, y: 0}, config: {connection: 'erp', sql: 'SELECT id\nFROM Orders\nWHERE id > @since', parameters: [{name: 'since', value: '$PARAMETERS.since', expression: true}]}, notes: 'the ERP'},
-    {id: 'map', type: 'mapper', position: {x: 320, y: 0}, config: {fields: [{target: 'total', value: '$a', expression: true}], onError: 'divert'}, outputKey: 'x', disabled: true, pinned: true},
+    {id: 'map', type: 'mapper', position: {x: 320, y: 0}, config: {fields: [{target: 'total', value: '$a', expression: true}], onError: 'divert'}, outputKey: 'x', disabled: true, pinned: {'out-0': [{total: 1}], error: []}},
     {id: 'log', type: 'log', position: {x: 480, y: 80}, config: {message: '$error'}},
     {id: 'end', type: 'end', position: {x: 640, y: 0}, config: {}},
   ],
@@ -79,4 +79,36 @@ test('a new flow: its Start and its End, nothing between them', async () => {
   expect(flow.nodes.map(n => n.type)).toEqual(['start', 'end']);
   expect(flow).toMatchObject({version: 1, id: 'f9', name: 'Orders', edges: []});
   expect(validateFlowFile(flow).ok).toBe(true);
+});
+
+test('Run for real lists the enabled components that write outside the flow (an HTTP GET only reads)', async () => {
+  const {writingComponents, newFlowFile} = await import('../../src/index');
+  const node = (id: string, type: string, config: Record<string, unknown> = {}, disabled = false) => ({id, type, position: {x: 0, y: 0}, config, ...(disabled ? {disabled} : {})});
+  const flow = {
+    ...newFlowFile('w'),
+    nodes: [
+      node('get', 'http-request', {method: 'GET'}),
+      node('post', 'http-request', {method: 'POST'}),
+      node('up', 'mongodb-upsert'),
+      node('del', 'mongodb-delete', {}, true),
+      node('map', 'mapper'),
+    ],
+  };
+  expect(writingComponents(flow).map(n => n.id)).toEqual(['post', 'up']);
+});
+
+test("a pin keeps its envelopes per port; a bare `true` of earlier versions is no pin; too much pinned is refused", async () => {
+  const {validateFlowFile, MAX_PINNED_BYTES} = await import('../../src/index');
+  const node = (pinned: unknown) => ({...FLOW, nodes: FLOW.nodes.map(n => (n.id === 'map' ? {...n, pinned} : n))});
+  const read = (pinned: unknown) => {
+    const r = validateFlowFile(JSON.parse(JSON.stringify(node(pinned))));
+    return r.ok ? r.value.nodes.find(n => n.id === 'map')?.pinned : r.errors;
+  };
+  expect(read({'out-0': [{a: 1}]})).toEqual({'out-0': [{a: 1}]});
+  expect(read(true)).toBeUndefined();
+  expect(read({'out-0': 'x'})).toBeUndefined();
+  const big = Array.from({length: 50}, () => ({text: 'x'.repeat(Math.ceil(MAX_PINNED_BYTES / 40))}));
+  expect(read({'out-0': big})).toEqual([expect.stringContaining('The pinned outputs take')]);
+  // the runner gets the pin
+  expect(toExecutableFlow(node({'out-0': [{a: 1}]}) as FlowFile, 'P').nodes.find(n => n.id === 'map')?.pinned).toEqual({'out-0': [{a: 1}]});
 });

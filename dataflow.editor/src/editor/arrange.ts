@@ -1,6 +1,6 @@
 import type { Edge } from '@xyflow/react';
 import { CARD_HEIGHT, CARD_WIDTH, PORT_GAP, STACK_GAP } from './node-geometry';
-import { ERROR_PORT, inputPorts, outputPorts } from '@dataflow/core';
+import { END, ERROR_PORT, inputPorts, outputPorts } from '@dataflow/core';
 
 /*
  * Arrange, as in the PoC but only left to right, and with the cards glued: each card goes in the column right after
@@ -68,15 +68,39 @@ export function arrange<T extends Placed>(nodes: T[], edges: Edge[]): T[] {
   const lowest = () => Math.max(-1, ...[...taken.values()].flatMap(rows => [...rows]));
 
   const row = new Map<string, number>();
+  // the columns a card and what follows it (not placed yet) use: a branch is placed in one piece
+  const branchColumns = (id: string, seen = new Set<string>()): Set<number> => {
+    if (seen.has(id) || row.has(id)) {
+      return new Set();
+    }
+
+    seen.add(id);
+    const columns = new Set([column.get(id)!]);
+    for (const e of outgoing(id)) {
+      branchColumns(e.target, seen).forEach(c => columns.add(c));
+    }
+
+    return columns;
+  };
+  // blocks: the main path of a flow, and each branch that had to make way for another (it is placed after, below it,
+  // then the blocks of the flow go above its main path: what goes below a card is its error port's)
+  const blockOf = new Map<string, number>();
+  let blocks = 0;
+  let mainBlock = 0;
+  let block = 0;
   const place = (c: T, wanted: number) => {
     const col = column.get(c.id)!;
-    let r = Math.max(0, wanted);
+    // below what the branches placed before took in these columns: the branch keeps its own ports lined up (a Lookup's
+    // input level with what feeds it), instead of one card pushed down alone by a card of another branch
+    const below = Math.max(-1, ...[...branchColumns(c.id)].flatMap(bc => [...(taken.get(bc) ?? [])]).filter(r => r >= wanted)) + 1;
+    let r = Math.max(0, wanted, below);
     while (!free(col, r, span(c))) {
       r++;
     }
 
     take(col, r, span(c));
     row.set(c.id, r);
+    blockOf.set(c.id, block);
   };
 
   // depth first from each start, in the order they are on screen (top to bottom): a whole branch before the next
@@ -84,29 +108,129 @@ export function arrange<T extends Placed>(nodes: T[], edges: Edge[]): T[] {
   // what handles the errors goes below the path that works
   const outRow = (edge: Edge) => (edge.sourceHandle === ERROR_PORT ? span(byId.get(edge.source)!) : portIndex(edge.sourceHandle));
 
+  // what a card leads to, without the sinks (the End, a Discard: every path may end in one) and the error edges (what
+  // handles errors is shared): two branches that meet before that go together
+  const sink = (id: string) => {
+    const data = component(byId.get(id)!);
+    return data.type === END || outputPorts(data.type, data.config).length === 0;
+  };
+  const reach = (id: string, seen = new Set<string>()): Set<string> => {
+    if (seen.has(id) || sink(id)) {
+      return seen;
+    }
+
+    seen.add(id);
+    outgoing(id).filter(e => e.sourceHandle !== ERROR_PORT).forEach(e => reach(e.target, seen));
+    return seen;
+  };
+  // how many cards the longest way from a card goes (a cycle stops at the cards already counted)
+  const depth = (id: string, seen = new Set<string>()): number => {
+    if (seen.has(id)) {
+      return 0;
+    }
+
+    seen.add(id);
+    return 1 + Math.max(0, ...outgoing(id).map(e => depth(e.target, new Set(seen))));
+  };
+
+  // a card's branches: those that meet again before the End go together (one under the other, in port order, so a
+  // Lookup's ports line up with what feeds them); of the separate ones the longest is the main path, the others go
+  // above it (each a block of its own on the flow's main path, below inside a block)
+  const branches = (c: T): Edge[][] => {
+    const edges = [...outgoing(c.id)].sort((a, b) => outRow(a) - outRow(b) || byId.get(a.target)!.position.y - byId.get(b.target)!.position.y);
+    const sets: { edges: Edge[]; reach: Set<string> }[] = [];
+    for (const edge of edges) {
+      const reached = reach(edge.target);
+      const meets = sets.filter(set => [...reached].some(id => set.reach.has(id)));
+      const merged = { edges: [...meets.flatMap(m => m.edges), edge], reach: new Set([...meets.flatMap(m => [...m.reach]), ...reached]) };
+      sets.splice(0, sets.length, ...sets.filter(set => !meets.includes(set)), merged);
+    }
+
+    if (sets.length === 0) {
+      return [];
+    }
+
+    // the error port's branch stays where it goes (below its card): never the main path, never above
+    const longest = (set: (typeof sets)[number]) => Math.max(...set.edges.map(e => depth(e.target)));
+    const candidates = sets.filter(set => set.edges.some(e => e.sourceHandle !== ERROR_PORT));
+    const main = [...(candidates.length ? candidates : sets)].sort((a, b) => longest(b) - longest(a))[0]!;
+    return [main, ...sets.filter(set => set !== main)].map(set => set.edges.sort((a, b) => edges.indexOf(a) - edges.indexOf(b)));
+  };
   const visit = (c: T) => {
-    for (const edge of [...outgoing(c.id)].sort((a, b) => outRow(a) - outRow(b))) {
-      const next = byId.get(edge.target)!;
-      if (row.has(next.id)) {
-        continue;
-      }
+    const outer = block;
+    const [main = [], ...others] = branches(c);
+    for (const [index, group] of [main, ...[...others].reverse()].entries()) {
+      // a separate branch on the flow's main path: a block of its own, moved above it at the end
+      // (only a fan-out from the main path's own port: another output, like Filter's false, has its row already)
+      const raised = index > 0 && outer === mainBlock && group.some(e => e.sourceHandle !== ERROR_PORT && main.some(m => m.sourceHandle === e.sourceHandle));
+      block = raised ? ++blocks : outer;
+      for (const edge of group) {
+        const next = byId.get(edge.target)!;
+        if (row.has(next.id)) {
+          continue;
+        }
 
-      // wait for every card that feeds it (several edges in, Lookup's two inputs), then line up with the one on its first input
-      const feeders = incoming(next.id);
-      if (feeders.some(f => !row.has(f.source))) {
-        continue;
-      }
+        // wait for every card that feeds it (several edges in, Lookup's two inputs), then line up with the one on its first input
+        const feeders = incoming(next.id);
+        if (feeders.some(f => !row.has(f.source))) {
+          continue;
+        }
 
-      const first = [...feeders].sort((a, b) => portIndex(a.targetHandle) - portIndex(b.targetHandle))[0]!;
-      place(next, row.get(first.source)! + outRow(first) - portIndex(first.targetHandle));
-      visit(next);
+        const first = [...feeders].sort((a, b) => portIndex(a.targetHandle) - portIndex(b.targetHandle))[0]!;
+        // a card goes with what feeds its first input (an End fed by the main path stays on it, whichever branch came last)
+        const branchBlock = block;
+        block = blockOf.get(first.source) === mainBlock && block !== mainBlock && !raised ? blockOf.get(first.source)! : block;
+        place(next, row.get(first.source)! + outRow(first) - portIndex(first.targetHandle));
+        visit(next);
+        block = branchBlock;
+      }
+    }
+
+    block = outer;
+  };
+
+  // a flow's blocks above its main path, in the order they were made (each above the one before), a row apart when a
+  // group is involved (its title and padding); then the whole flow below the flows before it
+  const grouped = (ids: string[]) => ids.some(id => tree.top(id) !== undefined);
+  const settle = (flow: string[], main: number, previousBottom: number) => {
+    const inBlock = (b: number) => flow.filter(id => blockOf.get(id) === b);
+    const mainIds = inBlock(main);
+    let ceiling = Math.min(...mainIds.map(id => row.get(id)!));
+    let lowerIds = mainIds;
+    const made = [...new Set(flow.map(id => blockOf.get(id)!))].filter(b => b !== main).sort((a, b) => a - b);
+    for (const b of made) {
+      const ids = inBlock(b);
+      const lo = Math.min(...ids.map(id => row.get(id)!));
+      const hi = Math.max(...ids.map(id => row.get(id)! + span(byId.get(id)!) - 1));
+      const gap = grouped(ids) || grouped(lowerIds) ? 1 : 0;
+      const shift = ceiling - 1 - gap - hi;
+      ids.forEach(id => row.set(id, row.get(id)! + shift));
+      ceiling = lo + shift;
+      lowerIds = ids;
+    }
+
+    // blocks moved above may reach the flows before: then the whole flow goes down below them
+    const raised = flow.filter(id => blockOf.get(id) !== main);
+    const down = raised.length ? previousBottom + 1 - Math.min(...raised.map(id => row.get(id)!)) : 0;
+    if (down > 0) {
+      flow.forEach(id => row.set(id, row.get(id)! + down));
+    }
+
+    // the rows taken again, as they are now
+    taken.clear();
+    for (const [id, r] of row) {
+      take(column.get(id)!, r, span(byId.get(id)!));
     }
   };
 
   const starts = components.filter(c => incoming(c.id).length === 0).sort((a, b) => a.position.y - b.position.y || a.position.x - b.position.x);
   for (const start of starts) {
-    place(start, lowest() + 1);
+    const bottom = lowest();
+    const before = new Set(row.keys());
+    mainBlock = block = ++blocks;
+    place(start, bottom + 1);
     visit(start);
+    settle([...row.keys()].filter(id => !before.has(id)), mainBlock, bottom);
   }
 
   // what is left (only in a cycle, or fed by a card left out): below everything, in its column
@@ -125,7 +249,7 @@ export function arrange<T extends Placed>(nodes: T[], edges: Edge[]): T[] {
     const feeding = links.filter(e => column.get(e.target) === col);
     const needs = feeding.map(e => {
       const from = column.get(e.source)!;
-      return (columnX.get(from) ?? 0) + (col - from) * CARD_WIDTH + portTextRoom(byId.get(e.source)!, e.sourceHandle, links);
+      return (columnX.get(from) ?? 0) + (col - from) * CARD_WIDTH + portTextRoom(byId.get(e.source)!, e.sourceHandle, links) + inputTextRoom(byId.get(e.target)!);
     });
     const previous = columns.filter(c => c < col).at(-1);
     const glued = previous === undefined ? 0 : columnX.get(previous)! + (col - previous) * CARD_WIDTH;
@@ -158,6 +282,16 @@ function portTextRoom(card: Placed, handle: string | null | undefined, links: Ed
   const named = port?.label ? Math.max(...ports.map(p => p.label?.length ?? 0)) : 0;
   const text = Math.max(named, count > 1 ? `${count}x`.length : 0);
   return text === 0 ? 0 : Math.ceil((text * TEXT_CHAR + TEXT_ROOM) / 16) * 16;
+}
+
+/**
+ * Extra room (px, whole grid steps) before a card for its inputs' names, shown left of it (Lookup's input / lookup):
+ * the longest name. 0 when its inputs have none.
+ */
+function inputTextRoom(card: Placed): number {
+  const data = card.data as { type: string; config?: Record<string, unknown> };
+  const longest = Math.max(0, ...inputPorts(data.type, data.config).map(p => p.label?.length ?? 0));
+  return longest === 0 ? 0 : Math.ceil((longest * TEXT_CHAR + TEXT_ROOM) / 16) * 16;
 }
 
 type Box = { x: number; y: number; w: number; h: number };

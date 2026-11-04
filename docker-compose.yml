@@ -1,17 +1,67 @@
-# Optional: a local Postgres for the server. Without it (no DATABASE_URL), the server uses PGlite in dataflow.server/data.local/.
-#   docker compose up -d
-#   DATABASE_URL=postgres://dataflow:dataflow@localhost:5432/dataflow   (in dataflow.server/.env, see dataflow.server/.env.example)
+name: dataflow
+
 services:
   postgres:
-    image: postgres:17
+    image: postgres:17.6-alpine
+    restart: unless-stopped
     environment:
-      POSTGRES_USER: dataflow
-      POSTGRES_PASSWORD: dataflow
-      POSTGRES_DB: dataflow
+      POSTGRES_USER: ${POSTGRES_USER:-dataflow}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-dataflow}
+      POSTGRES_DB: ${POSTGRES_DB:-dataflow}
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # the api and the supervisor, only with `docker compose --profile server up -d` (then run only the editor locally,
+  # `npm run editor`: `npm run start` would start another api on the same port)
+  server:
+    profiles: ["server"]
+    build:
+      context: .
+      dockerfile: dataflow.server/Dockerfile
+    image: dataflow-server
+    restart: unless-stopped
+    environment: &server-env
+      # inside the Compose network Postgres is at postgres:5432, whatever port it has on the host
+      DATABASE_URL: postgres://${POSTGRES_USER:-dataflow}:${POSTGRES_PASSWORD:-dataflow}@postgres:5432/${POSTGRES_DB:-dataflow}
+      ENVIRONMENT: ${ENVIRONMENT:-DEV}
+      API_PORT: 5190
+      # empty in DEV: the fixed dev key, as `npm run start` (the secrets stored there still decrypt)
+      SECRETS_KEYS: ${SECRETS_KEYS:-}
+      WORKERS: ${WORKERS:-1}
+      WORKER_TAGS: ${WORKER_TAGS:-default}
+    ports:
+      - "5190:5190"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      # the slim image has no curl: Bun asks
+      test: ["CMD", "bun", "-e", "fetch('http://localhost:5190/health').then(r => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # runs what the api queues, with WORKERS worker processes inside its container
+  supervisor:
+    profiles: ["server"]
+    image: dataflow-server
+    restart: unless-stopped
+    command: ["bun", "dataflow.server/supervisor/main.ts"]
+    environment: *server-env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      # the same image, built by the server's service
+      server:
+        condition: service_started
 
 volumes:
   postgres:

@@ -20,7 +20,7 @@ import { useParams } from 'react-router';
 import { ProjectResourcesContext, ScriptGlobalsContext, useLoadProjectResources } from '@/editor/project-resources';
 import { Button } from '@/components/ui/button';
 import '@xyflow/react/dist/style.css';
-import { componentSettings, connectionProblem, END, ERROR_PORT, scriptGlobals, settingsDefaults, START, startParameters } from '@dataflow/core';
+import { componentSettings, connectionProblem, dataTypeFromSamples, END, ERROR_PORT, inputVariables, scriptGlobals, settingsDefaults, START, startParameters, systemVariables, type EnvelopeData, type KnownVariables } from '@dataflow/core';
 import { arrange } from '@/editor/arrange';
 import { fittedConnections } from '@/editor/auto-connect';
 import { CATEGORIES, componentInfo, isFixedType } from '@/editor/catalog';
@@ -29,7 +29,8 @@ import { ComponentWindow } from '@/editor/component-window';
 import { FloatingWindow, type WindowPosition, type WindowSize } from '@/editor/floating-window';
 import { readViewport, readWindow, rememberViewport, rememberWindow } from '@/editor/window-memory';
 import { useFlowDraft, type DraftSave } from '@/editor/flow-save';
-import { RunMarksContext, type RunMarks } from '@/editor/run/run-marks';
+import { RunFromContext, RunMarksContext, type RunMarks } from '@/editor/run/run-marks';
+import { ExpressionVariablesContext, type InputSamples } from '@/editor/expression-variables';
 import { ComponentNodeMemo, type ComponentData, type ComponentNode } from '@/editor/component-node';
 import { COMPONENT_DRAG_TYPE } from '@/editor/drag';
 import { canSplice, edgeUnder, pointerBox, splice } from '@/editor/edge-splice';
@@ -53,7 +54,8 @@ type FlowNode = ComponentNode | GroupNode;
 export type CanvasHandle = {
   snapshot: () => { nodes: FlowNode[]; edges: Edge[] };
   focus: (nodeId: string) => void;
-  setPinned: (nodeId: string, pinned: boolean) => void;
+  /** pins the component with these envelopes per port (what went out of it in the run), or unpins it (undefined) */
+  setPinned: (nodeId: string, pinned: Record<string, EnvelopeData[]> | undefined) => void;
 };
 
 const isComponent = (node: FlowNode): node is ComponentNode => node.type === 'component';
@@ -90,14 +92,22 @@ const FIXED_NODES: ComponentNode[] = [
 /** the size a window with a code editor or a table opens with */
 const WIDE_WINDOW = { w: 760, h: null };
 
+const noRunFrom = () => {};
+
 export function FlowCanvas(props: {
   exportRef?: RefObject<CanvasHandle | null>;
   onSave?: (save: DraftSave) => void;
   marks?: RunMarks | null;
   /** the components whose output is pinned, each time that changes (the run's Data tab shows Pin or Unpin) */
   onPinned?: (nodeIds: string[]) => void;
+  /** what the runs so far saw going out of each port (expression fields suggest it) */
+  known?: KnownVariables;
+  /** the envelopes the runs saw reaching each component (a TypeScript component's Data type) */
+  inputSamples?: InputSamples;
+  /** Run from here on a component */
+  onRunFrom?: (nodeId: string) => void;
 }) {
-  const { exportRef, onSave, marks = null, onPinned } = props;
+  const { exportRef, onSave, marks = null, onPinned, known, inputSamples, onRunFrom = noRunFrom } = props;
   const [nodes, setNodes, onNodesChange] = useNodesState<FlowNode>(FIXED_NODES);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   // what the page's Download takes: the canvas as it is now
@@ -178,10 +188,10 @@ export function FlowCanvas(props: {
           setNodes(current => current.map(n => ({ ...n, selected: n.id === nodeId })));
           void flow.setCenter(node.position.x + CARD_WIDTH / 2, node.position.y + CARD_HEIGHT / 2, { zoom: Math.max(flow.getZoom(), 1), duration: 300 });
         },
-        // MOCK: pinning from the run's Data tab marks the node, as the bar's Pin does (one Ctrl+Z step)
+        // pinning from the run's Data tab, as the bar's Pin does (one Ctrl+Z step): the envelopes it keeps, or none
         setPinned: (nodeId, pinned) => {
           record();
-          setNodes(current => current.map(n => (n.id === nodeId && isComponent(n) ? { ...n, data: { ...n.data, pinned: pinned || undefined } } : n)));
+          setNodes(current => current.map(n => (n.id === nodeId && isComponent(n) ? ({ ...n, data: { ...n.data, pinned } } as FlowNode) : n)));
         },
       };
     }
@@ -465,12 +475,25 @@ export function FlowCanvas(props: {
   const frontWindow = shownWindows.filter(w => !w.minimized).at(-1)?.id;
   const dock = shownWindows.filter(w => w.minimized).sort((a, b) => (a.minimized ?? 0) - (b.minimized ?? 0));
   // $PARAMETERS in a TypeScript component's code: the Start's parameters (only the text changes when they do)
-  const globals = scriptGlobals(startParameters(nodes.filter(isComponent).map(n => n.data)));
+  // an expression field's suggestions at a component: what reached it in the runs so far, then the system variables
+  const parameters = startParameters(nodes.filter(isComponent).map(n => n.data));
+  const globals = (nodeId?: string) => {
+    const samples = nodeId ? inputSamples?.[nodeId] : undefined;
+    return scriptGlobals(parameters, samples?.length ? dataTypeFromSamples(samples) : undefined);
+  };
+  const portEdges = edges.map(e => ({ source: e.source, sourcePort: e.sourceHandle ?? 'out-0', target: e.target, targetPort: e.targetHandle ?? 'in-0' }));
+  const system = systemVariables(parameters, resources.variables, resources.secrets);
+  const expressionVariables = {
+    of: (nodeId: string, port?: string) => [...inputVariables(known ?? {}, portEdges, nodeId, port).variables, ...system],
+    seen: (nodeId: string, port?: string) => inputVariables(known ?? {}, portEdges, nodeId, port).seen,
+  };
 
   return (
     <RunMarksContext.Provider value={marks}>
+    <RunFromContext.Provider value={onRunFrom}>
     <ProjectResourcesContext.Provider value={resources}>
       <ScriptGlobalsContext.Provider value={globals}>
+      <ExpressionVariablesContext.Provider value={expressionVariables}>
         <HistoryContext.Provider value={history}>
           <div className="relative h-full w-full">
             <ReactFlow
@@ -637,8 +660,10 @@ export function FlowCanvas(props: {
             </div>
           </div>
         </HistoryContext.Provider>
+      </ExpressionVariablesContext.Provider>
       </ScriptGlobalsContext.Provider>
     </ProjectResourcesContext.Provider>
+    </RunFromContext.Provider>
     </RunMarksContext.Provider>
   );
 }

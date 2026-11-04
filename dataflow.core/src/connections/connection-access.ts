@@ -207,14 +207,16 @@ export async function oauthToken(
     headers: {'content-type': 'application/x-www-form-urlencoded', accept: 'application/json'},
     body: form.toString(),
   });
-  let answer: {access_token?: unknown; expires_in?: unknown} = {};
+  let answer: {access_token?: unknown; expires_in?: unknown; error?: unknown; error_description?: unknown} = {};
   try {
     answer = JSON.parse(response.body) as typeof answer;
   } catch {
     // not JSON: no token below
   }
   if (response.status < 200 || response.status >= 300 || typeof answer.access_token !== 'string') {
-    throw new Error(`The OAuth 2.0 token request to ${config.tokenUrl} failed (HTTP ${response.status}).`);
+    // the provider's reason (RFC 6749: error, error_description), or the start of its answer
+    const reason = [answer.error, answer.error_description].filter(v => typeof v === 'string' && v).join(': ') || response.body.slice(0, 200).trim();
+    throw new Error(`The OAuth 2.0 token request to ${config.tokenUrl} failed (HTTP ${response.status})${reason ? `: ${reason}` : ''}.`);
   }
   const seconds = Number(answer.expires_in);
   return {accessToken: answer.access_token, expiresAt: now + (Number.isFinite(seconds) && seconds > 0 ? seconds : 3600) * 1000};

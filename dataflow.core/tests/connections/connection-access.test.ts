@@ -139,3 +139,42 @@ test('an OAuth 2.0 connection in a run: the token is asked once (form-encoded cl
   expect(JSON.stringify(r)).toContain('***');
   expect(JSON.stringify(r)).not.toContain('tok-abcdef');
 });
+
+test("a token request the provider refuses says the provider's reason (error, error_description)", async () => {
+  const {oauthToken} = await import('../../src/index');
+  const connection = {type: 'rest-oauth2' as const, config: {grant: 'clientCredentials', tokenUrl: 'https://ims.test/token', clientId: 'app'}, secrets: {clientSecret: 's'}};
+  await expect(oauthToken(connection, async () => ({status: 400, body: JSON.stringify({error: 'invalid_scope', error_description: 'scope is required'})})))
+    .rejects.toThrow('The OAuth 2.0 token request to https://ims.test/token failed (HTTP 400): invalid_scope: scope is required.');
+  await expect(oauthToken(connection, async () => ({status: 401, body: 'Unauthorized'}))).rejects.toThrow('failed (HTTP 401): Unauthorized.');
+});
+
+test("the OAuth 2.0 token request counts as the HTTP Request's waiting (an outside system), with the API call", async () => {
+  const wf: ExecutableFlow = {
+    project: 'Test', flow: 'Timing', parameters: [],
+    nodes: [
+      {id: 'start', type: 'start', label: 'Start', config: {}},
+      {id: 'h', type: 'http-request', label: 'Get', config: {connection: 'wf', url: {value: 'https://api.test/items', expression: false}}},
+      {id: 'end', type: 'end', label: 'End', config: {}},
+    ],
+    edges: [
+      {source: 'start', sourcePort: 'out-0', target: 'h', targetPort: 'in-0'},
+      {source: 'h', sourcePort: 'out-0', target: 'end', targetPort: 'in-0'},
+    ],
+  };
+  const r = await flowRunner(wf, {
+    mode: 'execution', id: 'timing', evaluate,
+    secrets: {WF_SECRET: 's3cret'},
+    connections: {wf: {name: 'WF', type: 'rest-oauth2', config: {grant: 'clientCredentials', tokenUrl: 'https://auth.test/token', clientId: 'app', clientSecret: 'WF_SECRET'}}},
+    http: async request => {
+      await new Promise(resolve => setTimeout(resolve, 150));
+      return request.url === 'https://auth.test/token'
+        ? {status: 200, headers: {} as Record<string, string>, body: JSON.stringify({access_token: 'tok-abcdef', expires_in: 3600})}
+        : {status: 200, headers: {} as Record<string, string>, body: '{}'};
+    },
+  });
+  const h = r.components.find(c => c.nodeId === 'h')!;
+  // two calls of 150 ms: the token and the API, both waiting; the component itself barely works
+  expect(h.waitingMs!).toBeGreaterThanOrEqual(280);
+  expect(h.activeTimeMs!).toBeLessThan(100);
+  expect(h.logs.some(l => /^OAuth 2\.0 token from https:\/\/auth\.test\/token in \d+ ms\.$/.test(l.message))).toBe(true);
+});

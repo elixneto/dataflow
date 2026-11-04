@@ -121,7 +121,7 @@ export function ComponentWindow({ id, data, onSave, onCancel, onRemove, register
 
           {settings.length > 0 && (
             <section aria-label="Settings" className="border-t pt-4">
-              <SettingsForm id={id} fields={settings} values={draft.config} onChange={config => set({ config })} />
+              <SettingsForm id={id} nodeId={id} fields={settings} values={draft.config} onChange={config => set({ config })} />
             </section>
           )}
         </div>

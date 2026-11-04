@@ -7,11 +7,11 @@ export type ComponentRun = {
   label: string;
   type: string;
   /**
-   * disabled = bypass (did not execute, only passed through); with-warnings = ran, but something deserves attention
+   * running = started, not finished yet (only in a run's progress); disabled = bypass (did not execute, only passed through); with-warnings = ran, but something deserves attention
    * (e.g. envelopes dropped by an unconnected output, nothing reached the End); pinned = did not execute, replayed its
-   * pinned output (editor runs only)
+   * pinned output (test runs); skipped = did not run: it only fed pinned components
    */
-  status: 'not-run' | 'completed' | 'disabled' | 'pinned' | 'with-warnings' | 'with-errors' | 'failed';
+  status: 'not-run' | 'running' | 'completed' | 'disabled' | 'pinned' | 'skipped' | 'with-warnings' | 'with-errors' | 'failed';
   start?: string;
   end?: string;
   durationMs?: number;
@@ -35,5 +35,7 @@ export type ComponentRun = {
   logs: LogLine[];
   /** only the DATA of the first envelopes */
   inputSample: EnvelopeData[];
+  /** a component with several inputs (Lookup): the first envelopes of each one (Run from here feeds them back) */
+  inputSampleByPort?: Record<string, EnvelopeData[]>;
   outputSample: Record<string, EnvelopeData[]>;
 };

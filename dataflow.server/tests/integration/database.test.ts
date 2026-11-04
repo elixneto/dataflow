@@ -15,7 +15,7 @@ describe('database', () => {
         "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' ORDER BY table_name");
       expect(tables.map(t => t.table_name).sort()).toEqual([
         'connections', 'deployment_history', 'deployments', 'flow_versions', 'flows', 'folders', 'organization_settings', 'organizations',
-        'projects', 'promotions', 'runs', 'schema_migrations', 'secrets', 'supervisors', 'users', 'variables',
+        'projects', 'promotions', 'runs', 'schema_migrations', 'secrets', 'supervisors', 'test_runs', 'users', 'variables',
       ].sort());
     } finally {
       await db.close();
@@ -54,5 +54,16 @@ describe('database', () => {
     } finally {
       await db.close();
     }
+  });
+});
+
+describe('without Postgres', () => {
+  test('no DATABASE_URL, or a Postgres that does not answer: one clear message on what to do', async () => {
+    const { DatabaseUnavailableError } = await import('#shared/database/database');
+    await expect(openDatabase(undefined)).rejects.toBeInstanceOf(DatabaseUnavailableError);
+    await expect(openDatabase(undefined)).rejects.toThrow('docker compose up -d');
+    const unreachable = openDatabase('postgres://dataflow:dataflow@127.0.0.1:1/dataflow');
+    await expect(unreachable).rejects.toBeInstanceOf(DatabaseUnavailableError);
+    await expect(openDatabase('postgres://dataflow:dataflow@127.0.0.1:1/dataflow')).rejects.toThrow('Postgres at postgres://127.0.0.1:1/dataflow does not answer.');
   });
 });

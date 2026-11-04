@@ -1,0 +1,16 @@
+# what the server's image never takes (dataflow.server/Dockerfile, built from the repository root)
+**/node_modules
+**/.env
+**/.env.*
+!**/.env.example
+**/dist
+**/*.tsbuildinfo
+**/tests
+**/data.local*
+.git
+.idea
+.vscode
+POC_v0
+dataflow.editor/*
+!dataflow.editor/package.json
+docker-compose.yml
