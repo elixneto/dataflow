@@ -14,8 +14,8 @@ describe('database', () => {
       const tables = await db.query<{table_name: string}>(
         "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' ORDER BY table_name");
       expect(tables.map(t => t.table_name).sort()).toEqual([
-        'deployment_history', 'deployments', 'flow_versions', 'flows', 'organization_settings', 'organizations',
-        'projects', 'promotions', 'runs', 'schema_migrations', 'secrets', 'supervisors',
+        'connections', 'deployment_history', 'deployments', 'flow_versions', 'flows', 'folders', 'organization_settings', 'organizations',
+        'projects', 'promotions', 'runs', 'schema_migrations', 'secrets', 'supervisors', 'variables',
       ].sort());
     } finally {
       await db.close();

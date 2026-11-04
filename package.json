@@ -8,10 +8,12 @@
     "node": ">=26",
     "bun": ">=1.4.4"
   },
-  "workspaces": ["dataflow.core", "dataflow.server"],
+  "workspaces": ["dataflow.core", "dataflow.server", "dataflow.editor"],
   "scripts": {
-    "test": "bun test --cwd=dataflow.core && bun test --cwd=dataflow.server",
-    "typecheck": "bun run --cwd=dataflow.core typecheck && bun run --cwd=dataflow.server typecheck",
+    "dev": "bun scripts/dev.ts",
+    "start": "bun scripts/dev.ts",
+    "test": "bun test --cwd=dataflow.core && bun test --cwd=dataflow.server && bun test --cwd=dataflow.editor",
+    "typecheck": "bun run --cwd=dataflow.core typecheck && bun run --cwd=dataflow.server typecheck && bun run --cwd=dataflow.editor typecheck",
     "migrate": "bun run --cwd=dataflow.server migrate"
   }
 }

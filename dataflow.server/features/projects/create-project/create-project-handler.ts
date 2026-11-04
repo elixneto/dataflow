@@ -19,7 +19,7 @@ export class CreateProjectHandler implements UseCaseHandler<CreateProjectRespons
       return fail('conflict', `A project named "${command.name}" already exists.`, { name: 'Already in use' });
     }
 
-    const project = await projects.insert({ id: crypto.randomUUID(), name: command.name, description: command.description });
+    const project = await projects.insert({ id: crypto.randomUUID(), ...command });
     return success({ id: project.id });
   }
 }

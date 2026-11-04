@@ -7,6 +7,7 @@ const STATUS: Record<UseCaseErrorCode, ContentfulStatusCode> = {
   forbidden: 403,
   'not-found': 404,
   conflict: 409,
+  unavailable: 502,
 };
 
 /**

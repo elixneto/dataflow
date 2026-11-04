@@ -1,4 +1,4 @@
-import { and, eq, isNull, type InferInsertModel, type InferSelectModel, type SQL } from 'drizzle-orm';
+import { and, eq, isNotNull, isNull, type InferInsertModel, type InferSelectModel, type SQL } from 'drizzle-orm';
 import type { AnyPgColumn, PgInsertValue, PgTable, PgUpdateSetSource } from 'drizzle-orm/pg-core';
 import type { Database } from './database';
 
@@ -20,6 +20,9 @@ export type FindOptions = {
   orderBy?: SQL | AnyPgColumn | (SQL | AnyPgColumn)[];
   limit?: number;
 };
+
+/** which rows a query sees: the live ones (the default) or the soft deleted ones */
+type Rows = 'live' | 'deleted' | 'all';
 
 /**
  * The rows of ONE organization: the orgId comes in the constructor, every query filters by it and every insert writes
@@ -48,7 +51,25 @@ export class OrgRepository<TTable extends OrgTable> {
   }
 
   async findMany(where?: SQL, options: FindOptions = {}): Promise<InferSelectModel<TTable>[]> {
-    const query = this.db.orm.select().from(this.table as PgTable).where(this.scope(where)).$dynamic();
+    return this.select('live', where, options);
+  }
+
+  /** the soft deleted rows (archived, trash...), with the same filters and options as findMany */
+  async findDeleted(where?: SQL, options: FindOptions = {}): Promise<InferSelectModel<TTable>[]> {
+    return this.select('deleted', where, options);
+  }
+
+  /** live and soft deleted rows together (e.g. a whole tree, to apply its rules in memory) */
+  async findAll(where?: SQL, options: FindOptions = {}): Promise<InferSelectModel<TTable>[]> {
+    return this.select('all', where, options);
+  }
+
+  private async select(rows: Rows, where: SQL | undefined, options: FindOptions): Promise<InferSelectModel<TTable>[]> {
+    if (rows === 'deleted' && !this.table.deletedAt) {
+      return [];
+    }
+
+    const query = this.db.orm.select().from(this.table as PgTable).where(this.scope(where, rows)).$dynamic();
     if (options.orderBy) {
       query.orderBy(...[options.orderBy].flat());
     }
@@ -91,11 +112,37 @@ export class OrgRepository<TTable extends OrgTable> {
     return rows.length > 0;
   }
 
-  /** `where` plus the organization and "not deleted": every query of this repository goes through it */
-  protected scope(where?: SQL): SQL {
+  /** deletes the row for good (tables without soft delete); false when there is no such row */
+  async remove(id: string): Promise<boolean> {
+    const rows = await this.db.orm
+      .delete(this.table)
+      .where(this.scope(eq(this.table.id, id), 'all'))
+      .returning({ id: this.table.id });
+
+    return rows.length > 0;
+  }
+
+  /** brings a soft deleted row back (clears deleted_at/deleted_by); null when there is no such deleted row */
+  async restore(id: string): Promise<InferSelectModel<TTable> | null> {
+    if (!this.table.deletedAt || !this.table.deletedBy) {
+      throw new Error('This table has no soft delete.');
+    }
+
+    const rows = await this.db.orm
+      .update(this.table)
+      .set({ deletedAt: null, deletedBy: null } as PgUpdateSetSource<TTable>)
+      .where(this.scope(eq(this.table.id, id), 'deleted'))
+      .returning();
+
+    return (rows as InferSelectModel<TTable>[])[0] ?? null;
+  }
+
+  /** `where` plus the organization and "not deleted" (or "deleted", or both): every query of this repository goes through it */
+  protected scope(where?: SQL, rows: Rows = 'live'): SQL {
+    const deletedAt = this.table.deletedAt;
     return and(
       eq(this.table.orgId, this.orgId),
-      this.table.deletedAt ? isNull(this.table.deletedAt) : undefined,
+      deletedAt && rows !== 'all' ? (rows === 'live' ? isNull(deletedAt) : isNotNull(deletedAt)) : undefined,
       where,
     )!;
   }

@@ -47,10 +47,10 @@ Each component has its full explanation in the **Notes** tab of its window, insi
 git clone https://github.com/elixneto/dataflow.git
 cd dataflow
 npm run setup   # checks the environment and installs the dependencies of the three parts
-npm run start   # runner (port 5190) + editor (port 5180), in one terminal
+npm run start   # runner (port 5290) + editor (port 5280), in one terminal
 ```
 
-Open http://localhost:5180. The **Examples** project has an example flow for each component; open one and click **Run**.
+Open http://localhost:5280. The **Examples** project has an example flow for each component; open one and click **Run**.
 
 After a `git pull` that changes a `package.json`, run `npm run setup` again.
 
@@ -60,12 +60,12 @@ The runner reads these environment variables (Bun also loads a `.env` file at th
 
 | Variable | Default | What it is |
 |---|---|---|
-| `RUNNER_PORT` | `5190` | Runner port |
+| `RUNNER_PORT` | `5290` | Runner port |
 | `RUNNER_TIMEOUT_MS` | `300000` (5 min) | Maximum time of a run |
 | `RUNNER_SCRIPT_TIMEOUT_MS` | `30000` (30 s) | Maximum time of each TypeScript call |
 | `DATABASE_URL` | (none: PGlite) | Postgres for projects, flows and runs, e.g. `postgres://dataflow:dataflow@localhost:5432/dataflow` |
 
-The editor's dev server proxies `/api` to `RUNNER_URL` (default http://localhost:5190).
+The editor's dev server proxies `/api` to `RUNNER_URL` (default http://localhost:5290).
 
 ### Database
 
@@ -85,7 +85,7 @@ The first time the editor opens, whatever this browser had saved before the data
 - **`Bun is not installed`**: install Bun and open a new terminal, so the `PATH` is updated.
 - **The editor shows "The runner did not respond"**: projects and flows come from the runner, so it must be running (`npm run start` starts both). Check its terminal for a database error (a wrong `DATABASE_URL`, Postgres not started).
 - **Start over with an empty local database**: stop the runner (Ctrl+C) and move `runner/data.local/` away. Each start leaves a copy of the projects and flows in `runner/data.local.backup.json`.
-- **Port already in use**: something is still running on 5180 or 5190; stop it, or start with another `RUNNER_PORT` (and the same `RUNNER_URL` for the editor).
+- **Port already in use**: something is still running on 5280 or 5290; stop it, or start with another `RUNNER_PORT` (and the same `RUNNER_URL` for the editor).
 
 ### Other commands
 

@@ -7,10 +7,10 @@ Always work directly in the user's local clone (`E:\GITHUB\dataflow`), on branch
 ## Stack and commands
 
 - Vite + React 19 + TypeScript + Tailwind 4 + React Flow (`@xyflow/react`) + Monaco + lucide-react.
-- `npm run start` → http://localhost:5180/ · `npm run build` → `dist/` · `npm run typecheck`.
+- `npm run start` → http://localhost:5280/ · `npm run build` → `dist/` · `npm run typecheck`.
 - `base: '/'`: the app lives at the root. In production, `dist/` can be served by any static server, with `/api` proxied to the runner.
 - `.npmrc` points to the public npm registry.
-- Run calls the runner (`../runner`, Bun, port 5190): in dev Vite proxies `/api` to it (`RUNNER_URL` changes the target). To start both together: `npm run start` at the repository root.
+- Run calls the runner (`../runner`, Bun, port 5290): in dev Vite proxies `/api` to it (`RUNNER_URL` changes the target). To start both together: `npm run start` at the repository root.
 - The components' logic (validate/execute) lives in `../core` (alias `@dataflow/core`); here only the visual part.
 
 ## Structure

@@ -102,7 +102,7 @@ The pipeline is a JS expression (the text as Compass shows it) evaluated on the 
 
 ## 11. Runner API
 
-All under `/api` (the editor's Vite dev server proxies it to the runner on port 5190). Errors come back as `{error}`.
+All under `/api` (the editor's Vite dev server proxies it to the runner on port 5290). Errors come back as `{error}`.
 
 | Route | What it does |
 |---|---|
@@ -123,7 +123,7 @@ All under `/api` (the editor's Vite dev server proxies it to the runner on port 
 | `POST /api/projects/:projectId/files` | Uploads a file (multipart, `file` field); the same name is replaced |
 | `GET` / `DELETE /api/projects/:projectId/files/:name` | Downloads / deletes a file |
 
-Environment variables: `DATABASE_URL` (Postgres; without it, PGlite in `runner/data.local/`), `RUNNER_PORT` (default 5190), `RUNNER_TIMEOUT_MS` (maximum time of a run, default 5 min) and `RUNNER_SCRIPT_TIMEOUT_MS` (maximum time of each TypeScript `process` call, default 30 s).
+Environment variables: `DATABASE_URL` (Postgres; without it, PGlite in `runner/data.local/`), `RUNNER_PORT` (default 5290), `RUNNER_TIMEOUT_MS` (maximum time of a run, default 5 min) and `RUNNER_SCRIPT_TIMEOUT_MS` (maximum time of each TypeScript `process` call, default 30 s).
 
 ## 12. Targets in test runs
 

@@ -19,7 +19,7 @@ import {backupWorkspace} from './storage/backup';
  */
 
 // RUNNER_PORT, not PORT: whatever starts alongside it (concurrently, preview) usually passes PORT to the editor
-const PORT = Number(process.env.RUNNER_PORT ?? 5190);
+const PORT = Number(process.env.RUNNER_PORT ?? 5290);
 /** how many runs the list returns */
 const LISTED_RUNS = 50;
 /** maximum time of a run (default 5 min); past that, it is interrupted */

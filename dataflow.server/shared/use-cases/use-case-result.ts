@@ -3,7 +3,8 @@
  * database is down, a bug) are not results: they are thrown and the api answers 500.
  */
 
-export type UseCaseErrorCode = 'validation' | 'forbidden' | 'not-found' | 'conflict';
+/** 'unavailable': something outside dataflow (a database, an API) refused or did not answer */
+export type UseCaseErrorCode = 'validation' | 'forbidden' | 'not-found' | 'conflict' | 'unavailable';
 
 export type UseCaseError = {
   code: UseCaseErrorCode;

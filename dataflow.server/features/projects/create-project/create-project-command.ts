@@ -1,8 +1,11 @@
 import { z } from 'zod';
+import { appearanceKey, projectDescription, projectName } from '../project-fields';
 
 export const CreateProjectCommand = z.object({
-  name: z.string().trim().min(1, 'Required').max(100, 'At most 100 characters'),
-  description: z.string().trim().max(500, 'At most 500 characters').default(''),
+  name: projectName,
+  description: projectDescription.default(''),
+  icon: appearanceKey.default('folder'),
+  color: appearanceKey.default('blue'),
 });
 
 export type CreateProjectCommand = z.output<typeof CreateProjectCommand>;

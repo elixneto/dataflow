@@ -1,3 +1,4 @@
+import type { Keyring } from '#shared/crypto/keyring';
 import type { Database } from '#shared/database/database';
 
 /**
@@ -8,4 +9,6 @@ export type UseCaseContext = {
   orgId: string;
   userId: string;
   db: Database;
+  /** encrypts and decrypts secrets' values; only the secrets use cases need it */
+  keyring?: Keyring;
 };

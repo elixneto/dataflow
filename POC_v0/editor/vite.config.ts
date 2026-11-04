@@ -32,11 +32,11 @@ export default defineConfig({
     },
   },
   server: {
-    port: 5180,
+    port: 5280,
     fs: {allow: ['..']},
     proxy: {
       '/api': {
-        target: process.env.RUNNER_URL ?? 'http://localhost:5190',
+        target: process.env.RUNNER_URL ?? 'http://localhost:5290',
       },
     },
   },

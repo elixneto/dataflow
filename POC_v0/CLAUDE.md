@@ -6,13 +6,13 @@ Overview, concepts and how to run: [README.md](README.md). Engine architecture: 
 |---|---|---|
 | `editor/` | App (Vite + React + React Flow) at the root: projects → flows (editor), runs, secrets, files | see [editor/CLAUDE.md](editor/CLAUDE.md) |
 | `core/` | TypeScript engine without React or Node: contract (`src/types/`, one type per file, imported as `#types/<name>.type`), `src/envelope/` (building envelopes, expression variables), `src/validation/` (key names, cycles), `src/errors/`, `src/engine/` (envelope-by-envelope execution: entry point `workflowRunner` (`workflow-runner.ts`) → class `WorkflowExecution`), components (logic) | used by the editor (alias `@dataflow/core`) and by the runner |
-| `runner/` | Runner in Bun + Hono (port 5190): projects, flows and execution runs in Postgres (editor test runs stay in the browser's IndexedDB) (`src/storage/`: `DATABASE_URL`, or PGlite in `runner/data.local/` without it), secrets and files per project, expressions and scripts in `node:vm` | runs separately; the editor talks to it through `/api` |
+| `runner/` | Runner in Bun + Hono (port 5290): projects, flows and execution runs in Postgres (editor test runs stay in the browser's IndexedDB) (`src/storage/`: `DATABASE_URL`, or PGlite in `runner/data.local/` without it), secrets and files per project, expressions and scripts in `node:vm` | runs separately; the editor talks to it through `/api` |
 
 ## Commands (at the root)
 
 - Requirements: Node.js 24+ (`.nvmrc`, `engines` and `engine-strict=true` in every `.npmrc`) and Bun 1.2+. `npm run check` (`scripts/check-env.mjs`) checks both; it also runs before `setup` and `start`.
 - `npm run setup` — installs the dependencies of the three parts (once).
-- `npm run start` — starts **runner and editor together** (`scripts/dev-runner.mjs --with-editor`, one terminal); opens at http://localhost:5180/ (project list). Not `bun --watch` nor `concurrently`: both stop the runner with an immediate kill (see Database).
+- `npm run start` — starts **runner and editor together** (`scripts/dev-runner.mjs --with-editor`, one terminal); opens at http://localhost:5280/ (project list). Not `bun --watch` nor `concurrently`: both stop the runner with an immediate kill (see Database).
 - `npm run lint` — ESLint over the three parts (`eslint.config.mjs`); it is the first step of `npm run build`, so a missing `;` or an `any` breaks the build.
 - `npm test` — core and runner tests (`bun test`). Tests live in each part's `tests/` folder (never next to the code), mirroring `src/`: `core/tests/components/`, `core/tests/engine/`, `core/tests/validation/`, `runner/tests/`. `npm run typecheck` — the three parts. `npm run build` — editor build.
 - Each part has an `.npmrc` pointing to the public npm registry, so it installs the same even with another registry configured on the machine.

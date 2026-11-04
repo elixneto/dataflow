@@ -6,6 +6,8 @@ export const projects = pgTable('projects', {
     orgId: uuid('org_id').notNull().references(() => organizations.id),
     name: text('name').notNull(),
     description: text('description').notNull(),
+    icon: text('icon').notNull().default('folder'),
+    color: text('color').notNull().default('blue'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     deletedAt: timestamp('deleted_at', { withTimezone: true }),
     deletedBy: text('deleted_by'),

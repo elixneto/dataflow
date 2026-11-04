@@ -1,3 +1,5 @@
+import { parseKeys, type KeyEntry } from '../crypto/keyring';
+
 /*
  * The instance's configuration, read once from the environment (Bun loads dataflow.server/.env). Each environment (DEV,
  * STAGING, PROD...) is its own instance of the product, so these values say which one this process is.
@@ -17,6 +19,8 @@ export type AppSettings = {
   workerTags: string[];
   /** base URL of the next environment's instance, for promotions (push); undefined = this one promotes nowhere */
   promoteTo?: string;
+  /** the keys that encrypt the secrets (SECRETS_KEYS, the last one encrypts); empty = DEV's fixed key, refused elsewhere */
+  secretsKeys: KeyEntry[];
 };
 
 export class AppSettingsError extends Error {
@@ -50,6 +54,14 @@ function url(name: string, value: string | undefined): string | undefined {
   }
 }
 
+function keys(value: string | undefined): KeyEntry[] {
+  try {
+    return parseKeys(value);
+  } catch (e) {
+    throw new AppSettingsError((e as Error).message);
+  }
+}
+
 /** Reads and validates the configuration. Throws AppSettingsError naming the variable that is wrong. */
 export function readAppSettings(env: Record<string, string | undefined> = process.env): AppSettings {
   return {
@@ -59,5 +71,6 @@ export function readAppSettings(env: Record<string, string | undefined> = proces
     workers: integer('WORKERS', env.WORKERS, 1, 1),
     workerTags: list(env.WORKER_TAGS, ['default']),
     promoteTo: url('PROMOTE_TO', env.PROMOTE_TO),
+    secretsKeys: keys(env.SECRETS_KEYS),
   };
 }

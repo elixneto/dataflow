@@ -5,21 +5,30 @@
  * Returns one issue per crowded port, without the component's name (the caller puts it in front).
  */
 export function portConnectionIssues(
-  edges: {source: string; sourcePort: string; target: string; targetPort: string}[],
+  edges: { source: string; sourcePort: string; target: string; targetPort: string }[],
   takesSeveral: (nodeId: string) => boolean,
-): {nodeId: string; message: string}[] {
+): { nodeId: string; message: string }[] {
   const count = (keys: string[]) => keys.reduce((m, k) => m.set(k, (m.get(k) ?? 0) + 1), new Map<string, number>());
-  const issues: {nodeId: string; message: string}[] = [];
+  const issues: { nodeId: string; message: string }[] = [];
   const name = (port: string) => (/^(in|out)-\d+$/.test(port) ? String(Number(port.split('-')[1]) + 1) : `"${port}"`);
+
   for (const [key, n] of count(edges.map(e => `${e.source}\n${e.sourcePort}`))) {
-    if (n < 2) continue;
+    if (n <= 1) {
+      continue;
+    }
+
     const [nodeId, port] = key.split('\n');
-    issues.push({nodeId, message: `has output ${name(port)} with ${n} connections: each output goes to one input (use a Copy to send to several).`});
+    issues.push({ nodeId, message: `has output ${name(port)} with ${n} connections: each output goes to one input (use a Copy to send to several).` });
   }
+
   for (const [key, n] of count(edges.map(e => `${e.target}\n${e.targetPort}`))) {
     const [nodeId, port] = key.split('\n');
-    if (n < 2 || takesSeveral(nodeId)) continue;
-    issues.push({nodeId, message: `has input ${name(port)} with ${n} connections: merge them with a Union first.`});
+    if (n <= 1 || takesSeveral(nodeId)) {
+      continue;
+    }
+
+    issues.push({ nodeId, message: `has input ${name(port)} with ${n} connections: merge them with a Union first.` });
   }
+
   return issues;
 }
