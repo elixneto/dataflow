@@ -61,3 +61,22 @@ test('the file name comes from the flow name; the runner gets the flow without l
   expect(executable.nodes.find(n => n.id === 'sql')).toEqual({id: 'sql', type: 'sqlserver', label: 'Orders', config: FLOW.nodes[1]!.config});
   expect(executable).toMatchObject({id: 'f1', project: 'Sales', flow: 'Load orders', edges: FLOW.edges});
 });
+
+test('the server checks the JSON the editor saves with the same rules; the connection rules too', async () => {
+  const {validateFlowFile, newFlowFile} = await import('../../src/index');
+  expect(validateFlowFile(FLOW)).toEqual({ok: true, value: FLOW});
+  expect(validateFlowFile(null)).toEqual({ok: false, errors: ['Not a flow file.']});
+  const startToEnd = {...newFlowFile('x'), edges: [{source: 'start', sourcePort: 'out-0', target: 'end', targetPort: 'in-0'}]};
+  const result = validateFlowFile(startToEnd);
+  expect(result.ok).toBe(false);
+  // a component with incomplete settings is still saved (a flow being built)
+  expect(validateFlowFile({...newFlowFile('x'), nodes: [...newFlowFile('x').nodes, {id: 'f', type: 'filter', position: {x: 1, y: 1}, config: {}}]}).ok).toBe(true);
+});
+
+test('a new flow: its Start and its End, nothing between them', async () => {
+  const {newFlowFile, validateFlowFile} = await import('../../src/index');
+  const flow = newFlowFile('Orders', 'f9');
+  expect(flow.nodes.map(n => n.type)).toEqual(['start', 'end']);
+  expect(flow).toMatchObject({version: 1, id: 'f9', name: 'Orders', edges: []});
+  expect(validateFlowFile(flow).ok).toBe(true);
+});

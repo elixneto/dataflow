@@ -26,6 +26,8 @@ export type Flow = {
   createdAt: Date;
   updatedAt: Date;
   updatedBy: string;
+  /** who that is, by name (the server's users), when known */
+  updatedByName?: string;
   /** when it was archived; null while it is active */
   archivedAt: Date | null;
 };

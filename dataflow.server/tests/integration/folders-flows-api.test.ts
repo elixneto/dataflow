@@ -58,4 +58,49 @@ describe('folders and flows api', () => {
     expect((await call('GET', `/flows/${crypto.randomUUID()}`)).status).toBe(404);
     expect((await call('GET', `/projects/${crypto.randomUUID()}/contents`)).status).toBe(404);
   });
+
+  test("a flow's draft: a new flow opens with its Start and End; a save checks it, grows the revision, and a stale one is refused", async () => {
+    const flowId = (await call('POST', `/projects/${projectId}/flows`, { name: 'Drafts' })).body.id as string;
+    const opened = await call('GET', `/flows/${flowId}/draft`);
+    expect(opened.status).toBe(200);
+    expect(opened.body.revision).toBe(0);
+    const flow = opened.body.flow as { name: string; nodes: { id: string; type: string; position: { x: number; y: number }; config: object }[]; edges: unknown[] };
+    expect(flow.name).toBe('Drafts');
+    expect(flow.nodes.map(n => n.type)).toEqual(['start', 'end']);
+
+    // a component in between, saved
+    const edited = {
+      ...flow,
+      name: 'ignored (the name is the row one)',
+      nodes: [...flow.nodes, { id: 'm', type: 'mapper', position: { x: 320, y: 0 }, config: {} }],
+      edges: [
+        { source: 'start', sourcePort: 'out-0', target: 'm', targetPort: 'in-0' },
+        { source: 'm', sourcePort: 'out-0', target: 'end', targetPort: 'in-0' },
+      ],
+    };
+    const saved = await call('PUT', `/flows/${flowId}/draft`, { revision: 0, flow: edited });
+    expect(saved).toEqual({ status: 200, body: { revision: 1 } });
+    const reopened = await call('GET', `/flows/${flowId}/draft`);
+    expect(reopened.body.revision).toBe(1);
+    expect((reopened.body.flow as { name: string; nodes: unknown[] }).nodes).toHaveLength(3);
+    expect((reopened.body.flow as { name: string }).name).toBe('Drafts');
+
+    // another tab still at revision 0: refused, nothing overwritten
+    const stale = await call('PUT', `/flows/${flowId}/draft`, { revision: 0, flow });
+    expect(stale.status).toBe(409);
+    expect((await call('GET', `/flows/${flowId}/draft`)).body.revision).toBe(1);
+
+    // a broken flow (Start straight to End) is refused with the reason
+    const broken = await call('PUT', `/flows/${flowId}/draft`, {
+      revision: 1,
+      flow: { ...flow, edges: [{ source: 'start', sourcePort: 'out-0', target: 'end', targetPort: 'in-0' }] },
+    });
+    expect(broken.status).toBe(400);
+    expect((broken.body.error as { message: string }).message).toContain('The flow is not valid');
+
+    // an archived flow is read, not saved
+    await call('POST', `/flows/${flowId}/archive`);
+    expect((await call('GET', `/flows/${flowId}/draft`)).status).toBe(200);
+    expect((await call('PUT', `/flows/${flowId}/draft`, { revision: 1, flow })).status).toBe(404);
+  });
 });

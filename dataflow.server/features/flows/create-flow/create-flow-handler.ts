@@ -1,22 +1,17 @@
 import { z } from 'zod';
-import { isFolderVisible, siblingNames, validateName, type ExecutableFlow } from '@dataflow/core';
+import { isFolderVisible, newFlowFile, siblingNames, validateName } from '@dataflow/core';
 import { FlowRepository, invalidName, loadTree, location, nameTaken, requireActiveProject } from '#features/folders/project-tree';
 import type { UseCaseContext } from '#shared/use-cases/use-case-context';
 import type { UseCaseHandler } from '#shared/use-cases/use-case-handler';
 import { fail, success, type UseCaseResult } from '#shared/use-cases/use-case-result';
 import { validate } from '#shared/use-cases/validate';
+import type { StoredDraft } from '../flow-draft';
 
 export const CreateFlowCommand = z.object({
   projectId: z.uuid('Invalid'),
   folderId: location,
   name: z.string(),
 });
-
-/**
- * The draft of a new flow: no parameters, components or connections yet. The editor adds Start and End (with their
- * places on the canvas) the first time it opens it.
- */
-export const EMPTY_DRAFT: Pick<ExecutableFlow, 'parameters' | 'nodes' | 'edges'> = { parameters: [], nodes: [], edges: [] };
 
 /** Creates an empty flow at the project's root or in an active folder. An archived project takes no new flows. */
 export class CreateFlowHandler implements UseCaseHandler<{ id: string }> {
@@ -42,12 +37,15 @@ export class CreateFlowHandler implements UseCaseHandler<{ id: string }> {
       return error === 'Already in use' ? nameTaken('flow', name) : invalidName(error);
     }
 
+    const id = crypto.randomUUID();
+    // the draft of a new flow: its Start and its End (flow-draft.ts)
+    const draft: StoredDraft = { revision: 0, flow: newFlowFile(name, id) };
     const flow = await new FlowRepository(ctx.db, ctx.orgId).insert({
-      id: crypto.randomUUID(),
+      id,
       projectId,
       folderId,
       name,
-      draftDefinition: EMPTY_DRAFT,
+      draftDefinition: draft,
       updatedBy: ctx.userId,
     });
     return success({ id: flow.id });

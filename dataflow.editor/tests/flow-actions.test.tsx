@@ -5,7 +5,7 @@ import { FlowActionsView } from '../src/pages/flow-editor/flow-actions';
 
 /** each button's label and whether it is disabled */
 const buttons = (connection: ServerConnection) => {
-  const html = renderToStaticMarkup(<FlowActionsView connection={connection} onDownload={() => {}} />);
+  const html = renderToStaticMarkup(<FlowActionsView connection={connection} onDownload={() => {}} onRun={() => {}} />);
   return [...html.matchAll(/<button[^>]*>.*?<\/button>/g)].map(([b]) => ({
     name: b.match(/aria-label="([^"]+)"/)?.[1] ?? b.replace(/<[^>]+>/g, '').trim(),
     disabled: /\sdisabled=""/.test(b),
@@ -14,10 +14,10 @@ const buttons = (connection: ServerConnection) => {
 };
 
 describe('the flow actions and the server', () => {
-  test('online: everything can be used', () => {
+  test('online: everything can be used but Upload (soon)', () => {
     expect(buttons({ state: 'online', environment: 'DEV' }).map(b => [b.name, b.disabled])).toEqual([
       ['Download', false],
-      ['Upload', false],
+      ['Upload', true],
       ['Run for real', false],
       ['Run', false],
     ]);

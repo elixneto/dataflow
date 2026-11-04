@@ -18,7 +18,7 @@ export type ApiResult<T> = { ok: true; value: T } | { ok: false; error: ApiError
 const UNAVAILABLE: ApiError = { code: 'unavailable', message: 'Server unavailable' };
 
 /** a request to the api: the value, or the error the server answered ({ error: { code, message, fields } }) */
-export async function api<T>(path: string, init: { method?: string; body?: unknown } = {}): Promise<ApiResult<T>> {
+export async function api<T>(path: string, init: { method?: string; body?: unknown; keepalive?: boolean } = {}): Promise<ApiResult<T>> {
   let response: Response;
   try {
     response = await fetch(`/api${path}`, {
@@ -29,6 +29,8 @@ export async function api<T>(path: string, init: { method?: string; body?: unkno
         ...(init.body === undefined ? {} : { 'content-type': 'application/json' }),
       },
       body: init.body === undefined ? undefined : JSON.stringify(init.body),
+      // a save sent while the page closes still reaches the server
+      keepalive: init.keepalive,
     });
   } catch {
     reportUnavailable();

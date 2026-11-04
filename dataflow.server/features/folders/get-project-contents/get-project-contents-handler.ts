@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { withUpdatedByName } from '#features/users/user-names';
 import { GetProjectHandler } from '#features/projects/get-project/get-project-handler';
 import type { UseCaseContext } from '#shared/use-cases/use-case-context';
 import type { UseCaseHandler } from '#shared/use-cases/use-case-handler';
@@ -27,6 +28,6 @@ export class GetProjectContentsHandler implements UseCaseHandler<ProjectContents
     }
 
     const tree = await loadTree(ctx.db, ctx.orgId, parsed.value.projectId);
-    return success({ folders: tree.folders.map(toFolderView), flows: tree.flows.map(toFlowView) });
+    return success({ folders: tree.folders.map(toFolderView), flows: await withUpdatedByName(ctx.db, ctx.orgId, tree.flows.map(toFlowView)) });
   }
 }

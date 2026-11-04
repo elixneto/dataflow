@@ -3,7 +3,8 @@ import {END, START} from '#engine/constants';
 import type {ExecutableEdge} from '#types/executable-edge.type';
 import type {ExecutableFlow} from '#types/executable-flow.type';
 import {startParameters} from '../components/start';
-import {errorEdgeIssues, portConnectionIssues} from '#validation/ports';
+import {errorEdgeIssues} from '#validation/ports';
+import {portConnectionIssues} from '#validation/port-connections';
 
 /*
  * A flow as a file (YAML): what Download gives and Upload reads, and what the server can keep. One description, here,

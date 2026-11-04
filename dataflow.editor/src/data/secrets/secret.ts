@@ -13,4 +13,6 @@ export type Secret = {
   createdAt: Date;
   updatedAt: Date;
   updatedBy: string;
+  /** who that is, by name (the server's users), when known */
+  updatedByName?: string;
 };

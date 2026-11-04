@@ -32,8 +32,10 @@ export type SettingField = {
   max?: number;
   /** code: its language */
   language?: 'sql' | 'javascript' | 'typescript' | 'json';
-  /** connection: the profile type it takes (e.g. 'sqlserver') */
+  /** connection: the profile type of its own fields, when no profile is picked (e.g. 'sqlserver') */
   connectionType?: string;
+  /** connection: the profile types it can pick (default: `connectionType`); an HTTP request takes any API's */
+  connectionTypes?: string[];
   /** list: each item's settings */
   item?: SettingField[];
   /**

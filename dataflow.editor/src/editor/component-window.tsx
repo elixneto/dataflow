@@ -79,6 +79,10 @@ export function ComponentWindow({ id, data, onSave, onCancel, onRemove, register
             {value === 'notes' && draft.notes?.trim() && <span className="ml-1.5 inline-block size-1.5 rounded-full bg-amber-500 align-middle" aria-label="has a note" />}
           </button>
         ))}
+        {/* the component's own input and output of the last run: later */}
+        <button type="button" role="tab" aria-selected={false} disabled title="Soon" className="-mb-px cursor-not-allowed border-b-2 border-transparent px-3 py-2 text-sm text-muted-foreground/60">
+          Last run
+        </button>
       </div>
 
       {tab === 'configuration' ? (

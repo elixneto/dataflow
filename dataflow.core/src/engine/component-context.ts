@@ -2,7 +2,7 @@ import {timed, timedRequests} from '#engine/stopwatch';
 import {invokeFlow} from '#engine/invoke-flow';
 import {envelopeVariables} from '#envelope/expression-variables';
 import {toError} from '#errors/normalize-error';
-import {connectionHeaders, connectionString, resolveConnection, type ConnectionUse} from '../connections/connection-access';
+import {API_CONNECTION_TYPES, connectionHeaders, connectionString, oauthToken, resolveConnection, tokenStillGood, type ConnectionUse, type OAuthToken} from '../connections/connection-access';
 import type {FlowExecution} from '#engine/flow-execution';
 import type {ComponentContext} from '#types/component-context.type';
 import type {ExecutableNode} from '#types/executable-node.type';
@@ -11,6 +11,17 @@ import type {ExecutableNode} from '#types/executable-node.type';
 const LOGGED_UPSERTS = 3;
 /** How much of a request body a test run writes in the log. */
 const BODY_EXCERPT = 300;
+
+/** the OAuth 2.0 tokens of a run, by connection: asked once, used until they expire */
+const runTokens = new WeakMap<object, Map<string, OAuthToken>>();
+const tokensOf = (options: object) => {
+  let tokens = runTokens.get(options);
+  if (!tokens) {
+    tokens = new Map();
+    runTokens.set(options, tokens);
+  }
+  return tokens;
+};
 
 /**
  * What the engine gives a component while it runs (`ctx`): expressions, scripts, waits, database, memory...
@@ -25,7 +36,9 @@ export function componentContext(execution: FlowExecution, node: ExecutableNode,
   let inFlight = 0;
   // secret values never go to a log: longest first, so one that contains another is hidden whole
   const secretValues = Object.values(options.secrets ?? {}).filter(v => v.length >= 4).sort((a, b) => b.length - a.length);
-  const mask = (text: string) => secretValues.reduce((t, secret) => t.split(secret).join('***'), text);
+  // an OAuth 2.0 access token is a secret too, once fetched
+  const hidden = () => [...secretValues, ...[...tokensOf(options).values()].map(t => t.accessToken)].sort((a, b) => b.length - a.length);
+  const mask = (text: string) => hidden().reduce((t, secret) => t.split(secret).join('***'), text);
   // a database connection: its connection string, and the database a component that sets none takes from it
   const database = (type: 'sqlserver' | 'mongodb', use: ConnectionUse) => {
     const resolved = resolveConnection(type, use, options.connections, options.secrets);
@@ -111,8 +124,24 @@ export function componentContext(execution: FlowExecution, node: ExecutableNode,
     },
     sendHttp: async ({auth, ...given}) => {
       if (!options.http) throw new Error('This runner does not send HTTP requests.');
-      // an API connection: its headers first, the component's own win
-      const request = auth ? {...given, headers: {...connectionHeaders(resolveConnection('http-client', auth, options.connections, options.secrets)), ...given.headers}} : given;
+      // an API connection: its headers first (an OAuth 2.0 token asked once per run and connection), the component's own win
+      let request = given;
+      if (auth) {
+        const http = options.http;
+        const resolved = resolveConnection('http-client', auth, options.connections, options.secrets, API_CONNECTION_TYPES);
+        let token: string | undefined;
+        if (resolved.type === 'rest-oauth2' && !dryRun) {
+          const key = 'profile' in auth ? auth.profile : JSON.stringify(resolved.config);
+          const tokens = tokensOf(options);
+          let cached = tokens.get(key);
+          if (!tokenStillGood(cached)) {
+            cached = await oauthToken(resolved, async r => http({...r, timeoutMs: request.timeoutMs, signal: execution.control.signal}));
+            tokens.set(key, cached);
+          }
+          token = cached.accessToken;
+        }
+        request = {...given, headers: {...connectionHeaders(resolved, token), ...given.headers}};
+      }
       if (dryRun) {
         const body = request.body === undefined ? '' : `, body ${mask(request.body.slice(0, BODY_EXCERPT))}${request.body.length > BODY_EXCERPT ? '…' : ''}`;
         log('info', `Test run: ${request.method} ${mask(request.url)} not sent${body}.`);

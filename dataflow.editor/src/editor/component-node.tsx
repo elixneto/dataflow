@@ -1,12 +1,13 @@
 import { memo, useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { Handle, NodeToolbar, Position, useNodeConnections, useReactFlow, useUpdateNodeInternals, type Node, type NodeProps } from '@xyflow/react';
-import { CornerDownRight, Eye, LogIn, LoaderCircle, OctagonX, Pin, Play, Power, SkipForward, SlidersHorizontal, X, type LucideIcon } from 'lucide-react';
+import { CircleAlert, CircleCheck, CircleMinus, CircleX, CornerDownRight, Eye, LogIn, LoaderCircle, OctagonX, Pin, Play, Power, SkipForward, SlidersHorizontal, X, type LucideIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { CATEGORIES, componentInfo, isFixedType } from './catalog';
 import { CARD_HEIGHT, CARD_WIDTH, portTop, SIDE_GAP } from './node-geometry';
 import { useHistory } from './history';
+import { runActions, useRunMark } from './run/run-marks';
 import { nameIn, useProjectResources } from './project-resources';
-import { componentSummary, START, startConfig, ERROR_PORT, errorPort, inputPorts, outputPorts, type ErrorPolicy, type PortInfo } from '@dataflow/core';
+import { componentSummary, START, startConfig, ERROR_PORT, type ComponentRun, errorPort, inputPorts, outputPorts, type ErrorPolicy, type PortInfo } from '@dataflow/core';
 
 export type ComponentData = {
   type: string;
@@ -50,6 +51,10 @@ function ComponentNodeView({ id, data, selected }: NodeProps<ComponentNode>) {
   const outgoing = useNodeConnections({ handleType: 'source' });
   const hover = useHover();
   const [infoOpen, setInfoOpen] = useState(false);
+  // the last run on this component: a spinner while it runs, then its status and the envelopes per port
+  const mark = useRunMark(id);
+  const run = mark?.run;
+  const failed = run?.status === 'failed' || run?.status === 'with-errors';
   const closeInfo = useCallback(() => setInfoOpen(false), []);
   const updateNodeInternals = useUpdateNodeInternals();
   const inputCount = inputPorts(data.type, data.config).length;
@@ -89,30 +94,31 @@ function ComponentNodeView({ id, data, selected }: NodeProps<ComponentNode>) {
       )}
       {infoOpen && <InfoPanel data={data} onClose={closeInfo} />}
       <div {...hover.props} style={{ '--category': color, width: CARD_WIDTH - SIDE_GAP } as CSSProperties} className={cn('relative transition-opacity', data.disabled && 'opacity-50')}>
-        <Plate inputs={inputs.length} outputs={outputs.length} errorPort={hasErrorPort} selected={selected} />
-        {/* what is set on the node (Continue, pinned), above it where the bar appears: the bar covers it on hover and the
-            name keeps the whole card */}
+        <Plate inputs={inputs.length} outputs={outputs.length} errorPort={hasErrorPort} selected={selected} failed={failed} />
+        {mark && <RunBadge running={mark.running} run={run} />}
+        {/* what is set on the node (Continue, pinned), above it where the bar appears, in the plain color (the bar's
+            buttons are the colored ones): the bar covers it on hover and the name keeps the whole card */}
         {(onError === 'continue' || data.pinned || start?.acceptsInput || parameterCount > 0) && (
           <div className="pointer-events-none absolute bottom-full left-1 mb-1 flex items-center gap-1 px-1">
             {data.pinned && (
-              <Pin role="img" aria-label="Output pinned" className="size-3.5 rotate-45 text-blue-600 dark:text-blue-400">
+              <Pin role="img" aria-label="Output pinned" className="size-3.5 rotate-45 text-muted-foreground">
                 <title>Output pinned</title>
               </Pin>
             )}
             {start?.acceptsInput && (
-              <LogIn role="img" aria-label="Accepts input" className="size-3.5 text-sky-600 dark:text-sky-400">
+              <LogIn role="img" aria-label="Accepts input" className="size-3.5 text-muted-foreground">
                 <title>{start.testInput.trim() ? 'Accepts input (default input set)' : 'Accepts input'}</title>
               </LogIn>
             )}
             {parameterCount > 0 && (
-              <span role="img" aria-label={`${parameterCount} parameter${parameterCount === 1 ? '' : 's'}`} className="flex items-center gap-0.5 text-violet-600 dark:text-violet-400">
+              <span role="img" aria-label={`${parameterCount} parameter${parameterCount === 1 ? '' : 's'}`} className="flex items-center gap-0.5 text-muted-foreground">
                 <SlidersHorizontal className="size-3.5" aria-hidden />
                 <span className="font-mono text-[10px] leading-none font-medium">{parameterCount}</span>
                 <title>{`${parameterCount} parameter${parameterCount === 1 ? '' : 's'}`}</title>
               </span>
             )}
             {onError === 'continue' && (
-              <SkipForward role="img" aria-label="On error: continue" className="size-3.5 text-amber-600 dark:text-amber-400">
+              <SkipForward role="img" aria-label="On error: continue" className="size-3.5 text-muted-foreground">
                 <title>On error: continue (the envelope goes on as it came in)</title>
               </SkipForward>
             )}
@@ -128,7 +134,15 @@ function ComponentNodeView({ id, data, selected }: NodeProps<ComponentNode>) {
             <PortHandle key={port.id} port={port} kind="target" style={{ top: portTop(i) }} edges={incoming.filter(c => c.targetHandle === port.id).length} />
           ))}
           {outputs.map((port, i) => (
-            <PortHandle key={port.id} port={port} kind="source" style={{ top: portTop(i) }} edges={outgoing.filter(c => c.sourceHandle === port.id).length} />
+            <PortHandle
+              key={port.id}
+              port={port}
+              kind="source"
+              style={{ top: portTop(i) }}
+              edges={outgoing.filter(c => c.sourceHandle === port.id).length}
+              envelopes={run && !mark?.running ? (run.outputs[port.id] ?? 0) : undefined}
+              onShow={() => mark?.show(port.id)}
+            />
           ))}
           {/* Divert: the error port, a red bump under the card (what fails goes out through it) */}
           {hasErrorPort && (
@@ -142,6 +156,15 @@ function ComponentNodeView({ id, data, selected }: NodeProps<ComponentNode>) {
             >
               <span className="node-port-dot" aria-hidden />
             </Handle>
+          )}
+          {/* after a run: the envelopes that went out through the error port, beside its bump (the badge is on the right) */}
+          {hasErrorPort && run && !mark?.running && (
+            <EnvelopeCount
+              count={run.outputs[ERROR_PORT] ?? 0}
+              onShow={() => mark?.show(ERROR_PORT)}
+              className="top-full left-[calc(50%+22px)] mt-0.5"
+              tone="error"
+            />
           )}
         </div>
       </div>
@@ -176,10 +199,12 @@ function inputHoles(inputs: number): CSSProperties {
  * pieces have no borders of their own; the line around (--node-outline, none in light) and the shadow are drawn on the
  * whole shape, so there is no seam and the holes and bumps get the same line. Selected, it takes the category's color.
  */
-function Plate({ inputs, outputs, errorPort, selected }: { inputs: number; outputs: number; errorPort: boolean; selected: boolean }) {
+function Plate({ inputs, outputs, errorPort, selected, failed }: { inputs: number; outputs: number; errorPort: boolean; selected: boolean; failed?: boolean }) {
   const strip = (ports: number) => ({ width: EXTENSION_WIDTH, height: portTop(ports - 1) + CARD_HEIGHT / 2 });
   const height = Math.max(portTop(Math.max(inputs, outputs, 1) - 1) + CARD_HEIGHT / 2, errorPort ? CARD_HEIGHT + ERROR_BUMP.height : 0);
-  const filter = `${outline(selected ? 'var(--category)' : 'var(--node-outline)')} drop-shadow(0 1px 2px rgb(0 0 0 / ${selected ? 0.18 : 0.1}))`;
+  // failed in the last run: a red line around it
+  const line = failed ? 'var(--destructive)' : selected ? 'var(--category)' : 'var(--node-outline)';
+  const filter = `${outline(line)} drop-shadow(0 1px 2px rgb(0 0 0 / ${selected ? 0.18 : 0.1}))`;
 
   return (
     <div aria-hidden className="pointer-events-none absolute top-0 left-0" style={{ filter, height, width: `calc(100% + ${BUMP_WIDTH}px)` }}>
@@ -210,7 +235,8 @@ function Plate({ inputs, outputs, errorPort, selected }: { inputs: number; outpu
  * a port: the dot inside the input's hole or the output's bump (the hole and the bump are the plate's); an output with
  * several edges shows how many under it (2x, 3x)
  */
-function PortHandle({ port, kind, style, edges }: { port: PortInfo; kind: 'source' | 'target'; style: CSSProperties; edges: number }) {
+function PortHandle(props: { port: PortInfo; kind: 'source' | 'target'; style: CSSProperties; edges: number; envelopes?: number; onShow?: () => void }) {
+  const { port, kind, style, edges, envelopes, onShow } = props;
   const input = kind === 'target';
   const connected = edges > 0;
   return (
@@ -246,7 +272,65 @@ function PortHandle({ port, kind, style, edges }: { port: PortInfo; kind: 'sourc
           {edges}x
         </span>
       )}
+      {/* after a run: how many envelopes went out through it, inside the card next to the port (outside it would sit on
+          the next component, glued to this one) */}
+      {!input && envelopes !== undefined && (
+        <EnvelopeCount style={style} count={envelopes} onShow={onShow} className="right-1.5 -translate-y-1/2" tone="ok" />
+      )}
     </>
+  );
+}
+
+/**
+ * how many envelopes went out through a port in the last run; a click shows them (the run's Data tab, that port). It is
+ * a button of its own: pressing it neither drags the card nor starts an edge
+ */
+export function EnvelopeCount(props: { count: number; onShow?: () => void; className?: string; style?: CSSProperties; tone: 'ok' | 'error' }) {
+  const { count, onShow, className, style, tone } = props;
+  const text = `Show ${count} envelope${count === 1 ? '' : 's'}`;
+  return (
+    <button
+      type="button"
+      style={style}
+      title={text}
+      aria-label={text}
+      onPointerDown={event => event.stopPropagation()}
+      onMouseDown={event => event.stopPropagation()}
+      onClick={event => {
+        event.stopPropagation();
+        onShow?.();
+      }}
+      className={cn(
+        'nodrag nopan absolute z-10 cursor-pointer rounded px-1.5 font-mono text-xs leading-5 font-semibold hover:ring-1 hover:ring-current',
+        count === 0 ? 'bg-muted text-muted-foreground' : tone === 'error' ? 'bg-destructive/15 text-destructive' : 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300',
+        className,
+      )}
+    >
+      {count}
+    </button>
+  );
+}
+
+/** the component's status in the last run, on its bottom right corner (the top is the hover bar's) */
+function RunBadge({ running, run }: { running: boolean; run?: ComponentRun }) {
+  const [Icon, color, text] = running
+    ? [LoaderCircle, 'text-muted-foreground animate-spin', 'Running']
+    : !run || run.status === 'not-run'
+      ? [CircleMinus, 'text-muted-foreground', 'Not run']
+      : run.status === 'completed'
+        ? [CircleCheck, 'text-emerald-600 dark:text-emerald-400', 'Completed']
+        : run.status === 'pinned'
+          ? [Pin, 'text-blue-600 dark:text-blue-400', 'Pinned output']
+          : run.status === 'disabled'
+            ? [Power, 'text-muted-foreground', 'Disabled']
+            : run.status === 'with-warnings'
+              ? [CircleAlert, 'text-amber-600 dark:text-amber-400', 'With warnings']
+              : [CircleX, 'text-destructive', run.status === 'failed' ? 'Failed' : 'With errors'];
+  return (
+    <span role="img" aria-label={text} title={text} className="pointer-events-none absolute right-1 z-10 flex size-4 -translate-y-1/2 items-center justify-center rounded-full bg-card"
+      style={{ top: CARD_HEIGHT }}>
+      <Icon className={cn('size-4', color)} aria-hidden />
+    </span>
   );
 }
 
@@ -285,6 +369,9 @@ function NodeActions(props: {
   onInfo: () => void;
 }) {
   const { id, data, visible, hoverProps } = props;
+  // Run from here and Pin output come after a run, by what went in and out of this component (run-marks.ts)
+  const mark = useRunMark(id);
+  const offers = runActions(mark?.running ? undefined : mark?.run, data.pinned ?? false);
   const { updateNodeData, setEdges } = useReactFlow<ComponentNode>();
   const { record } = useHistory();
   const onError = onErrorOf(data);
@@ -325,17 +412,21 @@ function NodeActions(props: {
             >
               <Power />
             </ActionButton>
-            <ActionButton label="Run from here" disabled={running || data.disabled} onClick={runFromHere}>
-              {running ? <LoaderCircle className="animate-spin" /> : <Play />}
-            </ActionButton>
-            <ActionButton
-              label={data.pinned ? 'Unpin output' : 'Pin output'}
-              pressed={data.pinned ?? false}
-              className={data.pinned ? 'text-blue-600 hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-400' : undefined}
-              onClick={() => change({ pinned: !data.pinned })}
-            >
-              <Pin className={cn('transition-transform', data.pinned && 'rotate-45')} />
-            </ActionButton>
+            {offers.runFromHere && (
+              <ActionButton label="Run from here" disabled={running || data.disabled} onClick={runFromHere}>
+                {running ? <LoaderCircle className="animate-spin" /> : <Play />}
+              </ActionButton>
+            )}
+            {offers.pin && (
+              <ActionButton
+                label={data.pinned ? 'Unpin output' : 'Pin output'}
+                pressed={data.pinned ?? false}
+                className={data.pinned ? 'text-blue-600 hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-400' : undefined}
+                onClick={() => change({ pinned: !data.pinned })}
+              >
+                <Pin className={cn('transition-transform', data.pinned && 'rotate-45')} />
+              </ActionButton>
+            )}
             <span className="mx-0.5 h-4 w-px bg-border" aria-hidden />
             <div role="radiogroup" aria-label="On error" className="flex items-center gap-0.5">
               {ON_ERROR.map(option => (

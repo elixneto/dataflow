@@ -84,7 +84,7 @@ function Level({ contents, projectId, expanded, onToggle, actions, folderId, dep
               {flow.name}
             </Link>
             <span className="hidden shrink-0 text-xs text-muted-foreground sm:inline" title={formatDateTime(flow.updatedAt)}>
-              Updated {relativeTime(flow.updatedAt)} by {flow.updatedBy}
+              Updated {relativeTime(flow.updatedAt)} by {flow.updatedByName ?? flow.updatedBy}
             </span>
             <FlowMenu flow={flow} actions={actions} />
           </div>

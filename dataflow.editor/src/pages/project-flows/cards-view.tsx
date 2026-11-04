@@ -65,7 +65,7 @@ export function CardsView({ contents, projectId, folderId, actions }: Props) {
                 </Link>
               </CardTitle>
               <CardDescription className="truncate" title={formatDateTime(flow.updatedAt)}>
-                Updated {relativeTime(flow.updatedAt)} by {flow.updatedBy}
+                Updated {relativeTime(flow.updatedAt)} by {flow.updatedByName ?? flow.updatedBy}
               </CardDescription>
             </div>
             <FlowMenu flow={flow} actions={actions} className="-mr-2" />

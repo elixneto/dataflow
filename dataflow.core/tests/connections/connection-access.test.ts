@@ -92,3 +92,50 @@ test('in a run: a MongoDB component with a profile takes its database; an HTTP r
   expect(r.status).toBe('failed');
   expect(r.error).not.toContain('tok-123');
 });
+
+test('an HTTP request takes any API connection: basic (user and password), OAuth 2.0 (client credentials)', async () => {
+  const {API_CONNECTION_TYPES, componentSettings} = await import('../../src/index');
+  expect(componentSettings('http-request').find(f => f.key === 'connection')?.connectionTypes).toEqual(API_CONNECTION_TYPES);
+  const profiles = {
+    basic: {name: 'Basic', type: 'rest-basic', config: {user: 'joão', password: 'PW'}},
+    oauth: {name: 'WF', type: 'rest-oauth2', config: {grant: 'clientCredentials', tokenUrl: 'https://auth.test/token', clientId: 'app', clientSecret: 'CS', scopes: 'read'}},
+    erp: {name: 'ERP', type: 'sqlserver', config: SQL},
+  };
+  const basic = resolveConnection('http-client', {profile: 'basic'}, profiles, {PW: 'p@ss'}, API_CONNECTION_TYPES);
+  expect(connectionHeaders(basic)).toEqual({Authorization: `Basic ${Buffer.from('joão:p@ss').toString('base64')}`});
+  expect(() => resolveConnection('http-client', {profile: 'erp'}, profiles, {}, API_CONNECTION_TYPES))
+    .toThrow('The connection "ERP" is not a HTTP Client Account or REST Basic Authentication or REST OAuth 2.0 connection.');
+});
+
+test('an OAuth 2.0 connection in a run: the token is asked once (form-encoded client credentials), sent as Bearer, hidden in logs', async () => {
+  const sent: {url: string; headers: Record<string, string>; body?: string}[] = [];
+  const wf: ExecutableFlow = {
+    project: 'Test', flow: 'OAuth', parameters: [],
+    nodes: [
+      {id: 'start', type: 'start', label: 'Start', config: {acceptsInput: true}},
+      {id: 'h', type: 'http-request', label: 'Get', config: {connection: 'wf', url: {value: 'https://api.test/items', expression: false}, onError: 'continue'}},
+      {id: 'end', type: 'end', label: 'End', config: {}},
+    ],
+    edges: [
+      {source: 'start', sourcePort: 'out-0', target: 'h', targetPort: 'in-0'},
+      {source: 'h', sourcePort: 'out-0', target: 'end', targetPort: 'in-0'},
+    ],
+  };
+  const r = await flowRunner(wf, {
+    mode: 'execution', id: 'oauth', evaluate, input: [{a: 1}, {a: 2}],
+    secrets: {WF_SECRET: 's3cret'},
+    connections: {wf: {name: 'WF', type: 'rest-oauth2', config: {grant: 'clientCredentials', tokenUrl: 'https://auth.test/token', clientId: 'app', clientSecret: 'WF_SECRET', scopes: 'read write'}}},
+    http: async request => {
+      sent.push({url: request.url, headers: request.headers, body: request.body});
+      if (request.url === 'https://auth.test/token') return {status: 200, headers: {'content-type': 'application/json'} as Record<string, string>, body: JSON.stringify({access_token: 'tok-abcdef', expires_in: 3600})};
+      return {status: 500, headers: {} as Record<string, string>, body: `token was ${request.headers.Authorization}`};
+    },
+  });
+  const tokenCalls = sent.filter(s => s.url === 'https://auth.test/token');
+  expect(tokenCalls).toHaveLength(1);
+  expect(new URLSearchParams(tokenCalls[0]!.body)).toEqual(new URLSearchParams({grant_type: 'client_credentials', client_id: 'app', client_secret: 's3cret', scope: 'read write'}));
+  expect(sent.filter(s => s.url === 'https://api.test/items').map(s => s.headers.Authorization)).toEqual(['Bearer tok-abcdef', 'Bearer tok-abcdef']);
+  // the API answered 500 with the token in its body: nothing in the run's record shows it
+  expect(JSON.stringify(r)).toContain('***');
+  expect(JSON.stringify(r)).not.toContain('tok-abcdef');
+});

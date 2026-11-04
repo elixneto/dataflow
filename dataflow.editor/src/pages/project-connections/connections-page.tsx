@@ -140,7 +140,7 @@ export function ConnectionsPage() {
                               </span>
                             )}
                             <span className="hidden w-48 shrink-0 text-right text-xs text-muted-foreground md:inline" title={formatDateTime(profile.updatedAt)}>
-                              Updated {relativeTime(profile.updatedAt)} by {profile.updatedBy}
+                              Updated {relativeTime(profile.updatedAt)} by {profile.updatedByName ?? profile.updatedBy}
                             </span>
                             <DropdownMenu>
                               <DropdownMenuTrigger asChild>

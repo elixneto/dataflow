@@ -33,6 +33,9 @@ const SQL_SERVER_MODES: {first: ConnectionField[]; last: ConnectionField[]} = {
   last: [{key: 'connectionString', label: 'Connection string', kind: 'secret', required: true, when: {key: 'connectWith', values: ['string']}}],
 };
 
+/** the API connection types an HTTP request can use: their authentication goes on its requests (SOAP is apart) */
+export const API_CONNECTION_TYPES: ConnectionTypeName[] = ['http-client', 'rest-basic', 'rest-oauth2'];
+
 /** a profile as the runner receives it (`RunOptions.connections`, by id): its secret fields name project secrets */
 export type ConnectionProfileData = {name?: string; type: string; config: Record<string, string>};
 
@@ -67,9 +70,12 @@ const toSetting = (f: ConnectionField): SettingField => ({
   when: f.when ? [noProfile, f.when] : noProfile,
 });
 
-/** a component's settings for its connection: the profile picker, then the inline fields (shown when no profile is picked) */
-export function connectionSettings(type: ConnectionTypeName, label = 'Connection'): SettingField[] {
-  return [{key: CONNECTION_KEY, label, kind: 'connection', connectionType: type, default: ''}, ...inlineFields(type).map(toSetting)];
+/**
+ * a component's settings for its connection: the profile picker (profiles of the `accepted` types), then the inline
+ * fields of `type` (shown when no profile is picked)
+ */
+export function connectionSettings(type: ConnectionTypeName, accepted: ConnectionTypeName[] = [type], label = 'Connection'): SettingField[] {
+  return [{key: CONNECTION_KEY, label, kind: 'connection', connectionType: type, connectionTypes: accepted, default: ''}, ...inlineFields(type).map(toSetting)];
 }
 
 /** the connection a component's config asks for: a profile's id, or its inline fields (unset ones take their default) */
@@ -92,21 +98,25 @@ export function connectionIssues(type: ConnectionTypeName, config: Record<string
 }
 
 /**
- * The connection ready to use: the profile (by id, of the right type) or the inline fields, and the values of their
- * secret fields. Throws when the profile or a secret is not in this runner.
+ * The connection ready to use: the profile (by id, of one of the `accepted` types: its own type then) or the inline
+ * fields (of `type`), and the values of their secret fields. Throws when the profile or a secret is not in this runner.
  */
 export function resolveConnection(
   type: ConnectionTypeName,
   use: ConnectionUse,
   profiles: Record<string, ConnectionProfileData> | undefined,
   secrets: Record<string, string> | undefined,
+  accepted: ConnectionTypeName[] = [type],
 ): ResolvedConnection {
   let config: Record<string, string>;
   let fields: ConnectionField[];
   if ('profile' in use) {
     const profile = profiles?.[use.profile];
     if (!profile) throw new Error(`The connection "${use.profile}" does not exist in this runner.`);
-    if (profile.type !== type) throw new Error(`The connection "${profile.name ?? use.profile}" is not a ${connectionType(type).label} connection.`);
+    if (!accepted.includes(profile.type as ConnectionTypeName)) {
+      throw new Error(`The connection "${profile.name ?? use.profile}" is not a ${accepted.map(t => connectionType(t).label).join(' or ')} connection.`);
+    }
+    type = profile.type as ConnectionTypeName;
     config = profile.config;
     fields = visibleFields(type, config);
   } else {
@@ -147,15 +157,65 @@ export function connectionString(connection: ResolvedConnection): string {
   }
 }
 
-/** the headers a resolved API connection adds to a request: its authentication, and a profile's default headers */
-export function connectionHeaders(connection: ResolvedConnection): Record<string, string> {
-  const {config, secrets} = connection;
+/** text as base64, as UTF-8 (a user name with an accent goes as it is) */
+const base64 = (text: string) => btoa(String.fromCharCode(...new TextEncoder().encode(text)));
+
+/**
+ * the headers a resolved API connection adds to a request: its authentication (bearer, API key, basic; an OAuth 2.0
+ * token is fetched apart, see `oauthToken`) and a profile's default headers
+ */
+export function connectionHeaders(connection: ResolvedConnection, oauthAccessToken?: string): Record<string, string> {
+  const {type, config, secrets} = connection;
   const headers: Record<string, string> = {};
   for (const line of (config.headers ?? '').split('\n')) {
     const at = line.indexOf(':');
     if (at > 0) headers[line.slice(0, at).trim()] = line.slice(at + 1).trim();
   }
-  if (config.auth === 'bearer' && secrets.token) headers.Authorization = `Bearer ${secrets.token}`;
-  if (config.auth === 'apiKey' && secrets.apiKey) headers[config.apiKeyHeader?.trim() || 'X-API-Key'] = secrets.apiKey;
+  if (type === 'rest-basic') headers.Authorization = `Basic ${base64(`${config.user ?? ''}:${secrets.password ?? ''}`)}`;
+  if (type === 'rest-oauth2' && oauthAccessToken) headers.Authorization = `Bearer ${oauthAccessToken}`;
+  if (type === 'http-client' && config.auth === 'bearer' && secrets.token) headers.Authorization = `Bearer ${secrets.token}`;
+  if (type === 'http-client' && config.auth === 'apiKey' && secrets.apiKey) headers[config.apiKeyHeader?.trim() || 'X-API-Key'] = secrets.apiKey;
   return headers;
+}
+
+/** a token and when it stops being good (ms since 1970) */
+export type OAuthToken = {accessToken: string; expiresAt: number};
+
+/** a token is renewed this long before it expires, so a request does not go with one about to end */
+const TOKEN_MARGIN_MS = 30_000;
+
+export const tokenStillGood = (token: OAuthToken | undefined, now = Date.now()): token is OAuthToken => !!token && token.expiresAt - TOKEN_MARGIN_MS > now;
+
+/**
+ * An OAuth 2.0 connection's access token (client credentials): asked from its token URL with the client id and secret
+ * (form-encoded, as RFC 6749 says), with the scopes and the audience when set. The authorization code grant needs a
+ * person to log in: not in a run.
+ */
+export async function oauthToken(
+  connection: ResolvedConnection,
+  send: (request: {method: string; url: string; headers: Record<string, string>; body: string}) => Promise<{status: number; body: string}>,
+  now = Date.now(),
+): Promise<OAuthToken> {
+  const {config, secrets} = connection;
+  if (config.grant === 'authorizationCode') throw new Error('An OAuth 2.0 connection with the authorization code grant cannot be used in a run yet; use client credentials.');
+  const form = new URLSearchParams({grant_type: 'client_credentials', client_id: config.clientId ?? '', client_secret: secrets.clientSecret ?? ''});
+  if (config.scopes?.trim()) form.set('scope', config.scopes.trim());
+  if (config.audience?.trim()) form.set('audience', config.audience.trim());
+  const response = await send({
+    method: 'POST',
+    url: config.tokenUrl ?? '',
+    headers: {'content-type': 'application/x-www-form-urlencoded', accept: 'application/json'},
+    body: form.toString(),
+  });
+  let answer: {access_token?: unknown; expires_in?: unknown} = {};
+  try {
+    answer = JSON.parse(response.body) as typeof answer;
+  } catch {
+    // not JSON: no token below
+  }
+  if (response.status < 200 || response.status >= 300 || typeof answer.access_token !== 'string') {
+    throw new Error(`The OAuth 2.0 token request to ${config.tokenUrl} failed (HTTP ${response.status}).`);
+  }
+  const seconds = Number(answer.expires_in);
+  return {accessToken: answer.access_token, expiresAt: now + (Number.isFinite(seconds) && seconds > 0 ? seconds : 3600) * 1000};
 }

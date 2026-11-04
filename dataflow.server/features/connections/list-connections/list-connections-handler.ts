@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { withUpdatedByName } from '#features/users/user-names';
 import { GetProjectHandler } from '#features/projects/get-project/get-project-handler';
 import type { UseCaseContext } from '#shared/use-cases/use-case-context';
 import type { UseCaseHandler } from '#shared/use-cases/use-case-handler';
@@ -10,8 +11,8 @@ import { ConnectionRepository } from '../connection-store';
 export const ListConnectionsQuery = z.object({ projectId: z.uuid('Invalid') });
 
 /** The project's connection profiles by name (their sensitive fields name secrets, never values). */
-export class ListConnectionsHandler implements UseCaseHandler<{ items: ConnectionView[] }> {
-  async handle(input: unknown, ctx: UseCaseContext): Promise<UseCaseResult<{ items: ConnectionView[] }>> {
+export class ListConnectionsHandler implements UseCaseHandler<{ items: (ConnectionView & { updatedByName?: string })[] }> {
+  async handle(input: unknown, ctx: UseCaseContext): Promise<UseCaseResult<{ items: (ConnectionView & { updatedByName?: string })[] }>> {
     const parsed = validate(ListConnectionsQuery, input);
     if (!parsed.ok) {
       return parsed;
@@ -23,6 +24,6 @@ export class ListConnectionsHandler implements UseCaseHandler<{ items: Connectio
     }
 
     const rows = await new ConnectionRepository(ctx.db, ctx.orgId).ofProject(parsed.value.projectId);
-    return success({ items: rows.map(toConnectionView) });
+    return success({ items: await withUpdatedByName(ctx.db, ctx.orgId, rows.map(toConnectionView)) });
   }
 }

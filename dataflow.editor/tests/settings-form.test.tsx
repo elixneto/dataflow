@@ -113,4 +113,25 @@ describe("a component's settings form, from the core's settings", () => {
     expect(html).toContain('>$id</textarea>');
     expect(html).not.toContain('[object Object]');
   });
+
+  test("an HTTP Request lists the project's API connections of any kind (OAuth 2.0, basic, HTTP client), not a database's", () => {
+    const resources = {
+      projectId: 'p1',
+      connections: [
+        { id: 'wf', name: 'Tasks API', type: 'rest-oauth2' },
+        { id: 'b', name: 'Basic API', type: 'rest-basic' },
+        { id: 'erp', name: 'ERP', type: 'sqlserver' },
+      ],
+      secrets: [],
+      flows: [],
+    };
+    const html = renderToStaticMarkup(
+      <ProjectResourcesContext.Provider value={resources}>
+        <SettingsForm id="n" fields={componentSettings('http-request')} values={{}} onChange={() => {}} />
+      </ProjectResourcesContext.Provider>,
+    );
+    expect(html).toContain('<option value="wf">Tasks API</option>');
+    expect(html).toContain('<option value="b">Basic API</option>');
+    expect(html).not.toContain('ERP');
+  });
 });

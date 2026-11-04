@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { withUpdatedByName } from '#features/users/user-names';
 import { GetProjectHandler } from '#features/projects/get-project/get-project-handler';
 import type { UseCaseContext } from '#shared/use-cases/use-case-context';
 import type { UseCaseHandler } from '#shared/use-cases/use-case-handler';
@@ -23,6 +24,6 @@ export class ListSecretsHandler implements UseCaseHandler<{ items: SecretView[] 
     }
 
     const rows = await projectSecrets(ctx.db, ctx.orgId, parsed.value.projectId);
-    return success({ items: rows.sort((a, b) => a.name.localeCompare(b.name, 'en')).map(toSecretView) });
+    return success({ items: await withUpdatedByName(ctx.db, ctx.orgId, rows.sort((a, b) => a.name.localeCompare(b.name, 'en')).map(toSecretView)) });
   }
 }

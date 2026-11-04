@@ -24,3 +24,23 @@ export function rememberWindow(flowId: string, nodeId: string, update: Remembere
     // no storage: it opens in the default place next time
   }
 }
+
+/** where the canvas was looking (pan and zoom), per flow in this browser tab: not part of the flow, never saved with it */
+export type Viewport = { x: number; y: number; zoom: number };
+
+export function readViewport(flowId: string): Viewport | null {
+  try {
+    const view = JSON.parse(sessionStorage.getItem(`dataflow.viewport:${flowId}`) ?? 'null') as Viewport | null;
+    return view && [view.x, view.y, view.zoom].every(Number.isFinite) ? view : null;
+  } catch {
+    return null;
+  }
+}
+
+export function rememberViewport(flowId: string, view: Viewport) {
+  try {
+    sessionStorage.setItem(`dataflow.viewport:${flowId}`, JSON.stringify(view));
+  } catch {
+    // no storage: the whole flow is fitted on screen next time
+  }
+}

@@ -122,7 +122,7 @@ function Control({ id, field, value, onChange }: { id: string; field: SettingFie
         </span>
       );
     case 'connection':
-      return <ConnectionPicker id={id} type={field.connectionType ?? ''} value={text} onChange={onChange} />;
+      return <ConnectionPicker id={id} types={field.connectionTypes ?? [field.connectionType ?? '']} value={text} onChange={onChange} />;
     case 'secret':
       return <SecretPicker id={id} value={text} onChange={onChange} />;
     case 'flow':
@@ -145,9 +145,9 @@ function Control({ id, field, value, onChange }: { id: string; field: SettingFie
  * connection is made on the project's Connections tab (in a new tab, so the flow stays as it is); it shows up here when
  * this window comes back into focus.
  */
-function ConnectionPicker({ id, type, value, onChange }: { id: string; type: string; value: string; onChange: (value: string) => void }) {
+function ConnectionPicker({ id, types, value, onChange }: { id: string; types: string[]; value: string; onChange: (value: string) => void }) {
   const resources = useProjectResources();
-  const profiles = resources.connections.filter(c => c.type === type);
+  const profiles = resources.connections.filter(c => types.includes(c.type));
   return (
     <div className="flex items-center gap-2">
       <select id={id} value={value} className={SELECT} onChange={event => onChange(event.target.value)}>

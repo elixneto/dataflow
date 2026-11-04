@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { withUpdatedByName } from '#features/users/user-names';
 import { GetProjectHandler } from '#features/projects/get-project/get-project-handler';
 import type { UseCaseContext } from '#shared/use-cases/use-case-context';
 import type { UseCaseHandler } from '#shared/use-cases/use-case-handler';
@@ -23,6 +24,6 @@ export class ListVariablesHandler implements UseCaseHandler<{ items: VariableVie
     }
 
     const rows = await new VariableRepository(ctx.db, ctx.orgId).ofProject(parsed.value.projectId);
-    return success({ items: rows.map(toVariableView) });
+    return success({ items: await withUpdatedByName(ctx.db, ctx.orgId, rows.map(toVariableView)) });
   }
 }

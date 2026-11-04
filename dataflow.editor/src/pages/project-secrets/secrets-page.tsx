@@ -131,7 +131,7 @@ export function SecretsPage() {
                     <span className="hidden font-mono text-sm tracking-widest text-muted-foreground sm:inline" aria-label="Value hidden">
                       ••••••••
                     </span>
-                    <Updated at={secret.updatedAt} by={secret.updatedBy} />
+                    <Updated at={secret.updatedAt} by={secret.updatedByName ?? secret.updatedBy} />
                     {!readOnly && (
                       <RowMenu name={secret.name}>
                         <DropdownMenuItem onSelect={() => setSecretDialog({ mode: 'replace', secret })}>
@@ -186,7 +186,7 @@ export function SecretsPage() {
                     >
                       {copied === variable.id ? <Check /> : <Copy />}
                     </Button>
-                    <Updated at={variable.updatedAt} by={variable.updatedBy} />
+                    <Updated at={variable.updatedAt} by={variable.updatedByName ?? variable.updatedBy} />
                     {!readOnly && (
                       <RowMenu name={variable.name}>
                         <DropdownMenuItem onSelect={() => setVariableDialog({ mode: 'edit', variable })}>

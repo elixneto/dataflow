@@ -1,4 +1,4 @@
-import {connectionIssues, connectionSettings, connectionUse} from '../connections/connection-access';
+import {API_CONNECTION_TYPES, connectionIssues, connectionSettings, connectionUse} from '../connections/connection-access';
 import {withKey} from '#envelope/envelope-data';
 import {toError} from '#errors/normalize-error';
 import type {ComponentLogic} from '#types/component-logic.type';
@@ -65,7 +65,7 @@ export const httpRequest: ComponentLogic = {
   defaultOutputKey: 'response',
   sideEffects: httpWrites,
   settings: [
-    ...connectionSettings('http-client'),
+    ...connectionSettings('http-client', API_CONNECTION_TYPES),
     {key: 'method', label: 'Method', kind: 'select', default: 'GET', options: HTTP_METHODS.map(m => ({value: m, label: m}))},
     {key: 'url', label: 'URL', kind: 'value', required: true, default: {value: '', expression: false}, placeholder: 'https://api.example.com/orders'},
     {

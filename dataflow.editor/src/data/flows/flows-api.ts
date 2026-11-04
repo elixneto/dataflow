@@ -1,3 +1,4 @@
+import type { FlowFile } from '@dataflow/core';
 import { api, type ApiResult } from '@/lib/api';
 import type { Flow, Folder, ProjectContents } from './flow';
 
@@ -69,6 +70,21 @@ export async function restoreFolder(id: string): Promise<ApiResult<Folder>> {
 }
 
 // ---- flows
+
+/** the draft the editor opens: the core's flow file and the revision it is at */
+export type FlowDraft = { flow: FlowFile; revision: number };
+
+export function getDraft(id: string): Promise<ApiResult<FlowDraft>> {
+  return api<FlowDraft>(`/flows/${id}/draft`);
+}
+
+/**
+ * saves the draft from the revision it started from; a conflict when another save came in between. `keepalive`: sent
+ * while the page closes
+ */
+export function saveDraft(id: string, revision: number, flow: FlowFile, keepalive = false): Promise<ApiResult<{ revision: number }>> {
+  return api<{ revision: number }>(`/flows/${id}/draft`, { method: 'PUT', body: { revision, flow }, keepalive });
+}
 
 export function createFlow(projectId: string, fields: { name: string; folderId: string | null }): Promise<ApiResult<{ id: string }>> {
   return api<{ id: string }>(`/projects/${projectId}/flows`, { method: 'POST', body: fields });

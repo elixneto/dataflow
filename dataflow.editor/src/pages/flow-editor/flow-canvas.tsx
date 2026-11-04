@@ -27,14 +27,16 @@ import { CATEGORIES, componentInfo, isFixedType } from '@/editor/catalog';
 import type { ComponentDraft } from '@/editor/component-draft';
 import { ComponentWindow } from '@/editor/component-window';
 import { FloatingWindow, type WindowPosition, type WindowSize } from '@/editor/floating-window';
-import { readWindow, rememberWindow } from '@/editor/window-memory';
+import { readViewport, readWindow, rememberViewport, rememberWindow } from '@/editor/window-memory';
+import { useFlowDraft, type DraftSave } from '@/editor/flow-save';
+import { RunMarksContext, type RunMarks } from '@/editor/run/run-marks';
 import { ComponentNodeMemo, type ComponentData, type ComponentNode } from '@/editor/component-node';
 import { COMPONENT_DRAG_TYPE } from '@/editor/drag';
 import { canSplice, edgeUnder, pointerBox, splice } from '@/editor/edge-splice';
 import { GROUP_COLORS, GROUP_SIZE, GROUP_Z, layerGroups, type GroupNode } from '@/editor/group';
 import { GroupNodeMemo } from '@/editor/group-node';
 import { HistoryContext, isEditableField, UndoStack } from '@/editor/history';
-import { CARD_WIDTH } from '@/editor/node-geometry';
+import { CARD_HEIGHT, CARD_WIDTH } from '@/editor/node-geometry';
 import { ComponentPalette } from './component-palette';
 import { ZoomControls } from './zoom-controls';
 
@@ -47,8 +49,12 @@ const NODE_TYPES = { component: ComponentNodeMemo, group: GroupNodeMemo };
 /** what the canvas holds: components, and groups behind them */
 type FlowNode = ComponentNode | GroupNode;
 
-/** the canvas as it is now (the page's Download reads it) */
-export type CanvasExport = () => { nodes: FlowNode[]; edges: Edge[] };
+/** what the page does with the canvas: read it as it is now (Download, Run), focus a component, pin its output */
+export type CanvasHandle = {
+  snapshot: () => { nodes: FlowNode[]; edges: Edge[] };
+  focus: (nodeId: string) => void;
+  setPinned: (nodeId: string, pinned: boolean) => void;
+};
 
 const isComponent = (node: FlowNode): node is ComponentNode => node.type === 'component';
 
@@ -84,16 +90,40 @@ const FIXED_NODES: ComponentNode[] = [
 /** the size a window with a code editor or a table opens with */
 const WIDE_WINDOW = { w: 760, h: null };
 
-export function FlowCanvas({ exportRef }: { exportRef?: RefObject<CanvasExport | null> }) {
+export function FlowCanvas(props: {
+  exportRef?: RefObject<CanvasHandle | null>;
+  onSave?: (save: DraftSave) => void;
+  marks?: RunMarks | null;
+  /** the components whose output is pinned, each time that changes (the run's Data tab shows Pin or Unpin) */
+  onPinned?: (nodeIds: string[]) => void;
+}) {
+  const { exportRef, onSave, marks = null, onPinned } = props;
   const [nodes, setNodes, onNodesChange] = useNodesState<FlowNode>(FIXED_NODES);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   // what the page's Download takes: the canvas as it is now
-  useEffect(() => {
-    if (exportRef) {
-      exportRef.current = () => ({ nodes, edges });
-    }
-  }, [exportRef, nodes, edges]);
   const [flow, setFlow] = useState<ReactFlowInstance<FlowNode, Edge> | null>(null);
+  const { flowId = '', projectId = '' } = useParams();
+
+  // ---- the draft on the server (editor/flow-save.ts): opened here, saved by itself; the view comes back where it was
+  const opened = useRef<{ nodes: FlowNode[]; edges: Edge[] } | null>(null);
+  const draft = useFlowDraft(flowId, { nodes, edges }, loaded => {
+    opened.current = loaded;
+    setNodes(loaded.nodes);
+    setEdges(loaded.edges);
+  });
+  // once the draft is on the canvas and the canvas is ready: the remembered view, or the whole flow on screen
+  useEffect(() => {
+    if (!flow || !opened.current || draft.state.status === 'loading') {
+      return;
+    }
+
+    opened.current = null;
+    const view = readViewport(flowId);
+    window.setTimeout(() => (view ? void flow.setViewport(view) : void flow.fitView(FIT_VIEW)), 0);
+  }, [flow, flowId, draft.state.status]);
+  useEffect(() => {
+    onSave?.(draft);
+  }, [onSave, draft]);
   // a smaller group above a bigger one, so a group inside another can be clicked
   const shownNodes = useMemo(() => layerGroups(nodes), [nodes]);
 
@@ -128,14 +158,55 @@ export function FlowCanvas({ exportRef }: { exportRef?: RefObject<CanvasExport |
   const redo = useCallback(() => restore(stack.redo(snapshot())), [restore, stack, snapshot]);
   const history = useMemo(() => ({ record, recordEdit }), [record, recordEdit]);
 
-  // Ctrl+Z undoes; Ctrl+Y or Ctrl+Shift+Z redoes (Cmd on a Mac); typing in a field keeps the field's own undo
+  const pinnedKey = nodes.filter(n => isComponent(n) && n.data.pinned).map(n => n.id).join(',');
+  useEffect(() => {
+    onPinned?.(pinnedKey ? pinnedKey.split(',') : []);
+  }, [onPinned, pinnedKey]);
+
+  // the page's handle on the canvas (CanvasHandle)
+  useEffect(() => {
+    if (exportRef) {
+      exportRef.current = {
+        snapshot: () => ({ nodes, edges }),
+        // the component in the middle of the screen, selected (a click on a log line or a row of the run)
+        focus: nodeId => {
+          const node = nodes.find(n => n.id === nodeId);
+          if (!node || !flow) {
+            return;
+          }
+
+          setNodes(current => current.map(n => ({ ...n, selected: n.id === nodeId })));
+          void flow.setCenter(node.position.x + CARD_WIDTH / 2, node.position.y + CARD_HEIGHT / 2, { zoom: Math.max(flow.getZoom(), 1), duration: 300 });
+        },
+        // MOCK: pinning from the run's Data tab marks the node, as the bar's Pin does (one Ctrl+Z step)
+        setPinned: (nodeId, pinned) => {
+          record();
+          setNodes(current => current.map(n => (n.id === nodeId && isComponent(n) ? { ...n, data: { ...n.data, pinned: pinned || undefined } } : n)));
+        },
+      };
+    }
+  }, [exportRef, nodes, edges, flow, setNodes, record]);
+
+  // Ctrl+S saves now (anywhere, as in any editor); Ctrl+Z undoes; Ctrl+Y or Ctrl+Shift+Z redoes (Cmd on a Mac); typing
+  // in a field keeps the field's own undo
+  const saveNow = draft.saveNow;
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if (!(event.metaKey || event.ctrlKey) || isEditableField(event.target)) {
+      if (!(event.metaKey || event.ctrlKey)) {
         return;
       }
 
       const key = event.key.toLowerCase();
+      if (key === 's') {
+        event.preventDefault();
+        saveNow();
+        return;
+      }
+
+      if (isEditableField(event.target)) {
+        return;
+      }
+
       if (key === 'z' && !event.shiftKey) {
         event.preventDefault();
         undo();
@@ -146,7 +217,7 @@ export function FlowCanvas({ exportRef }: { exportRef?: RefObject<CanvasExport |
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [undo, redo]);
+  }, [undo, redo, saveNow]);
 
   const onConnect = useCallback(
     (connection: Connection) => {
@@ -333,7 +404,6 @@ export function FlowCanvas({ exportRef }: { exportRef?: RefObject<CanvasExport |
   type OpenWindow = { id: string; position: WindowPosition; size?: WindowSize; minimized?: number; changed?: boolean };
   const [windows, setWindows] = useState<OpenWindow[]>([]);
   // each window comes back where it was and with its size (this browser tab, per flow and component)
-  const { flowId = '', projectId = '' } = useParams();
   const resources = useLoadProjectResources(projectId);
   const openWindow = (id: string) =>
     setWindows(current => {
@@ -398,6 +468,7 @@ export function FlowCanvas({ exportRef }: { exportRef?: RefObject<CanvasExport |
   const globals = scriptGlobals(startParameters(nodes.filter(isComponent).map(n => n.data)));
 
   return (
+    <RunMarksContext.Provider value={marks}>
     <ProjectResourcesContext.Provider value={resources}>
       <ScriptGlobalsContext.Provider value={globals}>
         <HistoryContext.Provider value={history}>
@@ -425,6 +496,7 @@ export function FlowCanvas({ exportRef }: { exportRef?: RefObject<CanvasExport |
               // opens with the whole flow on screen (Start and End at first), never zoomed past 100%, clear of the palette
               fitView
               fitViewOptions={FIT_VIEW}
+              onMoveEnd={(_, view) => rememberViewport(flowId, view)}
               snapToGrid
               snapGrid={[DOT_GAP, DOT_GAP]}
               deleteKeyCode={['Delete', 'Backspace']}
@@ -567,5 +639,6 @@ export function FlowCanvas({ exportRef }: { exportRef?: RefObject<CanvasExport |
         </HistoryContext.Provider>
       </ScriptGlobalsContext.Provider>
     </ProjectResourcesContext.Provider>
+    </RunMarksContext.Provider>
   );
 }
