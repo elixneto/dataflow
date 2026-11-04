@@ -22,6 +22,7 @@ export {COMPONENTS} from './components';
 export {START_SETTINGS, startConfig, startParameters, validateStart} from './components/start';
 export {componentIssues, componentSettings, settingConditions, settingDefault, settingsDefaults, settingValue, settingVisible, withSetting} from './components/settings';
 export {SCRIPT_GLOBALS, scriptGlobals} from './components/script-globals';
+export {SCRIPT_RUNTIME_GLOBALS, SCRIPT_RUNTIME_TYPES} from './components/script-runtime';
 export {componentSummary, type SummaryLine, type SummarySection} from './components/summary';
 export {mapperFields, mapper, type MapperField} from './components/mapper';
 export {filterCondition, filter} from './components/filter';
@@ -50,3 +51,4 @@ export {applyRunFrom, downstreamOf, planRunFrom, skippedNodes, type RunFromPlan}
 export {resolveParameters} from '#engine/flow-parameters';
 export * from './flows/flow-file';
 export * from './scripts/script-path';
+export * from './scripts/type-shape';

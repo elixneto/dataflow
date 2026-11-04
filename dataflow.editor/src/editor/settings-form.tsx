@@ -1,7 +1,7 @@
 import { createContext, lazy, Suspense, useContext, type ReactNode } from 'react';
 import { useParams } from 'react-router';
 import { ArrowDown, ArrowRight, ArrowUp, LoaderCircle, Plus, Trash } from 'lucide-react';
-import { settingDefault, settingsDefaults, settingValue, settingVisible, withSetting, type ExpressionField, type SettingField } from '@dataflow/core';
+import { inputTypeRef, settingDefault, settingsDefaults, settingValue, settingVisible, withSetting, type ExpressionField, type SettingField } from '@dataflow/core';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -10,6 +10,7 @@ import { cn } from '@/lib/utils';
 import { useProjectResources } from './project-resources';
 import { ExpressionBox } from './expression-box';
 import { loadCodeEditor } from './code-editor-loader';
+import { ScriptTypePicker, TypedInputSetting } from './typed-input';
 
 type Values = Record<string, unknown>;
 
@@ -43,6 +44,16 @@ export function SettingsForm(props: { id: string; nodeId?: string; fields: Setti
                 columns={Array.isArray(values[field.key]) ? (values[field.key] as GridColumn[]) : []}
                 rows={Array.isArray(values.rows) ? (values.rows as string[][]) : []}
                 onChange={(columns, rows) => onChange({ ...values, [field.key]: columns, rows })}
+              />
+            ) : field.typedBy && inputTypeRef(values[field.typedBy]) ? (
+              // MOCK: a JSON typed by a project script's type (a Start's input): a form of that type, or the JSON
+              <TypedInputSetting
+                key={field.key}
+                id={`${id}-${field.key}`}
+                typeRef={String(values[field.typedBy])}
+                value={typeof values[field.key] === 'string' ? (values[field.key] as string) : ''}
+                onChange={value => onChange(withSetting(field, values, value))}
+                json={<Control id={`${id}-${field.key}-json`} field={field} value={settingValue(field, values)} onChange={value => onChange(withSetting(field, values, value))} />}
               />
             ) : (
               <Setting key={field.key} id={`${id}-${field.key}`} field={field} value={settingValue(field, values)} onChange={value => onChange(withSetting(field, values, value))} />
@@ -137,6 +148,8 @@ function Control({ id, field, value, onChange }: { id: string; field: SettingFie
       return <ConnectionPicker id={id} types={field.connectionTypes ?? [field.connectionType ?? '']} value={text} onChange={onChange} />;
     case 'secret':
       return <SecretPicker id={id} value={text} onChange={onChange} />;
+    case 'script-type':
+      return <ScriptTypePicker id={id} value={text} onChange={onChange} />;
     case 'flow':
       return <FlowPicker id={id} value={text} onChange={onChange} />;
     default:

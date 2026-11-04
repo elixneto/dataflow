@@ -1,4 +1,5 @@
 import type {FlowParameter} from '#types/flow-parameter.type';
+import {SCRIPT_RUNTIME_TYPES} from './script-runtime';
 
 /*
  * What a TypeScript component's code sees, as a declaration file: the editor gives it to its code editor (autocomplete
@@ -40,4 +41,4 @@ declare const $FLOW_CURRENT_RUN: {
 }
 /** writes to the component's log */
 declare function log(...parts: unknown[]): void
-`;
+${SCRIPT_RUNTIME_TYPES}`;

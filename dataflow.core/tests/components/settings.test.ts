@@ -103,3 +103,10 @@ test('a value setting in a list item is stored flat on the item ({name, value, e
   const lines = componentSummary('mapper', {fields: [{target: 'old', value: {value: '$x', expression: true}}]})[0]!.lines;
   expect(lines).toEqual([{label: '$old', value: '$x', code: true}]);
 });
+
+test("every global the runner gives a script has its type in the code editor's declarations, and no DOM", async () => {
+  const {SCRIPT_GLOBALS, SCRIPT_RUNTIME_GLOBALS} = await import('../../src/index');
+  const declared = (name: string) => ['const', 'var', 'function'].some(kind => [':', '(', '<'].some(after => SCRIPT_GLOBALS.includes(`declare ${kind} ${name}${after}`)));
+  for (const name of SCRIPT_RUNTIME_GLOBALS) expect({name, declared: declared(name)}).toEqual({name, declared: true});
+  for (const missing of ['document', 'window', 'localStorage']) expect(SCRIPT_GLOBALS).not.toContain(`declare var ${missing}`);
+});

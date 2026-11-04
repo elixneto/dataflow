@@ -17,7 +17,10 @@ const PARAMETER_TYPES: ParameterType[] = ['text', 'number', 'boolean'];
 
 export const START_SETTINGS: SettingField[] = [
   {key: 'acceptsInput', label: 'Accepts input', kind: 'boolean'},
-  {key: 'testInput', label: 'Default input (JSON)', kind: 'code', language: 'json', placeholder: '{"id": 1}', when: {key: 'acceptsInput', values: [true]}},
+  // MOCK (editor only, the runner does not read it yet): a project script's type as the input's type; the default input
+  // is then a form of that type
+  {key: 'inputType', label: 'Input type', kind: 'script-type', when: {key: 'acceptsInput', values: [true]}},
+  {key: 'testInput', label: 'Default input (JSON)', kind: 'code', language: 'json', placeholder: '{"id": 1}', typedBy: 'inputType', when: {key: 'acceptsInput', values: [true]}},
   {
     key: 'parameters', label: 'Parameters', kind: 'list', itemLabel: 'parameter',
     item: [

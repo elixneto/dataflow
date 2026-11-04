@@ -21,7 +21,9 @@ loader.config({ monaco });
 export const ts = monaco.typescript;
 ts.typescriptDefaults.setCompilerOptions({
   target: ts.ScriptTarget.ESNext,
-  lib: ['esnext', 'dom'],
+  // the language only: what the runner gives the code besides it (fetch, URL, timers...) comes typed with its globals
+  // (the core's SCRIPT_GLOBALS), never the browser's DOM, which is not there when it runs
+  lib: ['esnext'],
   strict: false,
   noEmit: true,
   allowNonTsExtensions: true,

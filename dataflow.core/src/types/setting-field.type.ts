@@ -13,9 +13,10 @@
  * - connection: the id of one of the project's connection profiles of `connectionType`;
  * - list: a list of items, each with the `item` settings (a Mapper's fields, a Router's cases);
  * - grid: a table, its columns (name and one of `options` as type) in `key` and its rows (text cells) in `rows`;
- * - flow: the id of another flow of the project.
+ * - flow: the id of another flow of the project;
+ * - script-type: a type (interface or type alias) a project script exports, as `path#Name` (a Start's input type).
  */
-export type SettingKind = 'text' | 'number' | 'select' | 'boolean' | 'expression' | 'value' | 'code' | 'secret' | 'connection' | 'list' | 'grid' | 'flow';
+export type SettingKind = 'text' | 'number' | 'select' | 'boolean' | 'expression' | 'value' | 'code' | 'secret' | 'connection' | 'list' | 'grid' | 'flow' | 'script-type';
 
 export type SettingField = {
   key: string;
@@ -49,6 +50,8 @@ export type SettingField = {
   itemLabel?: string;
   /** a list whose items take their first setting to the second (a Mapper: a value to a key): an arrow between them */
   arrow?: boolean;
+  /** code (JSON): edited as a form of the type another setting (a `script-type`) names, when it names one */
+  typedBy?: string;
   /** shown only when another setting (of the same level) has one of these values; several: all of them */
   when?: SettingCondition | SettingCondition[];
 };

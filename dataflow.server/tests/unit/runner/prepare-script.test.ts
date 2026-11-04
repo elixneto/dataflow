@@ -92,3 +92,9 @@ test("what the script waits for outside goes through the engine's wait: its time
     server.stop(true);
   }
 });
+
+test("the script's context has exactly the globals the core lists (what the code editor types)", async () => {
+  const { SCRIPT_RUNTIME_GLOBALS } = await import('@dataflow/core');
+  const process = await prepareScript(`async function process() { return Object.keys(globalThis).filter(k => !k.startsWith('__')); }`, globals);
+  expect(((await process({})) as string[]).sort()).toEqual([...SCRIPT_RUNTIME_GLOBALS].sort());
+});

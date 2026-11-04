@@ -86,7 +86,8 @@ export function useProjectScripts(projectId: string): ProjectScripts {
       void reloadScripts(projectId);
     }
   }, [projectId]);
-  return useSyncExternalStore(subscribe, () => projectScripts(projectId));
+  // the same on the server (a form rendered to text: tests)
+  return useSyncExternalStore(subscribe, () => projectScripts(projectId), () => projectScripts(projectId));
 }
 
 /** loads a script's code (once; again with `fresh`) */
