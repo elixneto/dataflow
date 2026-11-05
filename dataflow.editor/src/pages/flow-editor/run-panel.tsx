@@ -454,14 +454,15 @@ const METRICS: { label: string; hint: string; right?: boolean }[] = [
   { label: 'Waiting', hint: 'Time waiting for an outside system: an HTTP call (and its OAuth 2.0 token), database rows, a MongoDB write, a called flow', right: true },
   { label: 'Memory', hint: 'Most it held at once (the Lookup table, an Aggregate batch, a Sort): envelopes and an estimate of their size', right: true },
   { label: 'Start', hint: 'When its first envelope arrived', right: true },
-  { label: 'Timeline', hint: 'When it was open in the run: light = open, middle = waiting for an outside system, dark = working' },
+  { label: 'Timeline', hint: 'When it was open in the run, in the order of the columns: light = open, middle = active (working), dark = waiting for an outside system' },
 ];
 
 /**
  * When the component was open, on the run's time axis (as in the PoC): light from its first envelope until it finished;
- * inside, how much of that it spent waiting for an outside system and, darker, working (their share of the open time).
+ * inside, in the order and shades of the columns (Open, Active, Waiting: lighter to darker), how much of that it spent
+ * working and then waiting for an outside system (their share of the open time).
  */
-function Timeline({ c, runStart, runMs }: { c: ComponentRun; runStart: number; runMs: number }) {
+export function Timeline({ c, runStart, runMs }: { c: ComponentRun; runStart: number; runMs: number }) {
   if (!c.start || runMs <= 0) {
     return <span className="text-muted-foreground">—</span>;
   }
@@ -482,8 +483,8 @@ function Timeline({ c, runStart, runMs }: { c: ComponentRun; runStart: number; r
         // one that opened at the very end still shows a sliver inside the axis
         style={{ left: `min(${left}%, calc(100% - 2px))`, width: `${width}%` }}
       >
-        <span className="h-full bg-primary" style={{ width: open ? `${(active / open) * 100}%` : 0 }} />
-        <span className="h-full bg-primary/55" style={{ width: open ? `${(waiting / open) * 100}%` : 0 }} />
+        <span data-part="active" className="h-full bg-primary/55" style={{ width: open ? `${(active / open) * 100}%` : 0 }} />
+        <span data-part="waiting" className="h-full bg-primary" style={{ width: open ? `${(waiting / open) * 100}%` : 0 }} />
       </span>
     </span>
   );
