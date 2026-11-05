@@ -63,6 +63,6 @@ export const mapper: ComponentLogic = {
         yield {error: toError(e), doc};
       }
     }
-    ctx.log('info', `${mapped} envelope(s) mapped: ${fields.map(f => f.target).join(', ')}.`);
+    ctx.log('debug', `${mapped} envelope(s) mapped: ${fields.map(f => f.target).join(', ')}.`);
   },
 };

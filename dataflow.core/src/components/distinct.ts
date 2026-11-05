@@ -52,6 +52,6 @@ export const distinct: ComponentLogic = {
       ctx.holding(seen.size);
       yield {port: 'out-0', doc};
     }
-    ctx.log('info', `${seen.size} distinct envelope(s) and ${duplicates} duplicate(s).`);
+    ctx.log('debug', `${seen.size} distinct envelope(s) and ${duplicates} duplicate(s).`);
   },
 };

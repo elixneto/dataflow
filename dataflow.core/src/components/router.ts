@@ -59,6 +59,6 @@ export const router: ComponentLogic = {
         yield {error: toError(e), doc};
       }
     }
-    ctx.log('info', [...cases.map((c, i) => `${c.label || `case ${i + 1}`}: ${perCase[i]}`), `else: ${inElse}`].join(', ') + '.');
+    ctx.log('debug', [...cases.map((c, i) => `${c.label || `case ${i + 1}`}: ${perCase[i]}`), `else: ${inElse}`].join(', ') + '.');
   },
 };

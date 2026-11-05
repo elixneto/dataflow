@@ -60,6 +60,6 @@ export const typescript: ComponentLogic = {
         yield {error: toError(e), doc};
       }
     }
-    ctx.log('info', `${received} envelope(s) in and ${sent} out.`);
+    ctx.log('debug', `${received} envelope(s) in and ${sent} out.`);
   },
 };

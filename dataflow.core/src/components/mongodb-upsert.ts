@@ -164,7 +164,7 @@ export const mongodbUpsert: ComponentLogic = {
       totals.inserted += counts.inserted;
       totals.modified += counts.modified;
       totals.unchanged += counts.unchanged;
-      ctx.log('info', `Batch ${batches}: ${current.length} upsert(s) in ${Math.round(performance.now() - t0)} ms (${describe(counts)}${counts.failed ? `, ${counts.failed} failed` : ''}).`);
+      ctx.log('debug', `Batch ${batches}: ${current.length} upsert(s) in ${Math.round(performance.now() - t0)} ms (${describe(counts)}${counts.failed ? `, ${counts.failed} failed` : ''}).`);
       for (const [i, {doc}] of current.entries()) {
         const result = results[i];
         if (!result || 'error' in result) {
@@ -189,7 +189,7 @@ export const mongodbUpsert: ComponentLogic = {
       if (batch.length >= batchSize) yield* flush();
     }
     yield* flush();
-    if (prepared) ctx.log('info', `${prepared} upsert(s) prepared for ${database}.${collection}, none sent${failed ? `, ${failed} failed` : ''}.`);
-    else ctx.log('info', `${written} document(s) upserted into ${database}.${collection}: ${describe(totals)}${failed ? `, ${failed} failed` : ''} (${sent} sent).`);
+    if (prepared) ctx.log('debug', `${prepared} upsert(s) prepared for ${database}.${collection}, none sent${failed ? `, ${failed} failed` : ''}.`);
+    else ctx.log('debug', `${written} document(s) upserted into ${database}.${collection}: ${describe(totals)}${failed ? `, ${failed} failed` : ''} (${sent} sent).`);
   },
 };

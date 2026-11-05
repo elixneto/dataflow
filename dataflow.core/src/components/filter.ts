@@ -39,6 +39,6 @@ export const filter: ComponentLogic = {
         yield {error: toError(e), doc};
       }
     }
-    ctx.log('info', `${trues} envelope(s) to true and ${falses} to false.`);
+    ctx.log('debug', `${trues} envelope(s) to true and ${falses} to false.`);
   },
 };

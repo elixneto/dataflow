@@ -108,7 +108,7 @@ export const mongodbPipeline: ComponentLogic = {
           thisQuery += 1;
           yield {port: 'out-0', doc: mergeFields(doc, found, ctx.node.override)};
         }
-        ctx.log('info', `Pipeline ${queries}: ${thisQuery} document(s) in ${Date.now() - t0} ms (server ${Math.round(server)} ms).`);
+        ctx.log('debug', `Pipeline ${queries}: ${thisQuery} document(s) in ${Date.now() - t0} ms (server ${Math.round(server)} ms).`);
       } catch (e) {
         // documents already yielded move on; the envelope that triggered the pipeline goes to the error policy
         if (thisQuery) ctx.log('warning', `Pipeline ${queries} stopped after ${thisQuery} document(s).`);
@@ -116,6 +116,6 @@ export const mongodbPipeline: ComponentLogic = {
       }
       documents += thisQuery;
     }
-    ctx.log('info', `${documents} document(s) read from ${database}.${collection} in ${queries} pipeline(s).`);
+    ctx.log('debug', `${documents} document(s) read from ${database}.${collection} in ${queries} pipeline(s).`);
   },
 };

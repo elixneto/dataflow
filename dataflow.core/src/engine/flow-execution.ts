@@ -159,7 +159,7 @@ export class FlowExecution {
     const endRecord = this.records.get(this.wf.nodes.find(n => n.type === END)?.id ?? '');
     endRecord?.logs.push({
       at: new Date().toISOString(),
-      level: status === 'failed' ? 'error' : status === 'completed' ? 'info' : 'warning',
+      level: status === 'failed' ? 'error' : status === 'completed' ? 'debug' : 'warning',
       message: `Run ${this.run.id} finished (${STATUS_LABEL[status]}) in ${durationMs} ms.`,
     });
     return {
@@ -283,7 +283,7 @@ export class FlowExecution {
     // Run from here: the run starts at this component, with what reached it in the last run
     const from = this.options.runFrom?.nodeId === node.id ? this.options.runFrom : undefined;
     if (from) {
-      log('info', `Run from here: ${from.label}.`);
+      log('debug', `Run from here: ${from.label}.`);
       for (const [port, items] of Object.entries(from.inputs)) {
         const total = from.totals[port] ?? items.length;
         if (total > items.length) log('warning', `Only the first ${items.length} of the ${total} envelopes that reached ${port} in the last run came in: a run keeps ${items.length} per port.`);
@@ -303,10 +303,10 @@ export class FlowExecution {
 
       // pins are an editor aid: a real run (execution) always executes the node
       const pinned = this.options.mode === 'validation' ? node.pinned : undefined;
-      if (node.pinned && !pinned) log('info', 'Pinned output ignored: in a real run the component always executes.');
+      if (node.pinned && !pinned) log('debug', 'Pinned output ignored: in a real run the component always executes.');
       if (pinned) {
         replayed = true;
-        log('info', 'Pinned output: did not execute, the input was dropped and the pinned envelopes went out.');
+        log('debug', 'Pinned output: did not execute, the input was dropped and the pinned envelopes went out.');
         // the ports at the same time: a component after it may read one input only after the other
         await Promise.all([
           ...Object.values(inputs).map(drain),
@@ -325,7 +325,7 @@ export class FlowExecution {
           const doc: Envelope = {FLOW_CURRENT_RUN: this.run, PARAMETERS: this.parameters, DATA: envelope};
           for (const port of outputPorts) await this.send(node, port, doc);
         }
-        log('info', `Run ${this.run.id} started (${this.run.mode})${this.options.input !== undefined ? ' with input' : ''}.`);
+        log('debug', `Run ${this.run.id} started (${this.run.mode})${this.options.input !== undefined ? ' with input' : ''}.`);
       } else if (node.type === END) {
         for (const source of Object.values(inputs)) {
           for await (const doc of source) if (this.options.onReachEnd) await this.options.onReachEnd(doc);
@@ -361,7 +361,7 @@ export class FlowExecution {
           // continue: the incoming envelope goes out as it was through the main output and the flow moves on
           if (policy === 'continue') await send('out-0', output.doc);
         }
-        if (dryRun) log('info', 'Test run: nothing was written; the envelopes went on marked notSent. Run for real to write.');
+        if (dryRun) log('debug', 'Test run: nothing was written; the envelopes went on marked notSent. Run for real to write.');
       }
       const lost = this.reportDropped(node, log);
       rec.status = errors > 0 ? 'with-errors' : replayed ? 'pinned' : node.disabled ? 'disabled' : lost ? 'with-warnings' : 'completed';
@@ -401,7 +401,7 @@ export class FlowExecution {
     for (const port of optional) {
       const n = this.dropped.get(node.id)?.[port];
       if (!n) continue;
-      log('info', `${n} envelope(s) dropped by the output ${names.get(port) ?? port}, which is not connected.`);
+      log('debug', `${n} envelope(s) dropped by the output ${names.get(port) ?? port}, which is not connected.`);
       delete this.dropped.get(node.id)![port];
     }
     if (this.dropped.get(node.id) && Object.keys(this.dropped.get(node.id)!).length === 0) this.dropped.delete(node.id);

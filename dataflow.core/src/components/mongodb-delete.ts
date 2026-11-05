@@ -82,13 +82,13 @@ export const mongodbDelete: ComponentLogic = {
         }
         const n = answer.deleted;
         deleted += n;
-        ctx.log('info', `Delete ${calls}: ${n} document(s) from ${target} in ${Math.round(performance.now() - t0)} ms.`);
+        ctx.log('debug', `Delete ${calls}: ${n} document(s) from ${target} in ${Math.round(performance.now() - t0)} ms.`);
         yield {port: 'out-0', doc: withKey(doc, key, {deleted: n}, ctx.node.override)};
       } catch (e) {
         yield {error: toError(e), doc};
       }
     }
-    if (tested) ctx.log('info', `${tested} delete(s) counted on ${target}, none sent.`);
-    else ctx.log('info', `${deleted} document(s) deleted from ${target} in ${calls} delete(s).`);
+    if (tested) ctx.log('debug', `${tested} delete(s) counted on ${target}, none sent.`);
+    else ctx.log('debug', `${deleted} document(s) deleted from ${target} in ${calls} delete(s).`);
   },
 };

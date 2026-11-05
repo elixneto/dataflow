@@ -82,7 +82,7 @@ export const sort: ComponentLogic = {
       }
       return 0;
     });
-    ctx.log('info', `${held.length} envelope(s) sorted by ${keys.length} key(s).`);
+    ctx.log('debug', `${held.length} envelope(s) sorted by ${keys.length} key(s).`);
     for (let i = 0; i < held.length; i++) {
       ctx.holding(held.length - i - 1);
       yield {port: 'out-0', doc: held[i].doc};
