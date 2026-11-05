@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useParams, useSearchParams } from 'react-router';
-import { ChevronsDownUp, ChevronsUpDown, FolderPlus, LayoutGrid, ListTree, Plus, RotateCw, TriangleAlert } from 'lucide-react';
+import { ChevronsDownUp, ChevronsUpDown, FolderPlus, GitFork, LayoutGrid, ListTree, Plus, RotateCw, TriangleAlert } from 'lucide-react';
 import { ArchiveDialog } from '@/components/archive-dialog';
 import { SegmentedControl } from '@/components/segmented-control';
 import { StatusFilter, type ListStatus } from '@/components/status-filter';
@@ -15,6 +15,7 @@ import { readProjectView, saveProjectView, type ProjectView } from '@/lib/view-p
 import { ProjectPage } from '@/pages/project/project-page';
 import { ArchivedList } from './archived-list';
 import { CardsView } from './cards-view';
+import { GraphView } from './graph-view';
 import type { ItemActions } from './item-menus';
 import { MoveDialog, type MoveTarget } from './move-dialog';
 import { NameDialog, type NameDialogTarget } from './name-dialog';
@@ -187,6 +188,7 @@ export function ProjectFlowsPage() {
             options={[
               { value: 'tree', label: 'Tree', icon: ListTree },
               { value: 'cards', label: 'Cards', icon: LayoutGrid },
+              { value: 'graph', label: 'Graph', icon: GitFork },
             ]}
           />
           {view === 'tree' && (
@@ -229,6 +231,7 @@ export function ProjectFlowsPage() {
       {store.state.status === 'ready' && status === 'active' && view === 'tree' && (
         <TreeView contents={contents} projectId={projectId} expanded={expanded} onToggle={toggle} actions={actions} />
       )}
+      {store.state.status === 'ready' && status === 'active' && view === 'graph' && <GraphView projectId={projectId} />}
 
       <NameDialog target={naming} onClose={() => setNaming(null)} />
       <MoveDialog target={moving} contents={contents} onClose={() => setMoving(null)} onMove={move} />

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { flowCalls, flowFileName, flowToYaml, toExecutableFlow } from '@dataflow/core';
+import { flowFileName, flowToYaml, type FlowCall } from '@dataflow/core';
 import { canvasToFlowFile, saveFile } from '@/editor/flow-file';
 import { useParams } from 'react-router';
 import type { Flow, Folder } from '@/data/flows/flow';
@@ -59,6 +59,8 @@ export function FlowEditorPage() {
   const canvas = useRef<CanvasHandle | null>(null);
   // the draft's save state, from the canvas (shown in the top bar)
   const [save, setSave] = useState<DraftSave | null>(null);
+  // the canvas's Flow Invoker calls, as they change (the top bar's Calls)
+  const [ownCalls, setOwnCalls] = useState<FlowCall[] | null>(null);
   const download = () => {
     const now = canvas.current?.snapshot();
     if (!now || !current?.flow) {
@@ -268,15 +270,8 @@ export function FlowEditorPage() {
           <SaveStatus save={save} />
           <span className="mx-1 h-5 w-px bg-border" aria-hidden />
           {current?.flow && (
-            <FlowCallsButton
-              projectId={projectId}
-              flowId={flowId}
-              // this flow's calls as the canvas has them now
-              ownCalls={() => {
-                const now = canvas.current?.snapshot();
-                return now ? flowCalls([toExecutableFlow(canvasToFlowFile({ id: flowId, name: flowName }, now.nodes, now.edges), '')]) : null;
-              }}
-            />
+            // this flow's calls as the canvas has them now
+            <FlowCallsButton projectId={projectId} flowId={flowId} own={ownCalls} />
           )}
           <FlowActions onDownload={current?.flow ? download : undefined} running={running} onRun={current?.flow ? run : undefined} />
           <span className="mx-1 h-5 w-px bg-border" aria-hidden />
@@ -294,7 +289,7 @@ export function FlowEditorPage() {
                 zoom and minimap) the rest */}
             <div className="flex h-full flex-col">
               <div className="relative min-h-0 flex-1">
-                <FlowCanvas exportRef={canvas} onSave={setSave} onRunFrom={runFrom} onPinned={setPinned} marks={marks} known={knownNow} inputSamples={samplesNow} />
+                <FlowCanvas exportRef={canvas} onSave={setSave} onRunFrom={runFrom} onPinned={setPinned} onCalls={setOwnCalls} marks={marks} known={knownNow} inputSamples={samplesNow} />
               </div>
               {panelOpen && (
                 <RunPanel

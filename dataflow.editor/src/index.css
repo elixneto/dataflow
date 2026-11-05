@@ -323,6 +323,25 @@
     background-color: var(--popover);
     color: var(--popover-foreground);
     }
+  /* what can be clicked shows the hand (Tailwind 4 leaves buttons with the default cursor); a utility such as
+     cursor-help still wins (utilities come after base) */
+  button:not(:disabled),
+  [role='button']:not([aria-disabled='true']),
+  [role='tab'],
+  [role='radio'],
+  [role='checkbox'],
+  [role='menuitem'],
+  [role='menuitemradio'],
+  [role='menuitemcheckbox'],
+  [role='option'],
+  a[href],
+  summary,
+  select:not(:disabled),
+  input[type='checkbox']:not(:disabled),
+  input[type='radio']:not(:disabled),
+  label[for] {
+    cursor: pointer;
+    }
   /* thin, discreet scrollbars in both themes */
   * {
     scrollbar-width: thin;
