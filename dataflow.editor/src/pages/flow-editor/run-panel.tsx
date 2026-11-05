@@ -70,7 +70,7 @@ const STATUS: Record<string, { icon: typeof CircleCheck; color: string; label: s
   'with-errors': { icon: CircleX, color: 'text-destructive', label: 'With errors' },
   failed: { icon: CircleX, color: 'text-destructive', label: 'Failed' },
   pinned: { icon: Pin, color: 'text-blue-600 dark:text-blue-400', label: 'Pinned output' },
-  disabled: { icon: Power, color: 'text-muted-foreground', label: 'Disabled' },
+  disabled: { icon: Power, color: 'text-muted-foreground', label: 'Bypassed' },
   'not-run': { icon: CircleMinus, color: 'text-muted-foreground', label: 'Not run' },
   skipped: { icon: CircleDashed, color: 'text-muted-foreground', label: 'Skipped: it only feeds pinned components' },
   running: { icon: LoaderCircle, color: 'text-muted-foreground animate-spin', label: 'Running' },
