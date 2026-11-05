@@ -82,13 +82,19 @@ function Graph({ projectId }: { projectId: string }) {
     ),
   ];
   const faded = (id: string) => roleOf(id) === 'faded';
+  const at = new Map(graph.flows.map(f => [f.id, f]));
   const edges: Edge[] = graph.calls.map(call => {
-    const unavailable = !graph.flows.find(f => f.id === call.to)?.available;
+    const unavailable = !at.get(call.to)?.available;
     const color = call.circular ? 'var(--destructive)' : unavailable ? 'var(--muted-foreground)' : undefined;
+    // a call back to a flow on the left (a cycle closing, or a flow calling itself) goes under the boxes, not behind them
+    const back = (at.get(call.to)?.x ?? 0) <= (at.get(call.from)?.x ?? 0);
     return {
       id: call.id,
       source: call.from,
       target: call.to,
+      sourceHandle: back ? 'back-out' : 'out',
+      targetHandle: back ? 'back-in' : 'in',
+      ...(back ? { type: 'smoothstep', pathOptions: { offset: 28, borderRadius: 12 } } : {}),
       label: call.label,
       markerEnd: { type: MarkerType.ArrowClosed, ...(color ? { color } : {}) },
       style: { ...(color ? { stroke: color } : {}), ...(call.onError || unavailable ? { strokeDasharray: '6 4' } : {}), ...(call.circular ? { strokeWidth: 2 } : {}) },
@@ -177,7 +183,8 @@ function FlowNode({ data }: NodeProps<Node<FlowData>>) {
       )}
       title={flow.available ? 'Click: its impact' : flow.known ? 'Archived: each call to it fails' : 'Removed: each call to it fails'}
     >
-      <Handle type="target" position={Position.Left} className="opacity-0" isConnectable={false} />
+      <Handle id="in" type="target" position={Position.Left} className="opacity-0" isConnectable={false} />
+      <Handle id="back-in" type="target" position={Position.Bottom} style={{ left: '30%' }} className="opacity-0" isConnectable={false} />
       <div className="flex min-w-0 flex-1 flex-col">
         <span className={cn('truncate text-sm font-medium', !flow.known && 'text-destructive', flow.known && !flow.available && 'line-through')}>{flow.name}</span>
         <span className="truncate text-xs text-muted-foreground">{!flow.known ? 'Removed' : !flow.available ? 'Archived' : flow.folder || 'Flows (root)'}</span>
@@ -195,7 +202,8 @@ function FlowNode({ data }: NodeProps<Node<FlowData>>) {
           <ExternalLink className="size-3.5" />
         </a>
       )}
-      <Handle type="source" position={Position.Right} className="opacity-0" isConnectable={false} />
+      <Handle id="out" type="source" position={Position.Right} className="opacity-0" isConnectable={false} />
+      <Handle id="back-out" type="source" position={Position.Bottom} style={{ left: '70%' }} className="opacity-0" isConnectable={false} />
     </div>
   );
 }
