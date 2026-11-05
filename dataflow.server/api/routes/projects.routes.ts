@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { CreateFolderHandler } from '#features/folders/create-folder/create-folder-handler';
 import { GetProjectContentsHandler } from '#features/folders/get-project-contents/get-project-contents-handler';
 import { CreateFlowHandler } from '#features/flows/create-flow/create-flow-handler';
+import { GetFlowCallsHandler } from '#features/flows/get-flow-calls/get-flow-calls-handler';
 import { ArchiveProjectHandler } from '#features/projects/archive-project/archive-project-handler';
 import { CreateProjectHandler } from '#features/projects/create-project/create-project-handler';
 import { GetProjectHandler } from '#features/projects/get-project/get-project-handler';
@@ -41,6 +42,11 @@ export function projectsRoutes() {
     })
     .get('/:id/contents', async c => {
       const result = await new GetProjectContentsHandler().handle({ projectId: c.req.param('id') }, c.get('useCase'));
+      return toHttpResult(c, result);
+    })
+    // the calls between the project's flows (Flow Invokers): what each one uses and what uses it
+    .get('/:id/calls', async c => {
+      const result = await new GetFlowCallsHandler().handle({ projectId: c.req.param('id') }, c.get('useCase'));
       return toHttpResult(c, result);
     })
     .post('/:id/folders', async c => {
