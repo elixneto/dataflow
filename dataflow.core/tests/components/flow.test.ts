@@ -59,10 +59,17 @@ describe('Flow Invoker', () => {
     expect(diverted.components.find(c => c.nodeId === 'w')!.outputs['error']).toBe(2);
   });
 
-  test('a circular call is blocked', async () => {
+  test('a circular call is blocked, with the chain: a flow calling itself, or one that calls back the run\'s own flow (not among the callable ones)', async () => {
     const circular = await flowRunner(parent('A'), {mode: 'execution', id: 'p3', evaluate, flows: {...flows, A: parent('A')}});
     expect(circular.status).toBe('failed');
     expect(circular.error).toContain('Circular flow call: Parent → Parent');
+    // D calls A (the root): the server does not put the root among the flows a run can call
+    const back: ExecutableFlow = {...multiply, id: 'D', flow: 'Back', nodes: multiply.nodes.map(n => n.id === 'm'
+      ? {id: 'w', type: 'flow', label: 'Calls', config: {flowId: 'A', sendEnvelope: true, onError: 'throw', parameters: []}}
+      : n), edges: [edge('start', 'w'), edge('w', 'end')]};
+    const two = await flowRunner(parent('D'), {mode: 'execution', id: 'p3b', evaluate, flows: {D: back}});
+    expect(two.status).toBe('failed');
+    expect(two.error).toContain('Circular flow call: Parent → Back → Parent');
   });
 
   test("an input that does not fit the other flow's Start type is an error of the envelope, without running it", async () => {

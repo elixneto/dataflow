@@ -41,8 +41,9 @@ export type RunOptions = {
   flows?: Record<string, ExecutableFlow>;
   /** run that called this one (filled in by the Flow Invoker) */
   parentId?: string;
-  /** ids of the flows in the call chain so far, to catch circular calls */
+  /** ids of the flows in the call chain so far, to catch circular calls; `rootName`: the first one's name, for the message */
   chain?: string[];
+  rootName?: string;
   /** each envelope that reaches the End (the Flow Invoker uses it to pass them on); the End awaits the promise */
   onReachEnd?: (doc: Envelope) => Promise<void>;
   secrets?: Record<string, string>;

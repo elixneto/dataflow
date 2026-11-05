@@ -20,16 +20,17 @@ type Invoke = ComponentContext['invokeFlow'];
  */
 export function invokeFlow(execution: FlowExecution, node: ExecutableNode, flowId: string, {parameters: values, input}: Parameters<Invoke>[1]): ReturnType<Invoke> {
   const {wf, options, run, control} = execution;
-  const child = options.flows?.[flowId];
-  if (!child) throw new Error(`The called flow (${flowId}) was not found.`);
+  // a circular call first: the root flow is not among the callable ones (the run's own), so it would read as not found
   const chain = [...(options.chain ?? [wf.id ?? wf.flow]), flowId];
   if (chain.slice(0, -1).includes(flowId)) {
-    const name = (id: string) => options.flows?.[id]?.flow ?? (id === wf.id ? wf.flow : id);
+    const name = (id: string) => options.flows?.[id]?.flow ?? (id === chain[0] ? (options.rootName ?? wf.flow) : id);
     throw new Error(`Circular flow call: ${chain.map(name).join(' → ')}.`);
   }
   if (chain.length > MAX_FLOW_DEPTH + 1) {
     throw new Error(`More than ${MAX_FLOW_DEPTH} flows called in sequence.`);
   }
+  const child = options.flows?.[flowId];
+  if (!child) throw new Error(`The called flow (${flowId}) was not found.`);
   if (child.unavailable) throw new Error(`The flow "${child.flow}" cannot be called: ${child.unavailable}`);
   if (input !== undefined && child.inputType) {
     const issues = inputIssues(input, child.inputType.shape);
@@ -57,6 +58,7 @@ export function invokeFlow(execution: FlowExecution, node: ExecutableNode, flowI
     timeoutMs: undefined,
     parentId: run.id,
     chain,
+    rootName: options.rootName ?? wf.flow,
     onReachEnd: doc => queue.send(doc.DATA),
     // the child's progress goes into its entry (the parent's progress carries it), never out as the parent's
     onProgress: entry
