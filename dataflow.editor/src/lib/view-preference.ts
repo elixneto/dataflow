@@ -1,10 +1,10 @@
 /*
  * How the user likes the screens, remembered in this browser (the last choice is the one that shows next time):
- * Tree or Cards for a project's contents, and whether the flow editor's components panel is open. Storage can be
+ * Tree, Cards or Graph for a project's contents, and whether the flow editor's components panel is open. Storage can be
  * blocked (private mode): then the default, and the choice lasts until the page closes.
  */
 
-export type ProjectView = 'tree' | 'cards';
+export type ProjectView = 'tree' | 'cards' | 'graph';
 
 export const VIEW_KEY = 'dataflow.projectView';
 export const PALETTE_KEY = 'dataflow.paletteOpen';
@@ -31,7 +31,7 @@ function save(key: string, value: string, storage: Storage | undefined): void {
 }
 
 export const readProjectView = (storage: Storage | undefined = browserStorage()): ProjectView =>
-  read(VIEW_KEY, ['tree', 'cards'] as const, 'cards', storage);
+  read(VIEW_KEY, ['tree', 'cards', 'graph'] as const, 'cards', storage);
 
 export const saveProjectView = (view: ProjectView, storage: Storage | undefined = browserStorage()) => save(VIEW_KEY, view, storage);
 

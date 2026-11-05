@@ -1,7 +1,7 @@
-import { useState, type ReactNode } from 'react';
-import { Link } from 'react-router';
+import type { ReactNode } from 'react';
 import { Popover } from 'radix-ui';
-import { CircleAlert, GitFork, RefreshCw } from 'lucide-react';
+import { CircleAlert, ExternalLink, GitFork, RefreshCw } from 'lucide-react';
+import { flowPath } from '@/app/paths';
 import { callPath, callTree, MAX_FLOW_DEPTH, type CallTreeNode, type FlowCall } from '@dataflow/core';
 import { Button } from '@/components/ui/button';
 import type { FlowCalls } from '@/data/flows/flows-api';
@@ -12,16 +12,15 @@ type Named = FlowCalls['flows'][number];
 
 /**
  * The flows this flow calls (its Flow Invokers, and theirs, down the chain) and the ones that call it, in the top bar:
- * "Calls 2 · Called by 1", a circle in red when a chain comes back to it. Opening it reads the calls again, with this
- * flow's own as the canvas has them now (`ownCalls`).
+ * "Calls 2 · Called by 1", a circle in red when a chain comes back to it. This flow's own calls are the canvas's as
+ * they are now (`own`: it updates as a Flow Invoker is added, removed or changed); the other flows' are read again
+ * when it opens.
  */
-export function FlowCallsButton({ projectId, flowId, ownCalls }: { projectId: string; flowId: string; ownCalls: () => FlowCall[] | null }) {
+export function FlowCallsButton({ projectId, flowId, own }: { projectId: string; flowId: string; own: FlowCall[] | null }) {
   const data = useProjectCalls(projectId);
-  const [own, setOwn] = useState<FlowCall[] | null>(null);
   const open = (next: boolean) => {
     if (next) {
       loadProjectCalls(projectId, true);
-      setOwn(ownCalls());
     }
   };
   const calls = withOwnCalls(data?.calls ?? [], flowId, own);
@@ -109,28 +108,37 @@ function CallRows({ nodes, projectId, byId, nameOf }: { nodes: CallTreeNode[]; p
   );
 }
 
-/** a flow on the other end of a call: its name (a link), its folder and how it is called; a removed or archived one says so */
+/**
+ * A flow on the other end of a call: the whole row opens it in a new tab (a middle click too), with its name, its
+ * folder and how it is called; a removed one is not a link, an archived one says so.
+ */
 function FlowLink(props: { projectId: string; flow: Named | undefined; id: string; detail: string; depth?: number; children?: ReactNode }) {
   const { projectId, flow, id, detail, depth, children } = props;
   const where = flow ? (flow.available ? flow.folder || 'Flows (root)' : 'Archived: each call fails') : 'Removed: each call fails';
-  return (
-    <div className="flex min-w-0 flex-col rounded px-2 py-1 hover:bg-accent">
+  const body = (
+    <>
       <span className="flex min-w-0 items-center gap-2">
         {depth !== undefined && depth > 1 && <span className="font-mono text-xs text-muted-foreground">{depth}</span>}
-        {flow ? (
-          <Link to={`/projects/${projectId}/flows/${id}`} className={cn('truncate font-medium hover:underline', !flow.available && 'text-muted-foreground line-through')}>
-            {flow.name}
-          </Link>
-        ) : (
-          <span className="truncate font-medium text-destructive" title={id}>
-            Not found
-          </span>
-        )}
+        <span
+          className={cn('truncate font-medium', !flow && 'text-destructive', flow && !flow.available && 'text-muted-foreground line-through')}
+          title={flow ? undefined : id}
+        >
+          {flow?.name ?? 'Not found'}
+        </span>
+        {flow && <ExternalLink className="ml-auto size-3.5 shrink-0 text-muted-foreground opacity-0 group-hover:opacity-100" aria-hidden />}
       </span>
       <span className={cn('truncate text-xs text-muted-foreground', (!flow || !flow.available) && 'text-destructive')}>
         {where} · {detail}
       </span>
       {children && <span className="text-xs">{children}</span>}
-    </div>
+    </>
+  );
+  const box = 'group flex min-w-0 flex-col rounded px-2 py-1';
+  return flow ? (
+    <a href={flowPath(projectId, id)} target="_blank" rel="noopener" title={`Open ${flow.name} in a new tab`} className={cn(box, 'hover:bg-accent')}>
+      {body}
+    </a>
+  ) : (
+    <div className={box}>{body}</div>
   );
 }

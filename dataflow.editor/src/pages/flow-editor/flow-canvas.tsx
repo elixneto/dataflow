@@ -20,7 +20,7 @@ import { useParams } from 'react-router';
 import { ProjectResourcesContext, ScriptGlobalsContext, useLoadProjectResources } from '@/editor/project-resources';
 import { Button } from '@/components/ui/button';
 import '@xyflow/react/dist/style.css';
-import { componentSettings, connectionProblem, dataTypeFromSamples, END, ERROR_PORT, inputVariables, scriptGlobals, settingsDefaults, START, startParameters, systemVariables, type EnvelopeData, type KnownVariables } from '@dataflow/core';
+import { componentSettings, connectionProblem, flowCalls, type FlowCall, dataTypeFromSamples, END, ERROR_PORT, inputVariables, scriptGlobals, settingsDefaults, START, startParameters, systemVariables, type EnvelopeData, type KnownVariables } from '@dataflow/core';
 import { arrange } from '@/editor/arrange';
 import { fittedConnections } from '@/editor/auto-connect';
 import { CATEGORIES, componentInfo, isFixedType } from '@/editor/catalog';
@@ -111,8 +111,10 @@ export function FlowCanvas(props: {
   inputSamples?: InputSamples;
   /** Run from here on a component */
   onRunFrom?: (nodeId: string) => void;
+  /** this flow's calls (its Flow Invokers), each time one is added, removed or changed (the top bar's Calls) */
+  onCalls?: (calls: FlowCall[]) => void;
 }) {
-  const { exportRef, onSave, marks = null, onPinned, known, inputSamples, onRunFrom = noRunFrom } = props;
+  const { exportRef, onSave, marks = null, onPinned, known, inputSamples, onRunFrom = noRunFrom, onCalls } = props;
   const [nodes, setNodes, onNodesChange] = useNodesState<FlowNode>(FIXED_NODES);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   // what the page's Download takes: the canvas as it is now
@@ -172,6 +174,26 @@ export function FlowCanvas(props: {
   const undo = useCallback(() => restore(stack.undo(snapshot())), [restore, stack, snapshot]);
   const redo = useCallback(() => restore(stack.redo(snapshot())), [restore, stack, snapshot]);
   const history = useMemo(() => ({ record, recordEdit }), [record, recordEdit]);
+
+  // the Flow Invokers' calls, told again only when they change (not on a move)
+  const callsKey = useMemo(() => {
+    const invokers = nodes.filter(isComponent).filter(n => n.data.type === 'flow');
+    if (invokers.length === 0) {
+      return '[]';
+    }
+
+    const executable = {
+      project: '',
+      flow: '',
+      parameters: [],
+      nodes: nodes.filter(isComponent).map(n => ({ id: n.id, type: n.data.type, label: n.data.label || componentInfo(n.data.type)?.label || n.data.type, config: n.data.config })),
+      edges: edges.map(e => ({ source: e.source, sourcePort: e.sourceHandle ?? 'out-0', target: e.target, targetPort: e.targetHandle ?? 'in-0' })),
+    };
+    return JSON.stringify(flowCalls([{ ...executable, id: flowId }]));
+  }, [nodes, edges, flowId]);
+  useEffect(() => {
+    onCalls?.(JSON.parse(callsKey) as FlowCall[]);
+  }, [onCalls, callsKey]);
 
   const pinnedKey = nodes.filter(n => isComponent(n) && n.data.pinned).map(n => n.id).join(',');
   useEffect(() => {
