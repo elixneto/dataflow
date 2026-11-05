@@ -112,3 +112,42 @@ test("a pin keeps its envelopes per port; a bare `true` of earlier versions is n
   // the runner gets the pin
   expect(toExecutableFlow(node({'out-0': [{a: 1}]}) as FlowFile, 'P').nodes.find(n => n.id === 'map')?.pinned).toEqual({'out-0': [{a: 1}]});
 });
+
+test('an edge on a port the component no longer has: refused when saved, taken out when a stored flow is read', async () => {
+  const {dropDanglingEdges, validateFlowFile, withoutDanglingEdges} = await import('../../src/index');
+  const flow = {
+    version: 1, name: 'Ports',
+    nodes: [
+      {id: 'start', type: 'start', position: {x: 0, y: 0}, config: {}},
+      // back to Null: no not found output any more
+      {id: 'l', type: 'lookup', position: {x: 100, y: 0}, config: {keys: [{main: '$a', lookup: '$a'}], ifNotFound: 'null'}},
+      // one case removed: out-0 (the case) and out-1 (else) left
+      {id: 'r', type: 'router', position: {x: 200, y: 0}, config: {cases: [{label: 'a', condition: 'true'}]}},
+      {id: 'end', type: 'end', position: {x: 300, y: 0}, config: {}},
+    ],
+    edges: [
+      {source: 'start', sourcePort: 'out-0', target: 'l', targetPort: 'in-0'},
+      {source: 'start', sourcePort: 'out-0', target: 'l', targetPort: 'in-1'},
+      {source: 'l', sourcePort: 'out-0', target: 'r', targetPort: 'in-0'},
+      {source: 'l', sourcePort: 'out-1', target: 'end', targetPort: 'in-0'},
+      {source: 'r', sourcePort: 'out-1', target: 'end', targetPort: 'in-0'},
+      {source: 'r', sourcePort: 'out-2', target: 'end', targetPort: 'in-0'},
+      // On error not on Divert: no error port
+      {source: 'r', sourcePort: 'error', target: 'end', targetPort: 'in-0'},
+    ],
+  };
+  // (an error edge without Divert has its own message: the rest shows this one)
+  const checked = validateFlowFile({...flow, edges: flow.edges.filter(e => e.sourcePort !== 'error')});
+  expect(checked.ok).toBe(false);
+  if (!checked.ok) {
+    expect(checked.errors.some(e => e.includes('l out-1 → end in-0') && e.includes('port its component does not have'))).toBe(true);
+  }
+  const cleaned = dropDanglingEdges(flow) as typeof flow;
+  expect(cleaned.edges.map(e => `${e.source}:${e.sourcePort}`)).toEqual(['start:out-0', 'start:out-0', 'l:out-0', 'r:out-1']);
+  expect(validateFlowFile(cleaned).ok).toBe(true);
+  // a type the core does not know keeps its edges; a node that is gone takes them away
+  const nodeOf = (id: string) => (id === 'x' ? {type: 'custom-thing', config: {}} : id === 'end' ? {type: 'end', config: {}} : undefined);
+  expect(withoutDanglingEdges([{source: 'x', sourcePort: 'out-9', target: 'end', targetPort: 'in-0'}, {source: 'gone', sourcePort: 'out-0', target: 'end', targetPort: 'in-0'}], nodeOf))
+    .toEqual([{source: 'x', sourcePort: 'out-9', target: 'end', targetPort: 'in-0'}]);
+  expect(dropDanglingEdges('not a flow')).toBe('not a flow');
+});

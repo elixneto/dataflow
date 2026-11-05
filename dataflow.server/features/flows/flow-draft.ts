@@ -1,4 +1,4 @@
-import { newFlowFile, validateFlowFile, type FlowFile } from '@dataflow/core';
+import { dropDanglingEdges, newFlowFile, validateFlowFile, type FlowFile } from '@dataflow/core';
 import type { Flow } from './flow';
 
 /*
@@ -15,7 +15,8 @@ export type FlowDraft = { flow: FlowFile; revision: number };
 /** the draft the editor opens: the saved one, or a new flow (revision 0); always with the row's id and name */
 export function readDraft(row: Flow): FlowDraft {
   const stored = row.draftDefinition as Partial<StoredDraft> | null;
-  const checked = stored?.flow ? validateFlowFile(stored.flow) : null;
+  // an edge left on a port its component no longer has (saved before they were taken out) is dropped, not the flow
+  const checked = stored?.flow ? validateFlowFile(dropDanglingEdges(stored.flow)) : null;
   const flow = checked?.ok ? checked.value : newFlowFile(row.name, row.id);
   return { flow: { ...flow, id: row.id, name: row.name }, revision: checked?.ok && typeof stored?.revision === 'number' ? stored.revision : 0 };
 }

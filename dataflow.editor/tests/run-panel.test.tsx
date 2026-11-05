@@ -198,3 +198,42 @@ describe("the Metrics tab's timeline", () => {
     expect(timelineSpan({ ...record, durationMs: 500, components: [] }, runStart)).toBe(500);
   });
 });
+
+describe("a component window's Last run tab", () => {
+  test('how it ended, its counts and times, what came in and went out per port, and its own log lines', async () => {
+    const { ComponentLastRun } = await import('../src/pages/flow-editor/run-panel');
+    const record = mockRunRecord(flow, 'validation', new Date('2026-11-04T12:00:00Z'));
+    const filter = record.components.find(c => c.nodeId === 'f')!;
+    const html = renderToStaticMarkup(<ComponentLastRun c={{ ...filter, logs: [{ at: '2026-11-04T12:00:00.000Z', level: 'info', message: '3 to true and 1 to false.' }] }} />);
+    expect(html).toContain('Input (4)');
+    expect(html).toMatch(/role="tab" aria-selected="true"[^>]*>true \(3\)<\/button>/);
+    expect(html).toContain('false (1)');
+    expect(html).toMatch(/In <span[^>]*>4<\/span>/);
+    expect(html).toContain('3 to true and 1 to false.');
+  });
+
+  test('not run yet: it says so', async () => {
+    const { ComponentLastRun } = await import('../src/pages/flow-editor/run-panel');
+    expect(renderToStaticMarkup(<ComponentLastRun c={undefined} />)).toContain('Not run yet');
+  });
+});
+
+describe('which run a Last run tab shows', () => {
+  test('the marks say which runs they come from: the run shown and the full test run', async () => {
+    const { runMarks } = await import('../src/editor/run/run-marks');
+    const record = mockRunRecord(flow, 'execution', new Date('2026-11-04T12:00:00Z'));
+    const full = mockRunRecord(flow, 'validation', new Date('2026-11-04T11:00:00Z'));
+    const marks = runMarks({ ...record, from: { nodeId: 'f', label: 'Big' } }, false, undefined, full)!;
+    expect(marks.about).toEqual({ mode: 'execution', from: 'Big', startedAt: record.run.startedAt });
+    expect(marks.fullAbout).toEqual({ mode: 'validation', startedAt: full.run.startedAt });
+  });
+
+  test('its top line: Test run or Run for real, from which component, and when', async () => {
+    const { ComponentLastRun } = await import('../src/pages/flow-editor/run-panel');
+    const record = mockRunRecord(flow, 'validation', new Date('2026-11-04T12:00:00Z'));
+    const filter = record.components.find(c => c.nodeId === 'f')!;
+    const html = renderToStaticMarkup(<ComponentLastRun c={filter} about={{ mode: 'validation', from: 'Big', startedAt: '2026-10-30T12:00:00.000Z' }} />);
+    expect(html).toMatch(/>Test run<\/span> · from Big · Oct 30 \d{2}:\d{2}:\d{2}\.000</);
+    expect(renderToStaticMarkup(<ComponentLastRun c={filter} about={{ mode: 'execution', startedAt: new Date().toISOString() }} />)).toMatch(/>Run for real<\/span> · today /);
+  });
+});

@@ -54,3 +54,25 @@ test('a pin of earlier versions (a bare `true`, no envelopes) loads as not pinne
   const canvas = flowFileToCanvas(file);
   expect((canvas.nodes.find(n => n.id === 'h')!.data as { pinned?: unknown }).pinned).toBeUndefined();
 });
+
+describe('edges on ports a component no longer has', () => {
+  test('go with the change (Lookup back to Null, On error off Divert); the others stay as they are', async () => {
+    const { edgesWithPorts } = await import('../src/editor/flow-file');
+    const nodes: Node[] = [
+      { id: 'start', type: 'component', position: { x: 0, y: 0 }, data: { type: 'start', config: {} } },
+      { id: 'l', type: 'component', position: { x: 0, y: 0 }, data: { type: 'lookup', config: { ifNotFound: 'null', onError: 'throw' } } },
+      { id: 'end', type: 'component', position: { x: 0, y: 0 }, data: { type: 'end', config: {} } },
+      { id: 'g', type: 'group', position: { x: 0, y: 0 }, data: { title: '', color: '' } },
+    ];
+    const edges: Edge[] = [
+      { id: 'a', source: 'start', sourceHandle: 'out-0', target: 'l', targetHandle: 'in-0' },
+      { id: 'b', source: 'l', sourceHandle: 'out-0', target: 'end', targetHandle: 'in-0' },
+      { id: 'c', source: 'l', sourceHandle: 'out-1', target: 'end', targetHandle: 'in-0' },
+      { id: 'd', source: 'l', sourceHandle: 'error', target: 'end', targetHandle: 'in-0' },
+    ];
+    expect(edgesWithPorts(nodes, edges).map(e => e.id)).toEqual(['a', 'b']);
+    // with the not found output and Divert, all of them have their ports: the same list back
+    const withPorts = nodes.map(n => (n.id === 'l' ? { ...n, data: { type: 'lookup', config: { ifNotFound: 'output', onError: 'divert' } } } : n));
+    expect(edgesWithPorts(withPorts, edges)).toBe(edges);
+  });
+});

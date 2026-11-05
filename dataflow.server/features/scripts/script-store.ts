@@ -145,3 +145,25 @@ export async function deleteScriptPath(db: Database, orgId: string, projectId: s
   await db.query(`DELETE FROM scripts WHERE org_id = $1 AND project_id = $2 AND (path = $3 OR starts_with(path, $3 || '/'))`, [orgId, projectId, path]);
   await db.query(`DELETE FROM script_folders WHERE org_id = $1 AND project_id = $2 AND (path = $3 OR starts_with(path, $3 || '/'))`, [orgId, projectId, path]);
 }
+
+/** a script's code and the scripts it imports (and those import), as they are now: what reading a type of it needs */
+export async function typeSources(db: Database, orgId: string, projectId: string, path: string): Promise<Record<string, string>> {
+  const sources: Record<string, string> = {};
+  const queue = [path];
+  while (queue.length > 0 && Object.keys(sources).length < 200) {
+    const next = queue.shift()!;
+    if (next in sources) {
+      continue;
+    }
+
+    const script = await getScript(db, orgId, projectId, next);
+    if (!script) {
+      continue;
+    }
+
+    sources[next] = script.content;
+    queue.push(...scriptImports(script.content).filter(p => !(p in sources)));
+  }
+
+  return sources;
+}

@@ -22,7 +22,7 @@ export type TypeShape =
   | {kind: 'union'; tag: string; variants: TypeVariant[]}
   | {kind: 'json'};
 
-export type TypeField = {name: string; optional: boolean; shape: TypeShape};
+export type TypeField = {name: string; optional: boolean; shape: TypeShape; nullable?: boolean};
 
 /** one object of a discriminated union: the value of its tag and its other fields */
 export type TypeVariant = {value: string | number; fields: TypeField[]};
@@ -307,7 +307,9 @@ class TypeReader {
       }
       const m = /^(?:readonly\s+)?(?:(['"])(.+?)\1|([A-Za-z_$][\w$]*))\s*(\?)?\s*:\s*([\s\S]+)$/.exec(member);
       if (!m) continue;
-      fields.push({name: m[2] ?? m[3]!, optional: m[4] === '?', shape: this.type(path, m[5]!, env)});
+      // `T | null`: T, and null is a value it takes
+      const nullable = splitTop(m[5]!.trim().replace(/^\|/, ''), '|').some(u => u === 'null' || u === 'undefined');
+      fields.push({name: m[2] ?? m[3]!, optional: m[4] === '?', shape: this.type(path, m[5]!, env), ...(nullable ? {nullable: true} : {})});
     }
     return index && fields.length === 0 ? {kind: 'record', of: index} : {kind: 'object', fields};
   }
@@ -405,4 +407,85 @@ export function inputTypeRef(value: unknown): {path: string; name: string} | nul
   if (typeof value !== 'string') return null;
   const at = value.lastIndexOf('#');
   return at > 0 && at < value.length - 1 ? {path: value.slice(0, at), name: value.slice(at + 1)} : null;
+}
+
+/** what a value is, for a message: text, a number, a list... */
+function described(value: unknown): string {
+  if (value === null) return 'null';
+  if (Array.isArray(value)) return 'a list';
+  if (typeof value === 'string') return `text ${JSON.stringify(value.length > 40 ? `${value.slice(0, 40)}…` : value)}`;
+  if (typeof value === 'number') return `the number ${value}`;
+  if (typeof value === 'boolean') return String(value);
+  return typeof value === 'object' ? 'an object' : typeof value;
+}
+
+const isPlainObject = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
+
+/** the fields of an object against its value: each required one there, each one of its type (more fields are fine) */
+function fieldIssues(value: Record<string, unknown>, fields: TypeField[], at: string, issues: string[]) {
+  for (const field of fields) {
+    const where = `${at}.${field.name}`;
+    const v = value[field.name];
+    if (v === undefined) {
+      if (!field.optional) issues.push(`${where}: missing (required).`);
+      continue;
+    }
+    if (v === null && (field.nullable || field.optional)) continue;
+    collectIssues(v, field.shape, where, issues);
+  }
+}
+
+function collectIssues(value: unknown, shape: TypeShape, at: string, issues: string[]) {
+  if (issues.length >= 50) return;
+  const wrong = (expected: string) => issues.push(`${at}: expected ${expected}, got ${described(value)}.`);
+  switch (shape.kind) {
+    case 'string': if (typeof value !== 'string') wrong('text'); return;
+    case 'number': if (typeof value !== 'number' || !Number.isFinite(value)) wrong('a number'); return;
+    case 'boolean': if (typeof value !== 'boolean') wrong('true or false'); return;
+    case 'enum': if (!shape.options.includes(value as string | number)) wrong(`one of ${shape.options.map(o => JSON.stringify(o)).join(', ')}`); return;
+    case 'array':
+      if (!Array.isArray(value)) return void wrong('a list');
+      value.forEach((item, i) => collectIssues(item, shape.of, `${at}[${i}]`, issues));
+      return;
+    case 'tuple':
+      if (!Array.isArray(value) || value.length !== shape.items.length) return void wrong(`a list of ${shape.items.length}`);
+      shape.items.forEach((item, i) => collectIssues(value[i], item, `${at}[${i}]`, issues));
+      return;
+    case 'record':
+      if (!isPlainObject(value)) return void wrong('an object');
+      for (const [key, item] of Object.entries(value)) collectIssues(item, shape.of, `${at}.${key}`, issues);
+      return;
+    case 'object':
+      if (!isPlainObject(value)) return void wrong('an object');
+      fieldIssues(value, shape.fields, at, issues);
+      return;
+    case 'union': {
+      if (!isPlainObject(value)) return void wrong('an object');
+      const variant = shape.variants.find(v => v.value === value[shape.tag]);
+      if (!variant) return void issues.push(`${at}.${shape.tag}: expected one of ${shape.variants.map(v => JSON.stringify(v.value)).join(', ')}, got ${described(value[shape.tag])}.`);
+      fieldIssues(value, variant.fields, at, issues);
+      return;
+    }
+    case 'json': return;
+  }
+}
+
+/**
+ * Why a value does not fit a type's shape (none: it fits): each place (`input.items[0].qty`) with what it expected and
+ * what it got. Fields the type does not have are fine; any, unknown and what the reader takes as JSON take anything. At
+ * most 50.
+ */
+export function shapeIssues(value: unknown, shape: TypeShape, at = 'input'): string[] {
+  const issues: string[] = [];
+  collectIssues(value, shape, at, issues);
+  return issues;
+}
+
+/**
+ * A flow's input against the Start's type: a list (one envelope per item) item by item, unless the type is itself a
+ * list; anything else as it is.
+ */
+export function inputIssues(input: unknown, shape: TypeShape): string[] {
+  if (!Array.isArray(input) || shape.kind === 'array' || shape.kind === 'tuple' || shape.kind === 'json') return shapeIssues(input, shape);
+  return input.flatMap((item, i) => shapeIssues(item, shape, `input[${i}]`)).slice(0, 50);
 }

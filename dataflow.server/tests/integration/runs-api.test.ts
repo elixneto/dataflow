@@ -397,6 +397,10 @@ describe('runs api, pins and Run from here', () => {
     const flowId = await flowWith('From here');
     const rows = async () =>
       (await db.query<{ id: string; partial: boolean }>('SELECT id, run_from IS NOT NULL AS partial FROM test_runs WHERE flow_id = $1 ORDER BY partial', [flowId])).map(r => [r.id, r.partial]);
+    // a run for real is the whole flow: never from a component
+    const real = await call('POST', `/flows/${flowId}/runs`, { mode: 'execution', fromNodeId: 'map' });
+    expect(real.status).toBe(400);
+    expect((real.body.error as { message: string }).message).toContain('Run from here is a test run only');
     // nothing ran yet: refused
     const early = await call('POST', `/flows/${flowId}/runs`, { mode: 'validation', fromNodeId: 'map' });
     expect(early.status).toBe(400);
@@ -435,15 +439,35 @@ describe('runs api, pins and Run from here', () => {
     expect((await call('POST', `/flows/${flowId}/runs`, { mode: 'validation', fromNodeId: 'nope' })).status).toBe(400);
   });
 
-  test('Run for real from here takes the last test run too, and is kept in the history', async () => {
+  test("a flow's last run, for the editor when it opens: the latest that ended (test or real) and the full test run", async () => {
+    const flowId = await flowWith('Last run');
+    expect((await call('GET', `/flows/${flowId}/last-run`)).body).toEqual({ last: null, full: null });
+
+    const test = (await call('POST', `/flows/${flowId}/runs`, { mode: 'validation' })).body.id as string;
+    await ended(test);
+    const afterTest = (await call('GET', `/flows/${flowId}/last-run`)).body as { last: { id: string; mode: string; finishedAt: string; record: { run: { id: string } } }; full: { run: { id: string } } };
+    expect(afterTest.last).toMatchObject({ id: test, mode: 'validation' });
+    expect(afterTest.last.record.run.id).toBe(test);
+    expect(new Date(afterTest.last.finishedAt).getTime()).toBeGreaterThan(0);
+    expect(afterTest.full.run.id).toBe(test);
+
+    // a Run for real after it: that one is the latest; the full test run stays for Run from here
+    const real = (await call('POST', `/flows/${flowId}/runs`, { mode: 'execution' })).body.id as string;
+    await ended(real);
+    const afterReal = (await call('GET', `/flows/${flowId}/last-run`)).body as { last: { id: string; mode: string }; full: { run: { id: string } } };
+    expect(afterReal.last).toMatchObject({ id: real, mode: 'execution' });
+    expect(afterReal.full.run.id).toBe(test);
+    expect((await call('GET', `/flows/${crypto.randomUUID()}/last-run`)).status).toBe(404);
+  });
+
+  test('there is no Run for real from here: refused even after a test run, nothing queued', async () => {
     const flowId = await flowWith('Real from here');
     await ended((await call('POST', `/flows/${flowId}/runs`, { mode: 'validation' })).body.id);
     calls.length = 0;
-    const started = await call('POST', `/flows/${flowId}/runs`, { mode: 'execution', fromNodeId: 'map' });
-    const record = await ended(started.body.id);
+    const refused = await call('POST', `/flows/${flowId}/runs`, { mode: 'execution', fromNodeId: 'map' });
+    expect(refused.status).toBe(400);
     expect(calls).toEqual([]);
-    expect(record.status).toBe('completed');
-    expect((await db.query('SELECT id FROM runs WHERE id = $1', [started.body.id])).length).toBe(1);
+    expect((await db.query('SELECT id FROM runs WHERE flow_id = $1', [flowId])).length).toBe(0);
   });
 });
 
@@ -487,5 +511,67 @@ describe('runs api, queued runs', () => {
     expect(text).toContain('Run cancelled before it started.');
     expect((await call('GET', `/runs/${started.body.id}`)).body.status).toBe('cancelled');
     expect((await call('POST', `/runs/${crypto.randomUUID()}/cancel`)).status).toBe(404);
+  });
+
+  test("a Start typed by a script's type: the input (its default or the one given) must fit it, or the run is refused with why", async () => {
+    const projectId = (await call('POST', '/projects', { name: 'Typed' })).body.id as string;
+    await call('POST', `/projects/${projectId}/scripts`, { path: 'orders/types', kind: 'script' });
+    const saved = await call('PUT', `/projects/${projectId}/scripts/content`, {
+      path: 'orders/types',
+      revision: 0,
+      content: "export interface Order { id: number; status: 'new' | 'paid'; items: { sku: string; qty: number }[] }",
+    });
+    expect(saved.status).toBe(200);
+    const flowId = (await call('POST', `/projects/${projectId}/flows`, { name: 'Orders' })).body.id as string;
+    const draft = (start: Record<string, unknown>, revision: number) =>
+      call('PUT', `/flows/${flowId}/draft`, {
+        revision,
+        flow: {
+          version: 1,
+          name: 'Orders',
+          nodes: [
+            { id: 'start', type: 'start', position: { x: 0, y: 0 }, config: start },
+            { id: 'log', type: 'log', position: { x: 200, y: 0 }, config: { message: '$id' } },
+            { id: 'end', type: 'end', position: { x: 400, y: 0 }, config: {} },
+          ],
+          edges: [
+            { source: 'start', sourcePort: 'out-0', target: 'log', targetPort: 'in-0' },
+            { source: 'log', sourcePort: 'out-0', target: 'end', targetPort: 'in-0' },
+          ],
+        },
+      });
+    const typed = { acceptsInput: true, inputType: 'orders/types#Order' };
+    expect((await draft({ ...typed, testInput: JSON.stringify({ id: '7', status: 'lost', items: [{ sku: 'A' }] }) }, 0)).status).toBe(200);
+
+    const refused = await call('POST', `/flows/${flowId}/runs`, { mode: 'validation' });
+    expect(refused.status).toBe(400);
+    const message = (refused.body.error as { message: string }).message;
+    expect(message).toStartWith('The input does not fit Order: ');
+    expect(message).toContain('input.id: expected a number, got text "7".');
+    expect(message).toContain('input.status: expected one of "new", "paid", got text "lost".');
+    expect(message).toContain('input.items[0].qty: missing (required).');
+
+    // the input given for the run: checked the same way, and kept with the run when it fits
+    const givenBad = await call('POST', `/flows/${flowId}/runs`, { mode: 'execution', input: { id: 1, status: 'paid' } });
+    expect((givenBad.body.error as { message: string }).message).toContain('input.items: missing (required).');
+    const order = { id: 1, status: 'paid', items: [{ sku: 'A', qty: 2 }] };
+    const accepted = await call('POST', `/flows/${flowId}/runs`, { mode: 'execution', input: order });
+    expect(accepted.status).toBe(202);
+    expect((await db.query<{ input: unknown }>('SELECT input FROM runs WHERE id = $1', [accepted.body.id]))[0]?.input).toEqual(order);
+
+    // a default input that fits: it runs
+    expect((await draft({ ...typed, testInput: JSON.stringify(order) }, 1)).status).toBe(200);
+    expect((await call('POST', `/flows/${flowId}/runs`, { mode: 'validation' })).status).toBe(202);
+
+    // the type gone from the script: said so
+    await call('PUT', `/projects/${projectId}/scripts/content`, { path: 'orders/types', revision: 1, content: 'export const nothing = 1;' });
+    expect(((await call('POST', `/flows/${flowId}/runs`, { mode: 'validation' })).body.error as { message: string }).message).toBe(
+      "The Start's input type Order no longer exists in the script orders/types.",
+    );
+
+    // a flow that takes no input: an input given is refused
+    expect((await draft({ acceptsInput: false }, 2)).status).toBe(200);
+    const noInput = await call('POST', `/flows/${flowId}/runs`, { mode: 'validation', input: order });
+    expect((noInput.body.error as { message: string }).message).toContain('This flow does not take an input');
   });
 });

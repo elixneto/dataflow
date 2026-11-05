@@ -43,7 +43,7 @@ test('an interface becomes its fields: text, number, yes/no, a choice, lists, ob
       {name: 'street', optional: false, shape: {kind: 'string'}},
       {name: 'city', optional: false, shape: {kind: 'string'}},
     ]}},
-    {name: 'notes', optional: true, shape: {kind: 'string'}},
+    {name: 'notes', optional: true, shape: {kind: 'string'}, nullable: true},
     {name: 'extra', optional: false, shape: {kind: 'record', of: {kind: 'json'}}},
   ]});
   expect(shapeOf({'orders/types': ORDERS}, 'orders/types', 'Priority')).toEqual({kind: 'enum', options: [1, 2, 3]});
@@ -122,7 +122,7 @@ export type Customers = Page<Ref>;`;
   expect(shapeOf(s, 'c', 'Customers')).toEqual({kind: 'object', fields: [
     field('items', {kind: 'array', of: {kind: 'object', fields: [field('id', {kind: 'string'}), field('name', {kind: 'string'})]}}),
     field('meta', {kind: 'object', fields: [field('total', {kind: 'number'})]}),
-    field('next', {kind: 'string'}, true),
+    {...field('next', {kind: 'string'}, true), nullable: true},
   ]});
 });
 
@@ -150,4 +150,41 @@ test('an empty value of a shape (required fields only), and the setting as path#
   expect(emptyOfShape(shape)).toEqual({createdAt: '', id: 0, customerName: '', active: false, status: 'new', tags: [], items: [], extra: {}});
   expect(inputTypeRef('orders/types#Order')).toEqual({path: 'orders/types', name: 'Order'});
   expect(inputTypeRef('')).toBeNull();
+});
+
+test("an input against its type: each place that does not fit, with what it expected and what it got", async () => {
+  const {shapeIssues} = await import('../../src/index');
+  const code = `export type Discount = { type: 'percent'; percent: number } | { type: 'coupon'; code: string };
+export interface Order {
+  id: number;
+  status: 'new' | 'paid';
+  tags: string[];
+  size: [number, number];
+  counts: Record<string, number>;
+  discount: Discount;
+  items: { sku: string; qty: number }[];
+  notes?: string;
+  paidAt: string | null;
+  raw: any;
+}`;
+  const shape = shapeOf({o: code}, 'o', 'Order');
+  const good = {id: 1, status: 'paid', tags: ['a'], size: [1, 2], counts: {x: 1}, discount: {type: 'coupon', code: 'X'}, items: [{sku: 'A', qty: 1}], paidAt: null, raw: {any: 'thing'}, extra: true};
+  expect(shapeIssues(good, shape)).toEqual([]);
+  const bad = {id: '1', status: 'lost', tags: 'a', size: [1], counts: {x: 'one'}, discount: {type: 'gift'}, items: [{sku: 'A'}, {sku: 2, qty: 1}], notes: null, raw: 1};
+  expect(shapeIssues(bad, shape)).toEqual([
+    'input.id: expected a number, got text "1".',
+    'input.status: expected one of "new", "paid", got text "lost".',
+    'input.tags: expected a list, got text "a".',
+    'input.size: expected a list of 2, got a list.',
+    'input.counts.x: expected a number, got text "one".',
+    'input.discount.type: expected one of "percent", "coupon", got text "gift".',
+    'input.items[0].qty: missing (required).',
+    'input.items[1].sku: expected text, got the number 2.',
+    'input.paidAt: missing (required).',
+  ]);
+  expect(shapeIssues([1], shape)).toEqual(['input: expected an object, got a list.']);
+  // a flow's input that is a list: one envelope per item, each one checked
+  const {inputIssues} = await import('../../src/index');
+  expect(inputIssues([good, {...good, id: 'x'}], shape)).toEqual(['input[1].id: expected a number, got text "x".']);
+  expect(inputIssues(good, shape)).toEqual([]);
 });

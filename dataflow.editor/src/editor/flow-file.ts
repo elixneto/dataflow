@@ -1,5 +1,5 @@
 import type { Edge, Node } from '@xyflow/react';
-import { END, FLOW_FILE_VERSION, START, type FlowFile } from '@dataflow/core';
+import { END, FLOW_FILE_VERSION, START, withoutDanglingEdges, type FlowFile } from '@dataflow/core';
 import type { ComponentData, ComponentNode } from './component-node';
 import { GROUP_SIZE, GROUP_Z, type GroupData, type GroupNode } from './group';
 
@@ -91,4 +91,23 @@ export function saveFile(name: string, text: string, type: string): void {
   link.download = name;
   link.click();
   URL.revokeObjectURL(url);
+}
+
+/**
+ * The canvas' edges whose ports still exist, with the components as they are now (the core's withoutDanglingEdges): a
+ * config that takes a port away (Lookup back to Null, a Router case removed, On error off Divert) takes its edges too.
+ */
+export function edgesWithPorts(nodes: Node[], edges: Edge[]): Edge[] {
+  const components = new Map(nodes.filter(n => n.type === 'component').map(n => [n.id, n.data as ComponentData]));
+  const nodeOf = (id: string) => {
+    const data = components.get(id);
+    return data ? { type: data.type, config: data.config } : undefined;
+  };
+  const kept = new Set(
+    withoutDanglingEdges(
+      edges.map(e => ({ edge: e, source: e.source, sourcePort: e.sourceHandle ?? 'out-0', target: e.target, targetPort: e.targetHandle ?? 'in-0' })),
+      nodeOf,
+    ).map(e => e.edge),
+  );
+  return kept.size === edges.length ? edges : edges.filter(e => kept.has(e));
 }

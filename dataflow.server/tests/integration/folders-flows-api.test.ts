@@ -59,6 +59,30 @@ describe('folders and flows api', () => {
     expect((await call('GET', `/projects/${crypto.randomUUID()}/contents`)).status).toBe(404);
   });
 
+  test('an edge on a port its component no longer has: a save is refused; a stored draft opens without it (not as a new flow)', async () => {
+    const flowId = (await call('POST', `/projects/${projectId}/flows`, { name: 'Ports' })).body.id as string;
+    const opened = (await call('GET', `/flows/${flowId}/draft`)).body.flow as { nodes: object[] };
+    const flow = {
+      ...opened,
+      nodes: [...opened.nodes, { id: 'f', type: 'filter', position: { x: 320, y: 0 }, config: { condition: 'true' } }],
+      edges: [
+        { source: 'start', sourcePort: 'out-0', target: 'f', targetPort: 'in-0' },
+        { source: 'f', sourcePort: 'out-0', target: 'end', targetPort: 'in-0' },
+        // a Filter has no third output
+        { source: 'f', sourcePort: 'out-2', target: 'end', targetPort: 'in-0' },
+      ],
+    };
+    const refused = await call('PUT', `/flows/${flowId}/draft`, { revision: 0, flow });
+    expect(refused.status).toBe(400);
+    expect((refused.body.error as { message: string }).message).toContain('is on a port its component does not have');
+
+    // saved before such edges were taken out: it opens with the rest of the flow
+    await db.query(`UPDATE flows SET draft_definition = $1 WHERE id = $2`, [JSON.stringify({ revision: 3, flow }), flowId]);
+    const reopened = await call('GET', `/flows/${flowId}/draft`);
+    expect(reopened.body.revision).toBe(3);
+    expect((reopened.body.flow as { edges: { sourcePort: string }[] }).edges.map(e => e.sourcePort)).toEqual(['out-0', 'out-0']);
+  });
+
   test("a flow's draft: a new flow opens with its Start and End; a save checks it, grows the revision, and a stale one is refused", async () => {
     const flowId = (await call('POST', `/projects/${projectId}/flows`, { name: 'Drafts' })).body.id as string;
     const opened = await call('GET', `/flows/${flowId}/draft`);

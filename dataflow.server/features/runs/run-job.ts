@@ -23,6 +23,8 @@ import type { Keyring } from '#shared/crypto/keyring';
 import type { Database } from '#shared/database/database';
 import { evaluate } from '#shared/runner/evaluate';
 import { prepareScript } from '#shared/runner/prepare-script';
+import { querySqlServer } from '#shared/runner/sqlserver-driver';
+import { aggregateMongoDb, deleteMongoDb, upsertMongoDb } from '#shared/runner/mongodb-driver';
 import { sendHttp } from '#shared/runner/send-http';
 import type { Run } from './run';
 
@@ -171,6 +173,12 @@ export async function runJob(
       parameterValues: job.parameters,
       evaluate,
       http: options.http ?? sendHttp,
+      // the databases' drivers (SQL Server Query; MongoDB Pipeline, Upsert, Delete): in a test run, what writes does
+      // not reach them (the engine's gate), a Delete only counts
+      databases: { sqlserver: querySqlServer },
+      documentQueries: { mongodb: aggregateMongoDb },
+      documentStores: { mongodb: upsertMongoDb },
+      documentDeletes: { mongodb: deleteMongoDb },
       secrets: job.secrets,
       variables: job.variables,
       connections: job.connections,

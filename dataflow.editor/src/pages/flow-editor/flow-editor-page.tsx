@@ -17,7 +17,7 @@ import { FlowCanvas, type CanvasHandle } from './flow-canvas';
 import { RunPanel } from './run-panel';
 import { portLabel } from '@/editor/run/port-label';
 import { ConfirmDialog, type ConfirmTarget } from '@/components/confirm-dialog';
-import { cancelRun, getRun, startRun, type RunUsage } from '@/data/flows/flows-api';
+import { cancelRun, getLastRun, getRun, startRun, type RunUsage } from '@/data/flows/flows-api';
 import { followRun } from '@/data/flows/run-events';
 import { knownVariablesAfter, writingComponents, type KnownVariables } from '@dataflow/core';
 import { inputSamplesAfter, readInputSamples, readKnownVariables, rememberInputSamples, rememberKnownVariables, type InputSamples } from '@/editor/expression-variables';
@@ -89,6 +89,33 @@ export function FlowEditorPage() {
   const [confirm, setConfirm] = useState<ConfirmTarget | null>(null);
   // a port's count clicked on the canvas: the panel shows it
   const [show, setShow] = useState<{ nodeId: string; port: string; at: number } | null>(null);
+  // the flow opened (or another one): its latest run that ended and the full test run, from the server, until one
+  // runs here (a reload keeps what the components did last; the panel stays closed)
+  const [runsOf, setRunsOf] = useState(flowId);
+  if (runsOf !== flowId) {
+    // another flow: the runs shown were the other one's
+    setRunsOf(flowId);
+    setRecord(null);
+    setFullRun(null);
+    setUsage(null);
+  }
+
+  useEffect(() => {
+    let gone = false;
+    void getLastRun(flowId).then(answer => {
+      if (gone || !answer.ok) {
+        return;
+      }
+
+      const { last, full } = answer.value;
+      setRecord(previous => previous ?? last?.record ?? null);
+      setUsage(previous => previous ?? last?.usage ?? null);
+      setFullRun(previous => previous ?? full);
+    });
+    return () => {
+      gone = true;
+    };
+  }, [flowId]);
   // fromNodeId: Run from here (that component and what follows it, from what reached it in the last run)
   const execute = async (kind: 'test' | 'real', fromNodeId?: string): Promise<ApiResult<unknown>> => {
     if (!current?.flow || running) {
@@ -216,15 +243,17 @@ export function FlowEditorPage() {
   // what the canvas shows of the run (the same object while nothing changes: every component reads it)
   const marks = useMemo(
     () =>
-      panelOpen
-        ? runMarks(
-            record,
-            running !== null,
-            (nodeId, port) => setShow(previous => ({ nodeId, port, at: (previous?.at ?? 0) + 1 })),
-            fullRun,
-          )
-        : null,
-    [panelOpen, record, running, fullRun],
+      // with the panel closed too: the components keep what they did in the last run (a count opens the panel)
+      runMarks(
+        record,
+        running !== null,
+        (nodeId, port) => {
+          setPanelOpen(true);
+          setShow(previous => ({ nodeId, port, at: (previous?.at ?? 0) + 1 }));
+        },
+        fullRun,
+      ),
+    [record, running, fullRun],
   );
 
   return (

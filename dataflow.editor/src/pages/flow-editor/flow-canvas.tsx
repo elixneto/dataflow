@@ -29,6 +29,7 @@ import { ComponentWindow } from '@/editor/component-window';
 import { FloatingWindow, type WindowPosition, type WindowSize } from '@/editor/floating-window';
 import { readViewport, readWindow, rememberViewport, rememberWindow } from '@/editor/window-memory';
 import { useFlowDraft, type DraftSave } from '@/editor/flow-save';
+import { edgesWithPorts } from '@/editor/flow-file';
 import { RunFromContext, RunMarksContext, type RunMarks } from '@/editor/run/run-marks';
 import { ExpressionVariablesContext, type InputSamples } from '@/editor/expression-variables';
 import { ComponentNodeMemo, type ComponentData, type ComponentNode } from '@/editor/component-node';
@@ -522,7 +523,10 @@ export function FlowCanvas(props: {
       override: draft.override || undefined,
       notes: draft.notes || undefined,
     };
-    setNodes(current => current.map(n => (n.id === id && isComponent(n) ? { ...n, data: { ...n.data, ...changes } } : n)));
+    const updated = nodes.map(n => (n.id === id && isComponent(n) ? { ...n, data: { ...n.data, ...changes } } : n));
+    setNodes(updated);
+    // a port the new config no longer has takes its edges along (Undo brings both back)
+    setEdges(current => edgesWithPorts(updated, current));
     closeWindow(id);
   };
   const removeComponent = (id: string) => {

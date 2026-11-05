@@ -10,8 +10,10 @@ import { componentInfo, isFixedType } from './catalog';
 import { draftChanged, draftOf, type ComponentDraft } from './component-draft';
 import type { ComponentData } from './component-node';
 import { SettingsForm } from './settings-form';
+import { useRunMark } from './run/run-marks';
+import { ComponentLastRun } from '@/pages/flow-editor/run-panel';
 
-type Tab = 'configuration' | 'notes';
+type Tab = 'configuration' | 'notes' | 'last-run';
 
 type Props = {
   id: string;
@@ -37,6 +39,11 @@ type Props = {
  */
 export function ComponentWindow({ id, data, onSave, onCancel, onRemove, registerClose, onChanged }: Props) {
   const [tab, setTab] = useState<Tab>('configuration');
+  const mark = useRunMark(id);
+  // this run's, unless it did not run this component (skipped by a Run from here): then the full run's
+  const ranHere = !!mark?.run && mark.run.status !== 'skipped' && mark.run.status !== 'not-run';
+  const lastRun = ranHere ? mark?.run : (mark?.full ?? mark?.run);
+  const lastAbout = ranHere || !mark?.full ? mark?.about : mark?.fullAbout;
   const [draft, setDraft] = useState<ComponentDraft>(() => draftOf(data));
   const info = componentInfo(data.type);
   const logic = COMPONENTS[data.type];
@@ -62,6 +69,7 @@ export function ComponentWindow({ id, data, onSave, onCancel, onRemove, register
           [
             ['configuration', 'Configuration'],
             ['notes', 'Notes'],
+            ['last-run', 'Last run'],
           ] as const
         ).map(([value, label]) => (
           <button
@@ -79,10 +87,6 @@ export function ComponentWindow({ id, data, onSave, onCancel, onRemove, register
             {value === 'notes' && draft.notes?.trim() && <span className="ml-1.5 inline-block size-1.5 rounded-full bg-amber-500 align-middle" aria-label="has a note" />}
           </button>
         ))}
-        {/* the component's own input and output of the last run: later */}
-        <button type="button" role="tab" aria-selected={false} disabled title="Soon" className="-mb-px cursor-not-allowed border-b-2 border-transparent px-3 py-2 text-sm text-muted-foreground/60">
-          Last run
-        </button>
       </div>
 
       {tab === 'configuration' ? (
@@ -137,6 +141,11 @@ export function ComponentWindow({ id, data, onSave, onCancel, onRemove, register
               <SettingsForm id={id} nodeId={id} fields={settings} values={draft.config} onChange={config => set({ config })} />
             </section>
           )}
+        </div>
+      ) : tab === 'last-run' ? (
+        // what this component received and sent in the last run (a Run from here: the full run for what it skipped)
+        <div role="tabpanel" className="flex min-h-0 flex-1 flex-col overflow-auto">
+          <ComponentLastRun c={lastRun} about={lastAbout} />
         </div>
       ) : (
         <div role="tabpanel" className="flex min-h-0 flex-1 flex-col gap-4 overflow-x-hidden overflow-y-auto p-4 [&>*]:shrink-0">

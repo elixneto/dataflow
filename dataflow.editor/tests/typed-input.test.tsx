@@ -93,3 +93,19 @@ test('records as keys and values, tuples by position, a discriminated union by i
   // what was typed differs from the empty value: Reset is offered
   expect(html).toContain('>Reset</button>');
 });
+
+test("a default input that does not fit the type says why, as the server would when the run starts", () => {
+  const html = render({ acceptsInput: true, inputType: 'orders/types#Order', testInput: JSON.stringify({ id: 'x', customerName: 'Ana', active: true, status: 'lost', tags: [], items: [] }) });
+  expect(html).toContain('aria-label="Input issues"');
+  expect(html).toContain('input.id: expected a number, got text &quot;x&quot;.');
+  expect(html).toContain('input.status: expected one of &quot;new&quot;, &quot;paid&quot;, &quot;shipped&quot;, got text &quot;lost&quot;.');
+  expect(render({ acceptsInput: true, inputType: 'orders/types#Order', testInput: JSON.stringify({ id: 1, customerName: 'Ana', active: true, status: 'new', tags: [], items: [] }) })).not.toContain('Input issues');
+});
+
+test('a default input that is a list: one envelope per item, each checked; the form says to edit it as JSON (it never turns it into one object)', () => {
+  const one = { id: 1, customerName: 'Ana', active: true, status: 'new', tags: [], items: [] };
+  const html = render({ acceptsInput: true, inputType: 'orders/types#Order', testInput: JSON.stringify([one, { ...one, id: 'x' }]) });
+  expect(html).toContain('A list of 2 envelope(s), each one Order: edit it in the JSON view.');
+  expect(html).toContain('input[1].id: expected a number, got text &quot;x&quot;.');
+  expect(html).not.toContain('id="s-testInput-customerName"');
+});

@@ -18,3 +18,9 @@ describe("a component's window: Override, as in the PoC", () => {
     expect(render({ type: 'filter', config: {} })).not.toContain('Override');
   });
 });
+
+test('the Last run tab is there to open (no longer "Soon")', () => {
+  const html = render({ type: 'filter', config: {} });
+  expect(html).toMatch(/role="tab" aria-selected="false"[^>]*>Last run<\/button>/);
+  expect(html).not.toContain('title="Soon"');
+});

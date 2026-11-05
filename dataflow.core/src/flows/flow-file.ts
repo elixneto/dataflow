@@ -5,7 +5,7 @@ import type {EnvelopeData} from '#types/envelope-data.type';
 import type {ExecutableFlow} from '#types/executable-flow.type';
 import {startParameters} from '../components/start';
 import {COMPONENTS} from '../components';
-import {errorEdgeIssues} from '#validation/ports';
+import {errorEdgeIssues, withoutDanglingEdges} from '#validation/ports';
 import {portConnectionIssues} from '#validation/port-connections';
 
 /*
@@ -150,6 +150,10 @@ export function validateFlowFile(data: unknown): FlowFileResult {
   };
   const ports = [...portConnectionIssues(plainEdges, typeOf), ...errorEdgeIssues(plainEdges, nodeOf)];
   if (ports.length) return {ok: false, errors: ports.map(i => `Node "${i.nodeId}" ${i.message}`)};
+  // an edge on a port its component no longer has (its config changed): dropDanglingEdges takes it out on load
+  const kept = new Set(withoutDanglingEdges(plainEdges, nodeOf));
+  const dangling = plainEdges.flatMap((e, i) => (kept.has(e) ? [] : [`Edge ${i + 1} (${e.source} ${e.sourcePort} → ${e.target} ${e.targetPort}) is on a port its component does not have.`]));
+  if (dangling.length) return {ok: false, errors: dangling};
   const pinnedBytes = (nodes as Record<string, unknown>[]).reduce((n, node) => n + (isPinned(node.pinned) ? JSON.stringify(node.pinned).length : 0), 0);
   if (pinnedBytes > MAX_PINNED_BYTES) {
     return {ok: false, errors: [`The pinned outputs take ${(pinnedBytes / 1024 ** 2).toFixed(1)} MB (at most ${MAX_PINNED_BYTES / 1024 ** 2} MB): unpin a component.`]};
@@ -230,3 +234,22 @@ export function toExecutableFlow(file: FlowFile, project: string): ExecutableFlo
     edges: file.edges,
   };
 }
+
+/**
+ * A stored flow (raw, as saved) without the edges on ports its components no longer have, before it is read: a draft
+ * saved before such an edge was taken out still opens, without it. Anything that is not a flow comes back as it is.
+ */
+export function dropDanglingEdges(data: unknown): unknown {
+  if (!isObject(data) || !Array.isArray(data.nodes) || !Array.isArray(data.edges)) return data;
+  const nodes = new Map((data.nodes as unknown[]).filter(isObject).map(n => [n.id, n]));
+  const nodeOf = (id: string) => {
+    const n = nodes.get(id);
+    return n && typeof n.type === 'string' ? {type: n.type, config: isObject(n.config) ? n.config : {}} : undefined;
+  };
+  const edges = (data.edges as unknown[]).filter((e): e is PortEdgeLike => isObject(e) && typeof e.source === 'string' && typeof e.target === 'string' && typeof e.sourcePort === 'string' && typeof e.targetPort === 'string');
+  // what is not even an edge stays for the validation to report
+  const others = (data.edges as unknown[]).filter(e => !edges.includes(e as PortEdgeLike));
+  return {...data, edges: [...withoutDanglingEdges(edges, nodeOf), ...others]};
+}
+
+type PortEdgeLike = {source: string; sourcePort: string; target: string; targetPort: string};

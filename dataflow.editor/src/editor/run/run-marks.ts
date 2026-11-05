@@ -12,7 +12,19 @@ export type RunMarks = {
   onShow?: (nodeId: string, port: string) => void;
   /** the last full test run's components: Run from here starts from what reached them there */
   full?: Map<string, ComponentRun>;
+  /** which runs these are (a Last run tab says so): the run shown, and the full test run */
+  about?: RunAbout;
+  fullAbout?: RunAbout;
 };
+
+/** a run as a component's Last run tab names it: Test run or Run for real, from which component, when */
+export type RunAbout = { mode: 'validation' | 'execution'; from?: string; startedAt: string };
+
+const aboutOf = (record: RunRecord | RunProgress): RunAbout => ({
+  mode: record.run.mode,
+  ...(record.from ? { from: record.from.label } : {}),
+  startedAt: record.run.startedAt,
+});
 
 export const RunMarksContext = createContext<RunMarks | null>(null);
 
@@ -27,6 +39,8 @@ export const useRunMark = (nodeId: string) => {
         running: marks.running,
         run: marks.byNode.get(nodeId),
         full: marks.full?.get(nodeId),
+        about: marks.about,
+        fullAbout: marks.fullAbout,
         show: (port: string) => marks.onShow?.(nodeId, port),
         runFrom: () => runFrom(nodeId),
       }
@@ -36,7 +50,14 @@ export const useRunMark = (nodeId: string) => {
 /** while it runs, the run so far (each component running or how it ended); then the record */
 export const runMarks = (record: RunRecord | RunProgress | null, running: boolean, onShow?: RunMarks['onShow'], full?: RunRecord | null): RunMarks | null =>
   record || running
-    ? { running, byNode: new Map((record?.components ?? []).map(c => [c.nodeId, c])), onShow, full: full ? new Map(full.components.map(c => [c.nodeId, c])) : undefined }
+    ? {
+        running,
+        byNode: new Map((record?.components ?? []).map(c => [c.nodeId, c])),
+        onShow,
+        full: full ? new Map(full.components.map(c => [c.nodeId, c])) : undefined,
+        ...(record ? { about: aboutOf(record) } : {}),
+        ...(full ? { fullAbout: aboutOf(full) } : {}),
+      }
     : null;
 
 /**

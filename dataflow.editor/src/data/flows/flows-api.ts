@@ -140,3 +140,13 @@ export function cancelRun(id: string): Promise<ApiResult<{ id: string; status: R
 export function getRun(id: string): Promise<ApiResult<RunView>> {
   return api<RunView>(`/runs/${id}`);
 }
+
+/** what the editor shows of a flow's runs when it opens: its latest run that ended (test or real) and the full test run */
+export type LastRun = {
+  last: { id: string; mode: 'validation' | 'execution'; finishedAt: string; record: RunRecord; usage: RunUsage | null } | null;
+  full: RunRecord | null;
+};
+
+export function getLastRun(flowId: string): Promise<ApiResult<LastRun>> {
+  return api<LastRun>(`/flows/${flowId}/last-run`);
+}

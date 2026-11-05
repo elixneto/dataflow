@@ -94,6 +94,28 @@ export function takesSeveral(type: string | undefined, side: PortSide, port: str
 
 export type PortEdge = {source: string; sourcePort: string; target: string; targetPort: string};
 
+/** a node as the port rules read it: its component type and config */
+export type PortNode = {type: string; config: Record<string, unknown>};
+
+/**
+ * Whether a node has the port on that side, with its config as it is now (a Lookup without its not found output, a
+ * Router with one case less, On error not on Divert: no error port). A type the core does not know keeps its edges.
+ */
+export function hasPort(node: PortNode, side: PortSide, port: string): boolean {
+  if (node.type !== START && node.type !== END && !COMPONENTS[node.type]) return true;
+  if (side === 'target') return inputPorts(node.type, node.config).some(p => p.id === port);
+  return outputPorts(node.type, node.config).some(p => p.id === port) || errorPort(node.type, node.config)?.id === port;
+}
+
+/** the edges whose ports still exist (and whose nodes do): what a changed config leaves connected */
+export function withoutDanglingEdges<E extends PortEdge>(edges: E[], nodeOf: (id: string) => PortNode | undefined): E[] {
+  return edges.filter(e => {
+    const source = nodeOf(e.source);
+    const target = nodeOf(e.target);
+    return !!source && !!target && hasPort(source, 'source', e.sourcePort) && hasPort(target, 'target', e.targetPort);
+  });
+}
+
 /**
  * Why `edge` may not be added next to `edges` (undefined: it may). `typeOf` gives a node's component type. The message
  * has no component name (the caller puts it in front, or shows it on the canvas).

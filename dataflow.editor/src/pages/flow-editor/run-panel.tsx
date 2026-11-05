@@ -7,7 +7,7 @@ import { componentInfo } from '@/editor/catalog';
 import { cn } from '@/lib/utils';
 import { readChoice, rememberChoice } from '@/editor/run/run-choices';
 import { portLabel } from '@/editor/run/port-label';
-import { runActions } from '@/editor/run/run-marks';
+import { runActions, type RunAbout } from '@/editor/run/run-marks';
 import { dataTabComponents, dataTabSelection, timelineSpan, type Shown } from './run-view';
 import { JsonTree } from '@/editor/run/json-tree';
 
@@ -49,6 +49,13 @@ const total = (ports: Record<string, number>) => Object.values(ports).reduce((n,
 const time = (iso: string) => {
   const d = new Date(iso);
   return `${d.toLocaleTimeString('en-US', { hour12: false })}.${String(d.getMilliseconds()).padStart(3, '0')}`;
+};
+
+/** when a run started: its time today, or its date and time */
+const when = (iso: string) => {
+  const d = new Date(iso);
+  const today = d.toDateString() === new Date().toDateString();
+  return today ? `today ${time(iso)}` : `${d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} ${time(iso)}`;
 };
 
 /** a component's name in the run: the one given on the canvas, or the component's own (HTTP Request, not http-request) */
@@ -659,5 +666,80 @@ function RunUsageText({ usage }: { usage?: RunUsage | null }) {
     <span className="cursor-help font-mono text-xs text-muted-foreground" title={USAGE_HINT}>
       Memory {peak === null ? '—' : `${bytes(peak)} peak ${grew}`.trim()} · CPU {cpu === null ? '—' : `${Math.round(cpu)} ms`}
     </span>
+  );
+}
+
+/**
+ * One component's part of the last run (a component window's Last run tab): how it ended, its counts and times, what
+ * came in and what went out per port (as the Data tab shows them), and its log lines.
+ */
+export function ComponentLastRun({ c, about, portName = defaultPortName }: { c: ComponentRun | undefined; about?: RunAbout; portName?: PortName }) {
+  const [view, setViewState] = useState<'table' | 'json'>(() => readChoice(VIEW_KEY, VIEWS, 'table'));
+  const setView = (next: 'table' | 'json') => {
+    setViewState(next);
+    rememberChoice(VIEW_KEY, next);
+  };
+  if (!c || c.status === 'not-run') {
+    return <p className="p-4 text-sm text-muted-foreground">Not run yet: run the flow to see what came in and went out here.</p>;
+  }
+
+  const facts: [string, string][] = [
+    ['In', String(total(c.inputs))],
+    ['Out', String(total(c.outputs))],
+    ['Open', ms(c.durationMs)],
+    ['Active', shortMs(c.activeTimeMs)],
+    ['Waiting', shortMs(c.waitingMs)],
+    ...(c.memory && c.memory.peakEnvelopes > 0 ? [['Memory', bytes(c.memory.peakBytes)] as [string, string]] : []),
+  ];
+  return (
+    <div className="flex min-h-0 flex-1 flex-col">
+      {about && (
+        // which run this is: Test run or Run for real (from a component), and when it started
+        <p className="border-b bg-muted/40 px-4 py-1.5 text-xs text-muted-foreground">
+          <span className="font-medium text-foreground">{about.mode === 'execution' ? 'Run for real' : 'Test run'}</span>
+          {about.from && ` · from ${about.from}`}
+          {` · ${when(about.startedAt)}`}
+        </p>
+      )}
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-b px-4 py-2 text-xs">
+        <span className="flex items-center gap-1.5 font-medium">
+          <StatusIcon status={c.status} className="size-3.5" />
+          {STATUS[c.status]?.label ?? c.status}
+        </span>
+        {facts.map(([label, value]) => (
+          <span key={label} className="text-muted-foreground">
+            {label} <span className="font-mono text-foreground">{value}</span>
+          </span>
+        ))}
+        <div role="radiogroup" aria-label="View" className="ml-auto flex gap-1">
+          {VIEWS.map(v => (
+            <button
+              key={v}
+              type="button"
+              role="radio"
+              aria-checked={view === v}
+              onClick={() => setView(v)}
+              className={cn('rounded-md px-2 py-0.5 text-xs uppercase', view === v ? 'bg-accent font-medium' : 'text-muted-foreground hover:text-foreground')}
+            >
+              {v}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="grid min-h-48 flex-1 grid-cols-2 divide-x overflow-hidden border-b">
+        <Envelopes title={`Input (${total(c.inputs)})`} envelopes={c.inputSample} view={view} treeKey={`${c.nodeId}:in`} />
+        <OutputPorts key={c.nodeId} c={c} view={view} portName={portName} />
+      </div>
+      <ul aria-label="Log lines" className="max-h-40 shrink-0 overflow-auto py-1 font-mono text-xs">
+        {c.logs.length === 0 && <li className="px-4 py-0.5 text-muted-foreground">No log lines.</li>}
+        {c.logs.map((l: LogLine, i: number) => (
+          <li key={i} className="flex gap-3 px-4 py-0.5">
+            <span className="shrink-0 text-muted-foreground">{time(l.at)}</span>
+            <span className={cn('w-14 shrink-0', LEVEL_COLOR[l.level])}>{l.level}</span>
+            <span className="min-w-0 break-words">{l.message}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }

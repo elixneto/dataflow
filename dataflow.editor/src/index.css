@@ -316,6 +316,13 @@
   html.dark {
     color-scheme: dark;
     }
+  /* a native select's list: the select itself is transparent, so its options get the theme's own colors (else a
+     white list with the dark theme's light text) */
+  select option,
+  select optgroup {
+    background-color: var(--popover);
+    color: var(--popover-foreground);
+    }
   /* thin, discreet scrollbars in both themes */
   * {
     scrollbar-width: thin;

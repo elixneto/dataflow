@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { isFolderVisible, planRunFrom, toExecutableFlow, validateFlowFile, type RunFromPlan, type RunRecord } from '@dataflow/core';
+import { inputIssues, inputTypeRef, isFolderVisible, planRunFrom, scriptTypeShape, START, startConfig, toExecutableFlow, validateFlowFile, type FlowFile, type RunFromPlan, type RunRecord } from '@dataflow/core';
 import type { Database } from '#shared/database/database';
 import { FlowRepository, loadTree } from '#features/folders/project-tree';
 import { readDraft } from '#features/flows/flow-draft';
@@ -7,7 +7,7 @@ import type { UseCaseContext } from '#shared/use-cases/use-case-context';
 import type { UseCaseHandler } from '#shared/use-cases/use-case-handler';
 import { fail, success, type UseCaseResult } from '#shared/use-cases/use-case-result';
 import { validate } from '#shared/use-cases/validate';
-import { scriptsForRun } from '#features/scripts/script-store';
+import { scriptsForRun, typeSources } from '#features/scripts/script-store';
 import { CHANNELS, notifyRunEvent } from '../run-queue';
 import { runs, testRuns } from '../run';
 
@@ -21,7 +21,44 @@ export const StartRunCommand = z.object({
   fromNodeId: z.string().min(1).optional(),
   /** its name as the editor shows it, for the record and the first log line (display only) */
   fromLabel: z.string().trim().min(1).max(200).optional(),
+  /** the flow's input for this run (a flow whose Start accepts one); without it, the Start's default input */
+  input: z.unknown().optional(),
 });
+
+/**
+ * The input a run takes (the one given, or the Start's default input) and, when the Start names a project script's type
+ * as the input's type, whether it fits it: the reasons it does not, each place with what it expected.
+ */
+async function checkedInput(ctx: UseCaseContext, projectId: string, file: FlowFile, given: unknown): Promise<{ ok: true; input: unknown } | { ok: false; error: string }> {
+  const startNode = file.nodes.find(n => n.type === START);
+  const { acceptsInput, testInput } = startConfig(startNode?.config ?? {});
+  if (given !== undefined && !acceptsInput) {
+    return { ok: false, error: 'This flow does not take an input: turn on Accepts input in its Start.' };
+  }
+
+  let input = given;
+  if (input === undefined && acceptsInput && testInput.trim()) {
+    try {
+      input = JSON.parse(testInput);
+    } catch {
+      return { ok: false, error: "The Start's default input is not valid JSON." };
+    }
+  }
+
+  const typeRef = acceptsInput ? inputTypeRef(startNode?.config.inputType) : null;
+  if (!typeRef || input === undefined) {
+    return { ok: true, input };
+  }
+
+  const shape = scriptTypeShape(await typeSources(ctx.db, ctx.orgId, projectId, typeRef.path), typeRef.path, typeRef.name);
+  if (!shape) {
+    return { ok: false, error: `The Start's input type ${typeRef.name} no longer exists in the script ${typeRef.path}.` };
+  }
+
+  // a list: one envelope per item, each one checked
+  const issues = inputIssues(input, shape);
+  return issues.length ? { ok: false, error: `The input does not fit ${typeRef.name}: ${issues.join(' ')}` } : { ok: true, input };
+}
 
 /**
  * The user's latest full test run of the flow (not a Run from here): Run from here takes from it what reached the
@@ -52,7 +89,12 @@ export class StartRunHandler implements UseCaseHandler<{ id: string }> {
       return parsed;
     }
 
-    const { id: flowId, mode, parameters, fromNodeId, fromLabel } = parsed.value;
+    const { id: flowId, mode, parameters, fromNodeId, fromLabel, input: given } = parsed.value;
+    // Run from here is a test run only: a run for real runs the whole flow
+    if ((fromNodeId || fromLabel) && mode === 'execution') {
+      return fail('validation', 'Run from here is a test run only: a run for real runs the whole flow.');
+    }
+
     const row = await new FlowRepository(ctx.db, ctx.orgId).findById(flowId);
     const tree = row ? await loadTree(ctx.db, ctx.orgId, row.projectId) : null;
     if (!row || !tree || !isFolderVisible(tree.folders, row.folderId)) {
@@ -63,6 +105,12 @@ export class StartRunHandler implements UseCaseHandler<{ id: string }> {
     const checked = validateFlowFile(file);
     if (!checked.ok) {
       return fail('validation', `The flow cannot run: ${checked.errors.join(' ')}`);
+    }
+
+    // the input, checked against the Start's input type when it has one (a Run from here does not read it)
+    const runInput = fromNodeId ? { ok: true as const, input: undefined } : await checkedInput(ctx, row.projectId, checked.value, given);
+    if (!runInput.ok) {
+      return fail('validation', runInput.error);
     }
 
     let runFrom: RunFromPlan | null = null;
@@ -104,6 +152,7 @@ export class StartRunHandler implements UseCaseHandler<{ id: string }> {
       definition: checked.value,
       runFrom,
       scripts: imported.scripts,
+      ...(given !== undefined ? { input: given } : {}),
     };
     if (mode === 'execution') {
       await ctx.db.orm.insert(runs).values(values);

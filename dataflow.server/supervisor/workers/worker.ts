@@ -1,5 +1,7 @@
 import { runJob } from '#features/runs/run-job';
 import type { FromWorker, ToWorker } from './protocol';
+import { closeSqlServerPools } from '#shared/runner/sqlserver-driver';
+import { closeMongoClients } from '#shared/runner/mongodb-driver';
 
 /*
  * A worker process: started by the supervisor (workers/process-pool.ts), it runs the jobs it is sent, one at a time,
@@ -46,5 +48,8 @@ process.on('message', (message: ToWorker) => {
 });
 
 // its supervisor is gone: nobody would get what it runs
-process.on('disconnect', () => process.exit(0));
+// the supervisor is gone: the databases' connections closed (at most a second), then out
+process.on('disconnect', () => {
+  void Promise.race([Promise.all([closeSqlServerPools(), closeMongoClients()]), new Promise(resolve => setTimeout(resolve, 1000))]).finally(() => process.exit(0));
+});
 send({ type: 'ready' });

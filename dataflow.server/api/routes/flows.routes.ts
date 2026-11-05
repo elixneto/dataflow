@@ -9,6 +9,7 @@ import { RestoreFlowHandler } from '#features/flows/restore-flow/restore-flow-ha
 import { SaveDraftHandler } from '#features/flows/save-draft/save-draft-handler';
 import { CancelRunHandler } from '#features/runs/cancel-run/cancel-run-handler';
 import { GetRunHandler } from '#features/runs/get-run/get-run-handler';
+import { LastRunHandler } from '#features/runs/last-run/last-run-handler';
 import { StartRunHandler } from '#features/runs/start-run/start-run-handler';
 import type { RunProgress, RunRecord } from '@dataflow/core';
 import { runEvents, type RunEvent } from '#features/runs/run-events';
@@ -43,6 +44,8 @@ export function flowsRoutes() {
       const result = await new GetDraftHandler().handle({ id: c.req.param('id') }, c.get('useCase'));
       return toHttpResult(c, result);
     })
+    // what the editor shows of the flow's runs when it opens: its latest run that ended, and the full test run
+    .get('/:id/last-run', async c => toHttpResult(c, await new LastRunHandler().handle({ id: c.req.param('id') }, c.get('useCase'))))
     .put('/:id/draft', async c => {
       const result = await new SaveDraftHandler().handle(await bodyWith(c, { id: c.req.param('id') }), c.get('useCase'));
       return toHttpResult(c, result);

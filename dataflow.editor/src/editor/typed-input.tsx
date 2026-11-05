@@ -1,6 +1,6 @@
 import { useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Plus, Trash } from 'lucide-react';
-import { emptyOfShape, inputTypeRef, scriptImports, scriptTypeShape, unionValue, type TypeShape } from '@dataflow/core';
+import { emptyOfShape, inputTypeRef, scriptImports, scriptTypeShape, inputIssues, unionValue, type TypeShape } from '@dataflow/core';
 import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
 import { loadScriptContent, useProjectScripts } from '@/data/scripts/scripts-store';
@@ -91,15 +91,23 @@ export function TypedInputSetting(props: { id: string; typeRef: string; value: s
   const current = parsed(value);
   const invalid = value.trim() !== '' && current === undefined;
   const empty = shape ? JSON.stringify(emptyOfShape(shape), null, 2) : null;
+  // what the server would refuse the run for (the same check)
+  const issues = shape && current !== undefined ? inputIssues(current, shape) : [];
   // a type chosen: the default input starts as its empty value right away (saved with the rest); another type chosen
-  // later replaces it only while it is still the one filled in here, untouched (what was typed stays: Reset clears it)
+  // later replaces it only while it is still the one filled in here, untouched (what was typed stays: Reset clears it).
+  // Only when the type changes: never while it is being edited (cleared to paste something else, half typed)
   const filled = useRef<string | null>(null);
+  const latest = useRef({ value, onChange });
   useEffect(() => {
-    if (empty !== null && empty !== value && (value.trim() === '' || value === filled.current)) {
+    latest.current = { value, onChange };
+  });
+  useEffect(() => {
+    const { value: now, onChange: change } = latest.current;
+    if (empty !== null && empty !== now && (now.trim() === '' || now === filled.current)) {
       filled.current = empty;
-      onChange(empty);
+      change(empty);
     }
-  }, [empty, value, onChange]);
+  }, [empty]);
   return (
     <div className="grid gap-1.5">
       <div className="flex items-center gap-2">
@@ -132,10 +140,22 @@ export function TypedInputSetting(props: { id: string; typeRef: string; value: s
         <p className="text-xs text-destructive">The script no longer exports this type.</p>
       ) : invalid ? (
         <p className="text-xs text-destructive">The input is not valid JSON: fix it in the JSON view.</p>
+      ) : Array.isArray(current) && shape.kind !== 'array' && shape.kind !== 'tuple' ? (
+        // a list: one envelope per item, each one of the type (checked below); the form edits one, so the JSON view
+        <p className="text-xs text-muted-foreground">
+          A list of {current.length} envelope(s), each one {inputTypeRef(typeRef)?.name}: edit it in the JSON view.
+        </p>
       ) : (
         <div id={id} className="grid gap-3 rounded-md border p-3">
           <ShapeControl id={id} shape={shape} value={current ?? emptyOfShape(shape)} onChange={next => onChange(JSON.stringify(next, null, 2))} />
         </div>
+      )}
+      {issues.length > 0 && (
+        <ul aria-label="Input issues" className="grid gap-1 rounded-md border border-destructive/40 bg-destructive/10 p-2 text-xs text-destructive">
+          {issues.map(issue => (
+            <li key={issue}>{issue}</li>
+          ))}
+        </ul>
       )}
     </div>
   );
