@@ -8,7 +8,10 @@ import { useTypeShape } from './typed-input';
 export type InvokerParameter = ExpressionField & { name: string };
 
 /** what a Flow Invoker shows of the flow it calls: the Start of its draft (the published version, once there is one) */
-export type CalledStart = { status: 'loading' } | { status: 'missing' } | { status: 'ready'; acceptsInput: boolean; inputType: string; parameters: FlowParameter[] };
+export type CalledStart =
+  | { status: 'loading' }
+  | { status: 'missing' }
+  | { status: 'ready'; acceptsInput: boolean; inputType: string; parameters: FlowParameter[]; /** the flows its own Flow Invokers call */ calls: string[] };
 
 /** The Start of the called flow, read from its draft when the settings open and again when another flow is chosen. */
 export function useCalledStart(flowId: string): CalledStart {
@@ -30,7 +33,8 @@ export function useCalledStart(flowId: string): CalledStart {
         const config = draft.value.flow.nodes.find(n => n.type === START)?.config ?? {};
         const { acceptsInput, parameters } = startConfig(config);
         const inputType = acceptsInput && typeof config.inputType === 'string' ? config.inputType : '';
-        setRead({ flowId, start: { status: 'ready', acceptsInput, inputType, parameters } });
+        const calls = draft.value.flow.nodes.filter(n => n.type === 'flow' && typeof n.config.flowId === 'string').map(n => n.config.flowId as string);
+        setRead({ flowId, start: { status: 'ready', acceptsInput, inputType, parameters, calls } });
       });
     load();
     return () => {
@@ -52,10 +56,12 @@ export function CalledFlowSetting(props: {
   start: Extract<CalledStart, { status: 'ready' }>;
   items: InvokerParameter[];
   sendEnvelope: boolean;
+  /** the flow being edited: one the called flow calls back is a circular call */
+  selfId?: string;
   onChange: (items: InvokerParameter[]) => void;
   renderValue: (id: string, value: ExpressionField, placeholder: string, onChange: (value: ExpressionField) => void) => ReactNode;
 }) {
-  const { id, start, items, sendEnvelope, onChange, renderValue } = props;
+  const { id, start, items, sendEnvelope, selfId, onChange, renderValue } = props;
   const known = new Set(start.parameters.map(p => p.name));
   const extra = items.filter(item => !known.has(item.name));
   const valueOf = (name: string) => items.find(item => item.name === name);
@@ -69,6 +75,9 @@ export function CalledFlowSetting(props: {
 
   return (
     <div className="grid gap-4">
+      {selfId && start.calls.includes(selfId) && (
+        <Note warn>This flow calls this one back: a circular call, so each call would fail. Remove the Flow Invoker there, or call another flow.</Note>
+      )}
       <CalledInput inputType={start.inputType} acceptsInput={start.acceptsInput} sendEnvelope={sendEnvelope} />
       <fieldset className="grid gap-1.5">
         <legend className="mb-1.5 text-sm leading-none font-medium">Parameters</legend>

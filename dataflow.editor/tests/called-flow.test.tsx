@@ -10,6 +10,7 @@ const start = {
     { name: 'since', type: 'number' as const, default: '', required: true },
     { name: 'tag', type: 'text' as const, default: 'a' },
   ],
+  calls: [] as string[],
 };
 const render = (props: Partial<Parameters<typeof CalledFlowSetting>[0]>) =>
   renderToStaticMarkup(
@@ -41,4 +42,10 @@ test('the input the called flow takes: none (a warning when DATA is sent), or an
   const open = render({ start: { ...start, acceptsInput: true, parameters: [] }, sendEnvelope: true });
   expect(open).toContain('Any JSON (its Start has no input type).');
   expect(open).toContain('The flow has no parameters.');
+});
+
+test('a called flow that calls this one back is a circular call: said above the parameters', () => {
+  expect(render({ start: { ...start, calls: ['f1'] }, selfId: 'f1' })).toContain('This flow calls this one back');
+  expect(render({ start: { ...start, calls: ['f2'] }, selfId: 'f1' })).not.toContain('calls this one back');
+  expect(render({ start: { ...start, calls: ['f1'] } })).not.toContain('calls this one back');
 });

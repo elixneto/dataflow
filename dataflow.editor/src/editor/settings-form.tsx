@@ -82,6 +82,7 @@ export function SettingsForm(props: { id: string; nodeId?: string; fields: Setti
 function CalledFlowParameters(props: { id: string; field: SettingField; flowId: string; values: Values; onChange: (items: InvokerParameter[]) => void }) {
   const { id, field, flowId, values, onChange } = props;
   const start = useCalledStart(flowId);
+  const { flowId: selfId } = useParams();
   const items = Array.isArray(values[field.key]) ? (values[field.key] as InvokerParameter[]) : [];
   if (start.status === 'loading') {
     return <p className="text-xs text-muted-foreground">Reading the flow…</p>;
@@ -97,6 +98,7 @@ function CalledFlowParameters(props: { id: string; field: SettingField; flowId: 
       start={start}
       items={items}
       sendEnvelope={values.sendEnvelope === true}
+      selfId={selfId}
       onChange={onChange}
       renderValue={(valueId, value, placeholder, change) => (
         <ValueControl id={valueId} field={{ key: 'value', label: 'Value', kind: 'value' }} value={value} placeholder={placeholder} onChange={change} />
