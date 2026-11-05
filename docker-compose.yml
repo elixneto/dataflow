@@ -1,9 +1,18 @@
 name: dataflow
 
+# the json-file logs of the containers, tagged with their Compose service: how the otel-collector knows whose line it reads
+x-logging: &logging
+  driver: json-file
+  options:
+    labels: "com.docker.compose.project,com.docker.compose.service"
+    max-size: "20m"
+    max-file: "5"
+
 services:
   postgres:
     image: postgres:17.6-alpine
     restart: unless-stopped
+    logging: *logging
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-dataflow}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-dataflow}
@@ -27,6 +36,7 @@ services:
       dockerfile: dataflow.server/Dockerfile
     image: dataflow-server
     restart: unless-stopped
+    logging: *logging
     environment: &server-env
       # inside the Compose network Postgres is at postgres:5432, whatever port it has on the host
       DATABASE_URL: postgres://${POSTGRES_USER:-dataflow}:${POSTGRES_PASSWORD:-dataflow}@postgres:5432/${POSTGRES_DB:-dataflow}
@@ -36,6 +46,9 @@ services:
       SECRETS_KEYS: ${SECRETS_KEYS:-}
       WORKERS: ${WORKERS:-1}
       WORKER_TAGS: ${WORKER_TAGS:-default}
+      # one JSON event per line, its fields searchable in OpenObserve (profile observability); pretty is for a terminal
+      LOG_FORMAT: json
+      LOG_LEVEL: ${LOG_LEVEL:-info}
     ports:
       - "5190:5190"
     depends_on:
@@ -54,6 +67,7 @@ services:
     profiles: ["server"]
     image: dataflow-server
     restart: unless-stopped
+    logging: *logging
     command: ["bun", "dataflow.server/supervisor/main.ts"]
     environment: *server-env
     depends_on:
@@ -63,5 +77,49 @@ services:
       server:
         condition: service_started
 
+  # logs, metrics and dashboards of postgres, server and supervisor, only with `--profile observability`:
+  # http://localhost:5080 (OPENOBSERVE_USER / OPENOBSERVE_PASSWORD). The otel-collector feeds it.
+  openobserve:
+    profiles: ["observability"]
+    image: public.ecr.aws/zinclabs/openobserve:v1.1.2
+    restart: unless-stopped
+    environment:
+      ZO_ROOT_USER_EMAIL: ${OPENOBSERVE_USER:-root@dataflow.local}
+      ZO_ROOT_USER_PASSWORD: ${OPENOBSERVE_PASSWORD:-Dataflow#2026}
+      ZO_DATA_DIR: /data
+      ZO_TELEMETRY: "false"
+    ports:
+      - "${OPENOBSERVE_PORT:-5080}:5080"
+    volumes:
+      - openobserve:/data
+
+  # reads the containers' log files and the Docker and Postgres stats, sends them to openobserve (observability/otel-collector.yaml)
+  otel-collector:
+    profiles: ["observability"]
+    image: otel/opentelemetry-collector-contrib:0.164.0
+    restart: unless-stopped
+    # root: the log files under /var/lib/docker/containers and the Docker socket are root's
+    user: "0:0"
+    command: ["--config=/etc/otelcol/config.yaml"]
+    environment:
+      OPENOBSERVE_USER: ${OPENOBSERVE_USER:-root@dataflow.local}
+      OPENOBSERVE_PASSWORD: ${OPENOBSERVE_PASSWORD:-Dataflow#2026}
+      POSTGRES_USER: ${POSTGRES_USER:-dataflow}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-dataflow}
+      POSTGRES_DB: ${POSTGRES_DB:-dataflow}
+    volumes:
+      - ./observability/otel-collector.yaml:/etc/otelcol/config.yaml:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - otel-collector:/var/lib/otelcol
+    depends_on:
+      # distroless image, no healthcheck: the collector retries the export until openobserve answers
+      openobserve:
+        condition: service_started
+      postgres:
+        condition: service_healthy
+
 volumes:
   postgres:
+  openobserve:
+  otel-collector:

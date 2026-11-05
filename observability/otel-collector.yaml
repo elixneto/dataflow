@@ -1,0 +1,133 @@
+# The otel-collector of docker-compose.yml (profile "observability"): what postgres, server and supervisor write and
+# their stats, into openobserve. Three sources, one destination:
+#
+#   file_log    the containers' json-file logs; the Compose service of each line comes from the "attrs" that the
+#               x-logging of docker-compose.yml makes Docker write (lines without it, other containers, are dropped);
+#               the server's and the supervisor's JSON events (LOG_FORMAT=json) become fields (runId, flow, status...)
+#   docker_stats  cpu, memory, network and disk of each container, named by service
+#   postgresql  connections, commits, rows, index use, db size... of the dataflow database
+#
+# In openobserve: Logs -> stream "default" (field service_name), Metrics -> container_* and postgresql_*.
+
+extensions:
+  basicauth/openobserve:
+    client_auth:
+      username: ${env:OPENOBSERVE_USER}
+      password: ${env:OPENOBSERVE_PASSWORD}
+  # where filelog was in each file, kept across restarts (volume otel-collector)
+  file_storage:
+    directory: /var/lib/otelcol
+    create_directory: true
+
+receivers:
+  file_log:
+    include: [/var/lib/docker/containers/*/*-json.log]
+    start_at: beginning
+    storage: file_storage
+    operators:
+      - type: json_parser
+        parse_from: body
+        on_error: drop_quiet
+        timestamp:
+          parse_from: attributes.time
+          layout_type: gotime
+          layout: "2006-01-02T15:04:05.999999999Z07:00"
+      - type: move
+        from: attributes.log
+        to: body
+      - type: move
+        from: attributes.attrs["com.docker.compose.service"]
+        to: resource["service.name"]
+        if: attributes.attrs != nil
+      - type: move
+        from: attributes.attrs["com.docker.compose.project"]
+        to: resource["compose.project"]
+        if: attributes.attrs != nil
+      - type: remove
+        field: attributes.time
+      - type: remove
+        field: attributes.attrs
+        if: attributes.attrs != nil
+      - type: move
+        from: attributes.stream
+        to: attributes["log.iostream"]
+      # the api's and the supervisor's JSON events (LOG_FORMAT=json): their fields as attributes, msg as the body
+      - type: json_parser
+        if: body matches "^\\{\"time\""
+        parse_from: body
+        parse_to: attributes
+        on_error: send_quiet
+        severity:
+          parse_from: attributes.level
+      - type: move
+        if: attributes.msg != nil
+        from: attributes.msg
+        to: body
+      - type: remove
+        if: attributes.level != nil
+        field: attributes.level
+      - type: remove
+        if: attributes.service != nil
+        field: attributes.service
+      - type: remove
+        if: attributes.time != nil
+        field: attributes.time
+
+  docker_stats:
+    endpoint: unix:///var/run/docker.sock
+    collection_interval: 15s
+    container_labels_to_metric_labels:
+      com.docker.compose.service: service
+      com.docker.compose.project: compose_project
+
+  postgresql:
+    endpoint: postgres:5432
+    transport: tcp
+    username: ${env:POSTGRES_USER}
+    password: ${env:POSTGRES_PASSWORD}
+    databases:
+      - ${env:POSTGRES_DB}
+    collection_interval: 15s
+    tls:
+      insecure: true
+
+processors:
+  # only this project's containers (x-logging / Compose labels), not every container of the machine
+  filter/dataflow:
+    error_mode: ignore
+    logs:
+      log_record:
+        - resource.attributes["compose.project"] != "dataflow"
+    metrics:
+      datapoint:
+        - IsMatch(metric.name, "^container\\.") and resource.attributes["compose_project"] != "dataflow"
+  batch:
+    timeout: 5s
+
+exporters:
+  otlp_http/openobserve:
+    endpoint: http://openobserve:5080/api/default
+    auth:
+      authenticator: basicauth/openobserve
+    headers:
+      stream-name: default
+    retry_on_failure:
+      enabled: true
+      initial_interval: 5s
+      max_interval: 30s
+      max_elapsed_time: 0
+
+service:
+  extensions: [basicauth/openobserve, file_storage]
+  pipelines:
+    logs:
+      receivers: [file_log]
+      processors: [filter/dataflow, batch]
+      exporters: [otlp_http/openobserve]
+    metrics:
+      receivers: [docker_stats, postgresql]
+      processors: [filter/dataflow, batch]
+      exporters: [otlp_http/openobserve]
+  telemetry:
+    logs:
+      level: warn

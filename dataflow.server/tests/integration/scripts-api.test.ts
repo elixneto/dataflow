@@ -5,6 +5,7 @@ import { Keyring } from '#shared/crypto/keyring';
 import { openDatabase, type Database } from '#shared/database/database';
 import { createApp } from '../../api/app';
 import { Supervisor } from '../../supervisor/supervisor';
+import { silentLogger } from '#shared/logging/logger';
 import { inProcessExecutor } from '../../supervisor/workers/executor';
 
 setDefaultTimeout(30_000);
@@ -36,7 +37,7 @@ describe('scripts api', () => {
     const keyring = new Keyring([{ version: 't', key: new Uint8Array(32).fill(5) }]);
     app = createApp(db, 'DEV', keyring);
     stopFollowing = await followRunEvents(db);
-    supervisor = new Supervisor({ db, keyring, executor: inProcessExecutor(), tags: ['default'], log: () => {}, pollMs: 200 });
+    supervisor = new Supervisor({ db, keyring, executor: inProcessExecutor(), tags: ['default'], logger: silentLogger(), pollMs: 200 });
     await supervisor.start();
     projectId = (await call('POST', '/projects', { name: 'Scripts' })).body.id as string;
   });

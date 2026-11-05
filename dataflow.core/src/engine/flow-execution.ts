@@ -273,7 +273,8 @@ export class FlowExecution {
   private async runNode(node: ExecutableNode) {
     const rec = this.recordOf(node.id);
     // what the record keeps never shows a secret or a token, whatever the component wrote
-    const log = (level: LogLevel, message: string) => rec.logs.push({at: new Date().toISOString(), level, message: maskText(message, hiddenValues(this.options))});
+    const log = (level: LogLevel, message: string, byComponent = false) =>
+      rec.logs.push({at: new Date().toISOString(), level, message: maskText(message, hiddenValues(this.options)), ...(byComponent ? {byComponent: true as const} : {})});
     const outputPorts = [...new Set(this.channels.filter(c => c.source === node.id).map(c => c.sourcePort))];
     const stopwatch = this.stopwatchOf(node.id);
     const t0 = performance.now();
@@ -340,7 +341,7 @@ export class FlowExecution {
         // nothing (its ctx sends nothing) and its envelopes go on marked `notSent`, so the rest of the flow (and a
         // called flow's End) is tested too. A pin replays (above).
         dryRun = this.options.mode === 'validation' && writesOutside(logic, node.config);
-        const ctx = componentContext(this, node, log, dryRun);
+        const ctx = componentContext(this, node, (level, message) => log(level, message, true), dryRun);
         const send = (port: string, doc: Envelope) => this.send(node, port, doc);
         // the stopwatch runs while the component produces the next result (it discounts waiting for inputs)
         for await (const output of timedRequests(logic.execute(inputs, node.config, ctx), stopwatch)) {

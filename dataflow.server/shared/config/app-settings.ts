@@ -1,3 +1,4 @@
+import { LOG_FORMATS, LOG_LEVELS, type LogFormat, type ServerLogLevel } from '../logging/logger';
 import { parseKeys, type KeyEntry } from '../crypto/keyring';
 
 /*
@@ -21,6 +22,10 @@ export type AppSettings = {
   promoteTo?: string;
   /** the keys that encrypt the secrets (SECRETS_KEYS, the last one encrypts); empty = DEV's fixed key, refused elsewhere */
   secretsKeys: KeyEntry[];
+  /** the api's and the supervisor's own log: from which level (LOG_LEVEL, default info) */
+  logLevel: ServerLogLevel;
+  /** pretty for a terminal, json for a log collector (LOG_FORMAT, default pretty; docker-compose.yml sets json) */
+  logFormat: LogFormat;
 };
 
 export class AppSettingsError extends Error {
@@ -62,6 +67,16 @@ function keys(value: string | undefined): KeyEntry[] {
   }
 }
 
+function oneOf<T extends string>(name: string, value: string | undefined, allowed: readonly T[], fallback: T): T {
+  const v = value?.trim().toLowerCase();
+  if (!v) return fallback;
+  if (!(allowed as readonly string[]).includes(v)) {
+    throw new AppSettingsError(`${name} must be one of ${allowed.join(', ')} (got "${value}").`);
+  }
+
+  return v as T;
+}
+
 /** Reads and validates the configuration. Throws AppSettingsError naming the variable that is wrong. */
 export function readAppSettings(env: Record<string, string | undefined> = process.env): AppSettings {
   return {
@@ -72,5 +87,7 @@ export function readAppSettings(env: Record<string, string | undefined> = proces
     workerTags: list(env.WORKER_TAGS, ['default']),
     promoteTo: url('PROMOTE_TO', env.PROMOTE_TO),
     secretsKeys: keys(env.SECRETS_KEYS),
+    logLevel: oneOf('LOG_LEVEL', env.LOG_LEVEL, LOG_LEVELS, 'info'),
+    logFormat: oneOf('LOG_FORMAT', env.LOG_FORMAT, LOG_FORMATS, 'pretty'),
   };
 }

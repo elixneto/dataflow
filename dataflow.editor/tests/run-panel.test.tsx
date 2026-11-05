@@ -277,6 +277,19 @@ describe("a run's errors, stacked", () => {
     expect(runErrors(failed())).toEqual([{ nodeId: 'f', message: '$x is not defined', count: 2, at: at(2) }]);
   });
 
+  test('what a component logs at the error level (a Log set to Error) is in the Logs tab, not an error of the run', async () => {
+    const { runErrors } = await import('../src/pages/flow-editor/run-view');
+    const record = mockRunRecord(flow, 'validation', new Date('2026-11-04T12:00:00Z'));
+    const logged = {
+      ...record,
+      components: record.components.map(c => (c.nodeId === 'f' ? { ...c, logs: [{ at: at(1), level: 'error' as const, message: 'ER', byComponent: true as const }] } : c)),
+    };
+    expect(runErrors(logged)).toEqual([]);
+    const html = renderToStaticMarkup(<RunPanel record={logged} running={null} onFocus={() => {}} pinned={new Set()} onPin={() => {}} onClose={() => {}} />);
+    expect(html).not.toMatch(/>errors<span/);
+    expect(html).toContain('ER');
+  });
+
   test('a run that ended with errors opens on the Errors tab, with the count, and says why it failed above the tabs', () => {
     const html = renderToStaticMarkup(<RunPanel record={failed()} running={null} onFocus={() => {}} pinned={new Set()} onPin={() => {}} onClose={() => {}} />);
     expect(html).toMatch(/role="alert"[^>]*>.*&quot;Big&quot;: \$x is not defined/);

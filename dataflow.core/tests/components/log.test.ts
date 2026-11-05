@@ -59,5 +59,15 @@ test('Log: a message that fails is an error of the envelope', async () => {
   const node = logOf(r);
   expect(node.status).toBe('with-errors');
   expect(node.logs.filter(l => l.level === 'error')).toHaveLength(2);
+  // written by the engine: a failure of the run, not something the Log logged
+  expect(node.logs.filter(l => l.level === 'error' && l.byComponent)).toEqual([]);
   expect(node.outputs['out-0']).toBe(2);
+});
+
+test('Log at the error level only logs: its lines are marked as the component\'s, and the run completes', async () => {
+  const r = await flowRunner(flow({level: 'error', message: '$id'}), {mode: 'execution', id: 'l5', evaluate});
+  const node = logOf(r);
+  expect(node.status).toBe('completed');
+  expect(r.status).toBe('completed');
+  expect(node.logs.map(l => [l.level, l.message, l.byComponent])).toEqual([['error', '1', true], ['error', '2', true]]);
 });

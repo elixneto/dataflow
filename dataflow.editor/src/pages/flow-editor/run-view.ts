@@ -43,8 +43,9 @@ export const subRunsOf = (c: ComponentRun): (SubRun & { record: RunRecord | RunP
 const CLOSING_LINE = /^Run \S+ finished \(/;
 
 /**
- * The run's errors, from its components' error lines (not the log's other lines): the same message of the same
- * component once, with its count, in the order they first came.
+ * The run's errors, from the error lines the engine wrote (not the log's other lines, nor what a component logs at
+ * the error level, e.g. a Log set to Error): the same message of the same component once, with its count, in the
+ * order they first came.
  */
 export function runErrors(record: Shown): RunError[] {
   const stacked = new Map<string, RunError>();
@@ -52,7 +53,7 @@ export function runErrors(record: Shown): RunError[] {
   const collect = (shown: Shown, nodeId: string | undefined, via: string) => {
     for (const c of shown.components) {
       for (const line of c.logs) {
-        if (line.level !== 'error' || (c.type === 'end' && CLOSING_LINE.test(line.message))) {
+        if (line.level !== 'error' || line.byComponent || (c.type === 'end' && CLOSING_LINE.test(line.message))) {
           continue;
         }
 

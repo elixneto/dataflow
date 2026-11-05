@@ -5,6 +5,7 @@ import { openDatabase, type Database } from '#shared/database/database';
 import { followRunEvents } from '#features/runs/run-events';
 import { createApp } from '../../api/app';
 import { Supervisor } from '../../supervisor/supervisor';
+import { createLogger, silentLogger } from '#shared/logging/logger';
 import { inProcessExecutor } from '../../supervisor/workers/executor';
 
 setDefaultTimeout(30_000);
@@ -23,6 +24,9 @@ describe('runs api', () => {
   const sent: HttpRequest[] = [];
   let supervisor: Supervisor;
   let stopFollowing: () => Promise<void>;
+  /** the supervisor's events, as it writes them in Docker (JSON) */
+  const events: Record<string, unknown>[] = [];
+  const logger = createLogger({ service: 'supervisor', format: 'json', write: line => events.push(JSON.parse(line)) });
 
   const http = async (request: HttpRequest): Promise<HttpResponse> => {
     sent.push(request);
@@ -60,7 +64,7 @@ describe('runs api', () => {
     const keyring = new Keyring([{ version: 't', key: new Uint8Array(32).fill(5) }]);
     app = createApp(db, 'DEV', keyring);
     stopFollowing = await followRunEvents(db);
-    supervisor = new Supervisor({ db, keyring, executor: inProcessExecutor({ http }), tags: ['default'], log: () => {}, pollMs: 200 });
+    supervisor = new Supervisor({ db, keyring, executor: inProcessExecutor({ http }), tags: ['default'], logger, pollMs: 200 });
     await supervisor.start();
     projectId = (await call('POST', '/projects', { name: 'Runs' })).body.id as string;
     await call('POST', `/projects/${projectId}/secrets`, { name: 'tasks-secret', value: 'client-s3cret' });
@@ -351,6 +355,17 @@ describe('runs api', () => {
     expect(w.outputs['error']).toBe(1);
     expect(JSON.stringify(w.outputSample['error'])).toContain('The input does not fit Item');
     expect(w.subRuns?.map(r => [r.flow, r.status])).toEqual([['Tagged', 'completed']]);
+
+    // the log: the run's id in its message, then the run it called, with its own id, its parent and its root
+    const runId = started.body.id as string;
+    const childRunId = w.subRuns![0]!.id;
+    expect(events.find(e => e.run_id === runId && e.status === 'completed')).toMatchObject({
+      level: 'info', msg: `Run ${runId} "Caller" completed in ${Math.round(record.durationMs)} ms`, flow: 'Caller', root_run_id: runId, called_runs: 1, test_run: true,
+    });
+    expect(events.find(e => e.run_id === childRunId)).toMatchObject({
+      level: 'info', flow: 'Tagged', status: 'completed', parent_run_id: runId, root_run_id: runId, called_by: 'flow', called_by_node_id: 'w', trigger: 'flow-invoker',
+    });
+    expect(String(events.find(e => e.run_id === childRunId)!.msg)).toStartWith(`Run ${childRunId} "Tagged" completed in `);
   });
 });
 
@@ -414,7 +429,7 @@ describe('runs api, pins and Run from here', () => {
     const keyring = new Keyring([{ version: 't', key: new Uint8Array(32).fill(5) }]);
     app = createApp(db, 'DEV', keyring);
     stopFollowing = await followRunEvents(db);
-    supervisor = new Supervisor({ db, keyring, executor: inProcessExecutor({ http }), tags: ['default'], log: () => {}, pollMs: 200 });
+    supervisor = new Supervisor({ db, keyring, executor: inProcessExecutor({ http }), tags: ['default'], logger: silentLogger(), pollMs: 200 });
     await supervisor.start();
   });
 
