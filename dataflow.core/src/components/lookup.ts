@@ -93,7 +93,7 @@ export const lookup: ComponentLogic = {
         ctx.holding(table.size + held.length, doc);
       }
     }
-    ctx.log('info', `Lookup with ${table.size} key(s).`);
+    ctx.log('debug', `Lookup with ${table.size} key(s).`);
     if (repeated) ctx.log('warning', `${repeated} lookup envelope(s) with a repeated key: the first one wins.`);
 
     let found = 0;
@@ -127,6 +127,6 @@ export const lookup: ComponentLogic = {
       }
     }
     await hold;
-    ctx.log('info', `${found} envelope(s) found and ${unmatched} not found in the lookup.`);
+    ctx.log('debug', `${found} envelope(s) found and ${unmatched} not found in the lookup.`);
   },
 };

@@ -51,6 +51,6 @@ export const aggregate: ComponentLogic = {
       if (batch.length >= size) yield flush();
     }
     if (batch.length) yield flush();
-    ctx.log('info', `${received} envelope(s) in ${batches} batch(es) of up to ${size}.`);
+    ctx.log('debug', `${received} envelope(s) in ${batches} batch(es) of up to ${size}.`);
   },
 };

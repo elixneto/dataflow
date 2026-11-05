@@ -74,6 +74,6 @@ export const datagrid: ComponentLogic = {
       received += 1;
       for (const record of records) yield {port: 'out-0', doc: mergeFields(doc, record, ctx.node.override)};
     }
-    ctx.log('info', `${records.length} row(s) yielded for ${received} input envelope(s).`);
+    ctx.log('debug', `${records.length} row(s) yielded for ${received} input envelope(s).`);
   },
 };

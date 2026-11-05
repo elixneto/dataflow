@@ -186,9 +186,9 @@ export const httpRequest: ComponentLogic = {
     while (pending.length) yield* settle(pending.shift()!);
 
     const total = counts.ok + counts.client + counts.server + counts.other + counts.errors + counts.notSent;
-    if (counts.notSent && counts.notSent === total) ctx.log('info', `${total} ${method} request(s) prepared, none sent (test run).`);
+    if (counts.notSent && counts.notSent === total) ctx.log('debug', `${total} ${method} request(s) prepared, none sent (test run).`);
     else {
-      ctx.log('info', `${total} request(s): 2xx ${counts.ok}, 4xx ${counts.client}, 5xx ${counts.server}${counts.other ? `, other ${counts.other}` : ''}, errors ${counts.errors}, in ${Math.round(performance.now() - t0)} ms.`);
+      ctx.log('debug', `${total} request(s): 2xx ${counts.ok}, 4xx ${counts.client}, 5xx ${counts.server}${counts.other ? `, other ${counts.other}` : ''}, errors ${counts.errors}, in ${Math.round(performance.now() - t0)} ms.`);
     }
   },
 };

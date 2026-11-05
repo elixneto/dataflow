@@ -21,6 +21,6 @@ export const discard: ComponentLogic = {
       void doc;
       dropped += 1;
     }
-    ctx.log('info', `${dropped} envelope(s) discarded.`);
+    ctx.log('debug', `${dropped} envelope(s) discarded.`);
   },
 };

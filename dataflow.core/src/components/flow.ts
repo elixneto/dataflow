@@ -71,7 +71,7 @@ export const flowInvoker: ComponentLogic = {
         if (record.status === 'failed') {
           throw Object.assign(new Error(`The flow "${record.run.flow}" failed: ${record.error ?? 'no details'}`), {name: 'FlowError'});
         }
-        ctx.log(record.status === 'completed' ? 'info' : 'warning',
+        ctx.log(record.status === 'completed' ? 'debug' : 'warning',
           `Call ${calls}: "${record.run.flow}" ${record.status.replace('-', ' ')} in ${record.durationMs} ms, ${thisCall} envelope(s) at the End.`);
       } catch (e) {
         yield {error: toError(e), doc};
@@ -79,6 +79,6 @@ export const flowInvoker: ComponentLogic = {
         call?.cancel();
       }
     }
-    ctx.log('info', `${calls} call(s), ${outputs} envelope(s) returned.`);
+    ctx.log('debug', `${calls} call(s), ${outputs} envelope(s) returned.`);
   },
 };

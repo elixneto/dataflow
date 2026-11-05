@@ -55,6 +55,6 @@ export const limit: ComponentLogic = {
       }
     }
     const passed = Math.min(received, count);
-    ctx.log('info', `${passed} of ${received} envelope(s) passed (${mode} ${count}).`);
+    ctx.log('debug', `${passed} of ${received} envelope(s) passed (${mode} ${count}).`);
   },
 };

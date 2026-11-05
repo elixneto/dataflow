@@ -116,7 +116,8 @@ export function RunPanel({ record, usage, running, queued, onStop, stopping, onF
   // what is being looked at, kept from one run to the next (the record is gone while the next one starts): the Data
   // tab's component and the Logs tab's filters
   const [selected, setSelected] = useState<string | undefined>(undefined);
-  const [logsFilter, setLogsFilter] = useState<LogsFilter>({ level: 'all', node: 'all' });
+  // info and up: what a component says of itself (counts, times, the run's own lines) is debug
+  const [logsFilter, setLogsFilter] = useState<LogsFilter>({ level: 'info', node: 'all' });
   // a count clicked on the canvas: open, on the Data tab, on that component (the request is applied once, when it changes)
   const [shown, setShown] = useState<number | undefined>(undefined);
   if (show && show.at !== shown) {
@@ -292,7 +293,7 @@ function ErrorsTab({ record, errors, onFocus }: { record: Shown; errors: RunErro
           <li key={`${e.nodeId}:${e.message}`} className="border-b last:border-b-0">
             <button type="button" onClick={() => onFocus(e.nodeId)} className="flex w-full items-start gap-3 px-3 py-1.5 text-left hover:bg-accent" title="Show the component">
               <CircleX className="mt-0.5 size-3.5 shrink-0 text-destructive" aria-hidden />
-              <span className="w-40 shrink-0 truncate font-medium text-foreground">{c ? nameOf(c) : e.nodeId}</span>
+              <span className="w-1/5 shrink-0 truncate font-medium text-foreground">{c ? nameOf(c) : e.nodeId}</span>
               <span className="min-w-0 flex-1 font-mono break-words whitespace-pre-wrap text-destructive">
                 {e.via && (
                   <span className="text-muted-foreground" title="In a flow it called">
@@ -337,7 +338,7 @@ function LogsTab({ record, onFocus, filter, onFilter }: { record: Shown; onFocus
           ))}
         </select>
       </div>
-      {items.length === 0 && <p className="p-3 text-xs text-muted-foreground">No log lines.</p>}
+      {items.length === 0 && <p className="p-3 text-xs text-muted-foreground">{level === 'all' ? 'No log lines.' : `No log lines at ${level} and up (the components' own lines are debug).`}</p>}
       <LogList items={items} level={level} onFocus={onFocus} depth={0} />
     </div>
   );
@@ -381,7 +382,7 @@ function LogList({ items, level, onFocus, depth, focus }: { items: LogItem[]; le
             <button type="button" onClick={() => onFocus(focus ?? item.nodeId)} className="flex w-full gap-3 px-3 py-0.5 text-left hover:bg-accent" style={indent}>
               <span className="shrink-0 text-muted-foreground">{time(item.at)}</span>
               <span className={cn('w-14 shrink-0', LEVEL_COLOR[item.line.level])}>{item.line.level}</span>
-              <span className="w-40 shrink-0 truncate text-foreground" title={item.label}>{item.label}</span>
+              <span className="w-1/5 shrink-0 truncate text-foreground" title={item.label}>{item.label}</span>
               <span className="min-w-0 break-words whitespace-pre-wrap">{item.line.message}</span>
             </button>
           </li>
@@ -413,7 +414,7 @@ function SubRunGroup({ item, level, onFocus, depth, focus }: { item: Extract<Log
           <ChevronRight className="size-3.5 transition-transform group-open/sub:rotate-90" aria-hidden />
           <StatusIcon status={sub.status} className="size-3.5" />
         </span>
-        <span className="w-40 shrink-0 truncate text-foreground" title={item.label}>{item.label}</span>
+        <span className="w-1/5 shrink-0 truncate text-foreground" title={item.label}>{item.label}</span>
         <span className="min-w-0 break-words text-muted-foreground">
           Called <span className="text-foreground">{sub.flow}</span>: {sub.status === 'running' ? 'running' : `${status.toLowerCase()} in ${ms(sub.durationMs)}`}
           {errors > 0 && <span className="text-destructive"> · {errors} error line{errors === 1 ? '' : 's'}</span>}

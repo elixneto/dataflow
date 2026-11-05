@@ -66,7 +66,7 @@ test('HTTP Request sends one request per envelope with the evaluated URL, query,
   }});
   expect(node.logs.at(-1)?.message).toMatch(/^3 request\(s\): 2xx 3, 4xx 0, 5xx 0, errors 0, in \d+ ms\.$/);
   // per request at debug, and never a secret value
-  expect(node.logs.filter(l => l.level === 'debug')).toHaveLength(3);
+  expect(node.logs.filter(l => l.level === 'debug' && l.message.includes(' → '))).toHaveLength(3);
   expect(node.logs.some(l => l.message.includes('segredo-123456') || l.message.includes('gro.example.com/api'))).toBe(false);
   expect(node.waitingMs).toBeGreaterThan(0);
 });

@@ -155,7 +155,7 @@ export const sqlserver: ComponentLogic = {
           yield {port: 'out-0', doc: mergeFields(doc, row, ctx.node.override)};
         }
         // in all, and how much of it was the server (the rest is the flow consuming the rows: backpressure)
-        ctx.log('info', `Query ${queries}: ${thisQuery} row(s) in ${Date.now() - t0} ms (server ${Math.round(server)} ms).`);
+        ctx.log('debug', `Query ${queries}: ${thisQuery} row(s) in ${Date.now() - t0} ms (server ${Math.round(server)} ms).`);
       } catch (e) {
         // rows already yielded move on; the envelope that triggered the query goes to the error policy
         if (thisQuery) ctx.log('warning', `Query ${queries} stopped after ${thisQuery} row(s).`);
@@ -163,6 +163,6 @@ export const sqlserver: ComponentLogic = {
       }
       rows += thisQuery;
     }
-    ctx.log('info', `${rows} row(s) read in ${queries} query(ies).`);
+    ctx.log('debug', `${rows} row(s) read in ${queries} query(ies).`);
   },
 };

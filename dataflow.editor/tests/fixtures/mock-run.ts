@@ -128,7 +128,7 @@ export function mockRunRecord(file: FlowFile, mode: 'validation' | 'execution', 
     const count = (ports: Record<string, EnvelopeData[]>) => Object.fromEntries(Object.entries(ports).map(([p, e]) => [p, e.length]));
     const sent = Object.values(outputs).reduce((n, e) => n + e.length, 0);
     const logs: LogLine[] = reached
-      ? [{ at: start, level: 'info', message: node.type === START ? `${sent} envelope(s) sent.` : `${all.length} envelope(s) in, ${sent} out.` }]
+      ? [{ at: start, level: 'debug', message: node.type === START ? `${sent} envelope(s) sent.` : `${all.length} envelope(s) in, ${sent} out.` }]
       : [];
     if (node.type === 'http-request' && reached) {
       logs.push({ at: start, level: 'debug', message: `GET ${(node.config.url as { value?: string } | undefined)?.value || 'https://api.example.com'} → 200 in ${duration} ms.` });

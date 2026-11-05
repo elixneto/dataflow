@@ -48,6 +48,6 @@ export const split: ComponentLogic = {
         yield {port: 'out-0', doc: {FLOW_CURRENT_RUN: doc.FLOW_CURRENT_RUN, PARAMETERS: doc.PARAMETERS, DATA: item}};
       }
     }
-    ctx.log('info', `${received} envelope(s) split into ${items}.`);
+    ctx.log('debug', `${received} envelope(s) split into ${items}.`);
   },
 };
