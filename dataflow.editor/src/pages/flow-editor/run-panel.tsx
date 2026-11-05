@@ -204,7 +204,7 @@ export function RunPanel({ record, usage, running, queued, onStop, stopping, onF
               {record.from && ` · from ${nameOf(record.components.find(c => c.nodeId === record.from?.nodeId) ?? { label: record.from.label, type: record.from.label })}`}
             </span>
             <span className="font-mono text-xs text-muted-foreground">{ms(record.durationMs)}</span>
-            <RunUsageText usage={usage} />
+            <RunUsageText usage={usage} record={record} />
             <span className="font-mono text-xs text-muted-foreground" title="Envelopes the Start sent → envelopes that reached the End">
               {start ? total(start.outputs) : 0} → {end ? total(end.inputs) : 0} envelopes
             </span>
@@ -712,18 +712,25 @@ const stoppedRun = (record: Shown): boolean => record.status === 'failed' && /^R
 
 const USAGE_HINT =
   "What the run's worker process used. Memory: its peak, Bun included (about 50 MB before any run); in brackets, " +
-  'how much it grew during the run, close to what the run itself used. CPU: its processing time (counted in steps of ' +
-  'about 16 ms on Windows, so a short run may show 0).';
+  'how much it grew during the run, close to what the run itself used. Process CPU: the processing time of the whole ' +
+  "worker process during the run: the components' code and also the engine (scheduling, samples, progress sent to the " +
+  'server, memory sampling, garbage collection) and any flows called by a Flow Invoker. Counted in steps of about 16 ms ' +
+  'on Windows, so a short run may show 0. Components: the sum of the Active column of the Metrics tab, the time inside ' +
+  "the components' own code only.";
 
-/** "Memory 98 MB peak (+50 MB) · CPU 94 ms", or dashes for a run without them (older runs) */
-function RunUsageText({ usage }: { usage?: RunUsage | null }) {
+/** the Active time of the components, summed (what the Metrics tab's Active column adds up to) */
+const componentsActiveMs = (record: Shown) => record.components.reduce((n, c) => n + (c.activeTimeMs ?? 0), 0);
+
+/** "Memory 98 MB peak (+50 MB) · Process CPU 94 ms · Components 3 ms", or dashes for a run without them (older runs) */
+function RunUsageText({ usage, record }: { usage?: RunUsage | null; record: Shown }) {
   const peak = usage?.peakRssBytes ?? null;
   const start = usage?.startRssBytes ?? null;
   const cpu = usage?.cpuMs ?? null;
   const grew = peak !== null && start !== null ? `(+${bytes(Math.max(peak - start, 0))})` : '';
   return (
     <span className="cursor-help font-mono text-xs text-muted-foreground" title={USAGE_HINT}>
-      Memory {peak === null ? '—' : `${bytes(peak)} peak ${grew}`.trim()} · CPU {cpu === null ? '—' : `${Math.round(cpu)} ms`}
+      Memory {peak === null ? '—' : `${bytes(peak)} peak ${grew}`.trim()} · Process CPU {cpu === null ? '—' : `${Math.round(cpu)} ms`} · Components{' '}
+      {shortMs(componentsActiveMs(record))}
     </span>
   );
 }

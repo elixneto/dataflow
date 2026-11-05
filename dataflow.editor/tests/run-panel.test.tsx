@@ -113,15 +113,16 @@ describe("what the run's worker used, in the panel header", () => {
       <RunPanel record={mockRunRecord(flow, 'validation', new Date('2026-11-04T12:00:00Z'))} usage={usage} running={null} onFocus={() => {}} pinned={new Set()} onPin={() => {}} onClose={() => {}} />,
     );
 
-  test('its memory peak, how much it grew, its CPU; a tooltip says what they measure', () => {
+  test("its memory peak, how much it grew, the process CPU and the components' active time; a tooltip says what they measure", () => {
     const html = panel({ startRssBytes: 50 * 1024 ** 2, peakRssBytes: 98 * 1024 ** 2, cpuMs: 94.4 });
-    expect(html).toContain('Memory 98.0 MB peak (+48.0 MB) · CPU 94 ms');
-    expect(html).toMatch(/title="What the run&#x27;s worker process used\. Memory: its peak, Bun included/);
+    // the process CPU is the whole worker's; Components is the sum of the Active column
+    expect(html).toMatch(/Memory 98\.0 MB peak \(\+48\.0 MB\) · Process CPU 94 ms · Components [\d.]+ ms/);
+    expect(html).toMatch(/title="What the run&#x27;s worker process used\. Memory: its peak, Bun included.*Process CPU: the processing time of the whole worker process/);
   });
 
   test('dashes for a run without them (older runs)', () => {
-    expect(panel(null)).toContain('Memory — · CPU —');
-    expect(panel({ startRssBytes: null, peakRssBytes: 1024 ** 2, cpuMs: null })).toContain('Memory 1.0 MB peak · CPU —');
+    expect(panel(null)).toContain('Memory — · Process CPU —');
+    expect(panel({ startRssBytes: null, peakRssBytes: 1024 ** 2, cpuMs: null })).toContain('Memory 1.0 MB peak · Process CPU —');
   });
 });
 
