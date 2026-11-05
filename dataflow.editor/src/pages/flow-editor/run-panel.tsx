@@ -484,9 +484,12 @@ function DataTab(props: {
               </Button>
             )}
           </div>
-          <div className="grid min-h-0 flex-1 grid-cols-2 divide-x overflow-hidden">
-            <Envelopes title={`Input (${total(c.inputs)})`} envelopes={c.inputSample} view={view} treeKey={`${c.nodeId}:in`} />
-            <OutputPorts key={`${c.nodeId}:${show?.nodeId === c.nodeId ? show.at : ''}`} c={c} view={view} portName={portName} show={show?.nodeId === c.nodeId ? show.port : undefined} />
+          {/* the Start only sends (its input is its output), the End only receives */}
+          <div className={cn('grid min-h-0 flex-1 overflow-hidden', oneSide(c) ? 'grid-cols-1' : 'grid-cols-2 divide-x')}>
+            {c.type !== 'start' && <Envelopes title={`Input (${total(c.inputs)})`} envelopes={c.inputSample} view={view} treeKey={`${c.nodeId}:in`} />}
+            {c.type !== 'end' && (
+              <OutputPorts key={`${c.nodeId}:${show?.nodeId === c.nodeId ? show.at : ''}`} c={c} view={view} portName={portName} show={show?.nodeId === c.nodeId ? show.port : undefined} />
+            )}
           </div>
         </div>
       )}
@@ -500,6 +503,9 @@ function DataTab(props: {
     </div>
   );
 }
+
+/** the Start shows only its output (what it received is what it sends), the End only its input */
+const oneSide = (c: ComponentRun) => c.type === 'start' || c.type === 'end';
 
 /** a port's name for the Data tab (true, false, a Router's case, error), from the core and the node's config */
 export type PortName = (nodeId: string, type: string, port: string) => string;
@@ -726,9 +732,9 @@ export function ComponentLastRun({ c, about, portName = defaultPortName }: { c: 
           ))}
         </div>
       </div>
-      <div className="grid min-h-48 flex-1 grid-cols-2 divide-x overflow-hidden border-b">
-        <Envelopes title={`Input (${total(c.inputs)})`} envelopes={c.inputSample} view={view} treeKey={`${c.nodeId}:in`} />
-        <OutputPorts key={c.nodeId} c={c} view={view} portName={portName} />
+      <div className={cn('grid min-h-48 flex-1 overflow-hidden border-b', oneSide(c) ? 'grid-cols-1' : 'grid-cols-2 divide-x')}>
+        {c.type !== 'start' && <Envelopes title={`Input (${total(c.inputs)})`} envelopes={c.inputSample} view={view} treeKey={`${c.nodeId}:in`} />}
+        {c.type !== 'end' && <OutputPorts key={c.nodeId} c={c} view={view} portName={portName} />}
       </div>
       <ul aria-label="Log lines" className="max-h-40 shrink-0 overflow-auto py-1 font-mono text-xs">
         {c.logs.length === 0 && <li className="px-4 py-0.5 text-muted-foreground">No log lines.</li>}

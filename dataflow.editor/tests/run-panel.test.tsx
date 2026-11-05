@@ -212,6 +212,17 @@ describe("a component window's Last run tab", () => {
     expect(html).toContain('3 to true and 1 to false.');
   });
 
+  test('the Start shows only its output, the End only its input', async () => {
+    const { ComponentLastRun } = await import('../src/pages/flow-editor/run-panel');
+    const record = mockRunRecord(flow, 'validation', new Date('2026-11-04T12:00:00Z'));
+    const start = renderToStaticMarkup(<ComponentLastRun c={record.components.find(c => c.type === 'start')} />);
+    expect(start).toContain('Output (4)');
+    expect(start).not.toContain('Input (');
+    const end = renderToStaticMarkup(<ComponentLastRun c={record.components.find(c => c.type === 'end')} />);
+    expect(end).toContain('Input (');
+    expect(end).not.toContain('Output (');
+  });
+
   test('not run yet: it says so', async () => {
     const { ComponentLastRun } = await import('../src/pages/flow-editor/run-panel');
     expect(renderToStaticMarkup(<ComponentLastRun c={undefined} />)).toContain('Not run yet');
