@@ -489,3 +489,11 @@ export function inputIssues(input: unknown, shape: TypeShape): string[] {
   if (!Array.isArray(input) || shape.kind === 'array' || shape.kind === 'tuple' || shape.kind === 'json') return shapeIssues(input, shape);
   return input.flatMap((item, i) => shapeIssues(item, shape, `input[${i}]`)).slice(0, 50);
 }
+
+/**
+ * Whether a form marks a field as one to fill in: a required one, except a list or a record, which nothing says needs
+ * an item (it always goes, [] or {} at first: what fits it). Missing altogether, a required one is still an issue.
+ */
+export function needsFilling(field: TypeField): boolean {
+  return !field.optional && field.shape.kind !== 'array' && field.shape.kind !== 'record';
+}

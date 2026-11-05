@@ -109,3 +109,13 @@ test('a default input that is a list: one envelope per item, each checked; the f
   expect(html).toContain('input[1].id: expected a number, got text &quot;x&quot;.');
   expect(html).not.toContain('id="s-testInput-customerName"');
 });
+
+test('lists and records are not marked required: they go as [] or {} until items are added; text and numbers are', () => {
+  const html = render({ acceptsInput: true, inputType: 'orders/types#Extras', testInput: JSON.stringify({ notes: {}, size: [1, 'a'], discount: { type: 'percent', percent: 1 }, priority: 'low' }) });
+  const marked = (name: string) => new RegExp(`for="s-testInput-${name}"[^>]*>${name}</label><span[^>]*aria-label="Required"`).test(html);
+  expect(marked('notes')).toBe(false);
+  expect(marked('size')).toBe(true);
+  const order = render({ acceptsInput: true, inputType: 'orders/types#Order', testInput: JSON.stringify({ id: 1, customerName: 'Ana', active: true, status: 'new', tags: [], items: [] }) });
+  const markedOrder = (name: string) => new RegExp(`for="s-testInput-${name}"[^>]*>${name}</label><span[^>]*aria-label="Required"`).test(order);
+  expect([markedOrder('tags'), markedOrder('items'), markedOrder('id'), markedOrder('customerName')]).toEqual([false, false, true, true]);
+});

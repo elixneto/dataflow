@@ -1,6 +1,6 @@
 import { useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Plus, Trash } from 'lucide-react';
-import { emptyOfShape, inputTypeRef, scriptImports, scriptTypeShape, inputIssues, unionValue, type TypeShape } from '@dataflow/core';
+import { emptyOfShape, inputTypeRef, scriptImports, scriptTypeShape, inputIssues, needsFilling, unionValue, type TypeShape } from '@dataflow/core';
 import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
 import { loadScriptContent, useProjectScripts } from '@/data/scripts/scripts-store';
@@ -237,7 +237,8 @@ function ObjectControl(props: { id: string; shape: { fields: Extract<TypeShape, 
               <label htmlFor={fieldId} className="font-mono font-medium">
                 {field.name}
               </label>
-              {!field.optional && (
+              {/* a list or a record is not marked: it always goes, [] or {} until items are added (the core's rule) */}
+              {needsFilling(field) && (
                 <span className="text-destructive" title="Required" aria-label="Required">
                   *
                 </span>

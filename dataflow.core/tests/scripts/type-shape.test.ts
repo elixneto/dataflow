@@ -188,3 +188,14 @@ export interface Order {
   expect(inputIssues([good, {...good, id: 'x'}], shape)).toEqual(['input[1].id: expected a number, got text "x".']);
   expect(inputIssues(good, shape)).toEqual([]);
 });
+
+test('a required list or record is not one to fill in: [] and {} fit it, its empty value has them; missing, it is an issue', async () => {
+  const {needsFilling, shapeIssues} = await import('../../src/index');
+  const code = `export interface Line { sku: string; tags: string[]; allocation: Record<string, number>; notes?: string[] }`;
+  const shape = shapeOf({c: code}, 'c', 'Line');
+  if (shape.kind !== 'object') throw new Error('an object');
+  expect(shape.fields.map(f => [f.name, needsFilling(f)])).toEqual([['sku', true], ['tags', false], ['allocation', false], ['notes', false]]);
+  expect(emptyOfShape(shape)).toEqual({sku: '', tags: [], allocation: {}});
+  expect(shapeIssues({sku: 'A', tags: [], allocation: {}}, shape)).toEqual([]);
+  expect(shapeIssues({sku: 'A'}, shape)).toEqual(['input.tags: missing (required).', 'input.allocation: missing (required).']);
+});
