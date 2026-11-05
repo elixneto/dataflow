@@ -1,6 +1,7 @@
 import { fileURLToPath } from 'node:url';
-import type { RunProgress } from '@dataflow/core';
+import { oauthTokenFromMemory, type RunProgress, type SendHttp } from '@dataflow/core';
 import { failedRecord, stoppedRecord, type RunJob } from '#features/runs/run-job';
+import { sendHttp } from '#shared/runner/send-http';
 import type { Executor, Execution } from './executor';
 import type { FromWorker, ToWorker } from './protocol';
 
@@ -17,6 +18,8 @@ export type PoolOptions = {
   cancelGraceMs?: number;
   /** a run that has not ended this long after it started is killed with its worker (past the engine's own timeout) */
   hardTimeoutMs?: number;
+  /** what asks the OAuth 2.0 tokens from their providers (the runner's HTTP by default) */
+  http?: SendHttp;
 };
 
 type Slot = {
@@ -29,10 +32,12 @@ type Slot = {
 
 /**
  * Worker processes (workers/worker.ts), one run each at a time, talking over IPC. A worker that dies mid-run fails
- * that run with what it did so far and is replaced; one past its runs or memory is replaced between runs.
+ * that run with what it did so far and is replaced; one past its runs or memory is replaced between runs. The OAuth 2.0
+ * tokens of the runs live here, in the supervisor's memory, one per connection for all the workers (asked once, even
+ * by several at a time; kept when a worker is replaced; never in the database): a worker asks for one (`token`).
  */
 export function processPool(options: PoolOptions): Executor {
-  const { size, maxRunsPerWorker = 100, maxRssBytes = 1024 ** 3, cancelGraceMs = 5_000, hardTimeoutMs = 11 * 60_000 } = options;
+  const { size, maxRunsPerWorker = 100, maxRssBytes = 1024 ** 3, cancelGraceMs = 5_000, hardTimeoutMs = 11 * 60_000, http = sendHttp } = options;
   let closing = false;
   const slots: Slot[] = [];
 
@@ -58,6 +63,13 @@ export function processPool(options: PoolOptions): Executor {
       ipc(message: FromWorker) {
         if (message.type === 'ready') {
           ready();
+        } else if (message.type === 'token') {
+          // from the supervisor's memory, or asked from the provider (once for all who need it meanwhile)
+          const answer = (reply: ToWorker) => slot.process === child && child.send(reply);
+          oauthTokenFromMemory(message.request, http).then(
+            token => answer({ type: 'token', ask: message.ask, token }),
+            (error: unknown) => answer({ type: 'token', ask: message.ask, error: error instanceof Error ? error.message : String(error) }),
+          );
         } else if (message.type === 'progress' && slot.current?.job.id === message.id) {
           slot.current.last = message.progress;
           slot.current.onProgress(message.progress);

@@ -1,6 +1,7 @@
 import type {RunProgress} from '#types/run-record.type';
 import type {RunFromPlan} from '#engine/run-from';
 import type {ConnectionProfileData} from '../connections/connection-access';
+import type {OAuthTokenSource} from '../connections/oauth-token-cache';
 import type {Envelope} from '#types/envelope.type';
 import type {EvaluateExpression} from '#types/evaluate-expression.type';
 import type {ExecutableFlow} from '#types/executable-flow.type';
@@ -56,6 +57,11 @@ export type RunOptions = {
   variables?: Record<string, string>;
   /** the project's connection profiles, by id (their secret fields name entries of `secrets`) */
   connections?: Record<string, ConnectionProfileData>;
+  /**
+   * where the OAuth 2.0 tokens of the run's API connections come from (and a refused one goes back): by default the
+   * memory of the run's own process (oauth-token-cache.ts); a worker's runs ask their supervisor
+   */
+  oauthTokens?: OAuthTokenSource;
   /**
    * Run from here: the run is the component and what follows it (applyRunFrom), and these envelopes go into its inputs
    * (the record says so; its first log line too)

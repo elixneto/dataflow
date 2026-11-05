@@ -9,6 +9,7 @@ import {
   type ConnectionProfileData,
   type ExecutableFlow,
   type FlowFile,
+  type OAuthTokenSource,
   type RunMode,
   type RunProgress,
   type RunRecord,
@@ -176,11 +177,12 @@ export async function prepareJob(db: Database, keyring: Keyring | undefined, run
 
 /**
  * Runs a prepared job with the engine (in a worker). The engine hides the secrets' values in the logs, the errors
- * and the record. `onProgress`: the run so far, a few times a second; `signal`: Stop.
+ * and the record. `onProgress`: the run so far, a few times a second; `signal`: Stop; `oauthTokens`: where the OAuth 2.0
+ * tokens come from (a worker: its supervisor).
  */
 export async function runJob(
   job: RunJob,
-  options: { http?: SendHttp; onProgress?: (progress: RunProgress) => void; signal?: AbortSignal } = {},
+  options: { http?: SendHttp; onProgress?: (progress: RunProgress) => void; signal?: AbortSignal; oauthTokens?: OAuthTokenSource } = {},
 ): Promise<RunRecord> {
   try {
     return await flowRunner(job.flow, {
@@ -206,6 +208,8 @@ export async function runJob(
       flows: job.flows,
       prepareScript: (code, globals) => prepareScript(code, globals, job.scripts ?? {}, job.scriptHashes ?? {}),
       signal: options.signal,
+      // a worker's OAuth 2.0 tokens come from its supervisor; elsewhere (tests) from this process's memory
+      ...(options.oauthTokens ? { oauthTokens: options.oauthTokens } : {}),
     });
   } catch (e) {
     // the engine masks what it writes; an error thrown past it is masked here

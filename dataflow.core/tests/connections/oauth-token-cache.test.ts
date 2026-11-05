@@ -148,3 +148,19 @@ test('a token from memory is hidden in the run that uses it, the one that got it
     expect(JSON.stringify(r)).not.toContain('tok-secret-1');
   }
 });
+
+test('a run with its own token source (a worker asking its supervisor): asks it, gives back the refused token on a 401', async () => {
+  const asked: {key: string; refused?: string}[] = [];
+  const s = server(r => (r.headers.Authorization === 'Bearer from-source-2' ? {status: 200, headers: {}, body: '{}'} : {status: 401, headers: {}, body: 'no'}));
+  const r = await run(calling, {
+    ...options(s.http),
+    oauthTokens: async request => {
+      asked.push({key: request.key, ...(request.refused ? {refused: request.refused} : {})});
+      return {accessToken: `from-source-${asked.length}`, expiresAt: Date.now() + 3_600_000};
+    },
+  }, 'sourced', [{a: 1}]);
+  expect(r.status).toBe('completed');
+  expect(asked).toEqual([{key: 'profile:api'}, {key: 'profile:api', refused: 'from-source-1'}]);
+  // the provider itself is never called by the run: the source does it
+  expect(s.tokenCalls()).toBe(0);
+});

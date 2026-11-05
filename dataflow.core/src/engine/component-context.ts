@@ -2,8 +2,8 @@ import {timed, timedRequests} from '#engine/stopwatch';
 import {invokeFlow} from '#engine/invoke-flow';
 import {envelopeVariables} from '#envelope/expression-variables';
 import {toError} from '#errors/normalize-error';
-import {API_CONNECTION_TYPES, connectionHeaders, connectionString, oauthToken, resolveConnection, type ConnectionUse} from '../connections/connection-access';
-import {cachedAccessTokens, cachedOAuthToken, dropOAuthToken, oauthFingerprint} from '../connections/oauth-token-cache';
+import {API_CONNECTION_TYPES, connectionHeaders, connectionString, resolveConnection, type ConnectionUse} from '../connections/connection-access';
+import {cachedAccessTokens, oauthFingerprint, oauthTokenFromMemory} from '../connections/oauth-token-cache';
 import type {FlowExecution} from '#engine/flow-execution';
 import type {ComponentContext} from '#types/component-context.type';
 import type {ExecutableNode} from '#types/executable-node.type';
@@ -13,7 +13,7 @@ const LOGGED_UPSERTS = 3;
 /** How much of a request body a test run writes in the log. */
 const BODY_EXCERPT = 300;
 
-/** the OAuth 2.0 access tokens a run used (they live in the process's memory, oauth-token-cache.ts): hidden in its logs */
+/** the OAuth 2.0 access tokens a run used (kept by its token source, see RunOptions.oauthTokens): hidden in its logs */
 const runTokens = new WeakMap<object, Set<string>>();
 const tokensOf = (options: object) => {
   let tokens = runTokens.get(options);
@@ -154,7 +154,7 @@ export function componentContext(execution: FlowExecution, node: ExecutableNode,
       // waiting (for an outside system) while at least one request is in flight, the OAuth 2.0 token's included
       if (!dryRun && inFlight++ === 0) waiting.resume();
       try {
-        // an API connection: its headers first (an OAuth 2.0 token from the process's memory, asked when it has none), the component's own win
+        // an API connection: its headers first (an OAuth 2.0 token from the run's token source, see RunOptions.oauthTokens), the component's own win
         let request = given;
         let oauth: {name: string; renew: (refused?: string) => Promise<string>} | undefined;
         let token: string | undefined;
@@ -164,19 +164,14 @@ export function componentContext(execution: FlowExecution, node: ExecutableNode,
             const fingerprint = oauthFingerprint(resolved);
             const key = 'profile' in auth ? `profile:${auth.profile}` : `inline:${fingerprint}`;
             const name = 'profile' in auth ? (options.connections?.[auth.profile]?.name ?? auth.profile) : 'of the HTTP Request';
-            const ask = async () => {
-              const t0 = performance.now();
-              const got = await oauthToken(resolved, async r => http({...r, timeoutMs: given.timeoutMs, signal: execution.control.signal}));
-              log('debug', `OAuth 2.0 token from ${mask(resolved.config.tokenUrl ?? '')} in ${Math.round(performance.now() - t0)} ms.`);
-              return got;
-            };
+            const source = options.oauthTokens ?? (r => oauthTokenFromMemory(r, http, execution.control.signal));
             oauth = {
               name,
-              // a token the API refused goes first: the next one is asked (or the one another request already got)
+              // a token the API refused goes back with the ask: the next one comes (or the one another request already got)
               renew: async refused => {
-                if (refused) dropOAuthToken(key, refused);
-                const got = await cachedOAuthToken(key, fingerprint, ask);
+                const got = await source({key, fingerprint, connection: resolved, timeoutMs: given.timeoutMs, ...(refused ? {refused} : {})});
                 tokensOf(options).add(got.accessToken);
+                if (got.askedMs !== undefined) log('debug', `OAuth 2.0 token from ${mask(resolved.config.tokenUrl ?? '')} in ${got.askedMs} ms.`);
                 return got.accessToken;
               },
             };
