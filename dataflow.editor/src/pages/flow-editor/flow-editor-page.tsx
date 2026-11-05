@@ -3,7 +3,7 @@ import { flowFileName, flowToYaml, type FlowCall } from '@dataflow/core';
 import { canvasToFlowFile, saveFile } from '@/editor/flow-file';
 import { useParams } from 'react-router';
 import type { Flow, Folder } from '@/data/flows/flow';
-import { getFlow, getProjectContents } from '@/data/flows/flows-api';
+import { getFlow, getProjectContents, restoreFlow } from '@/data/flows/flows-api';
 import { folderPath } from '@/data/flows/project-tree';
 import { useProject } from '@/data/projects/use-project';
 import { ConnectionStatus } from '@/layout/connection-status';
@@ -37,6 +37,12 @@ export function FlowEditorPage() {
   const { projectId = '', flowId = '' } = useParams();
   const project = useProject(projectId);
   const [loaded, setLoaded] = useState<Loaded | null>(null);
+  // read again: after a restore, or when a save says the flow is no longer there (archived or removed)
+  const [readAgain, setReadAgain] = useState(0);
+  // the draft's save state, from the canvas (shown in the top bar)
+  const [save, setSave] = useState<DraftSave | null>(null);
+  // a save answered not found: the flow is read again (archived: it turns read-only, with Restore)
+  const gone = save?.state.status === 'gone';
 
   useEffect(() => {
     let current = true;
@@ -51,14 +57,29 @@ export function FlowEditorPage() {
     return () => {
       current = false;
     };
-  }, [flowId, projectId]);
+  }, [flowId, projectId, readAgain, gone]);
 
   const current = loaded?.for === flowId ? loaded : null;
   const flowName = current ? (current.flow?.name ?? 'Flow not found') : '';
+  // an archived flow opens read-only (nothing saved, nothing run), with Restore
+  const archived = Boolean(current?.flow?.archivedAt);
+  const [restoring, setRestoring] = useState<{ busy: boolean; error?: string }>({ busy: false });
   // Download: the canvas as it is now, as the core's YAML flow file
   const canvas = useRef<CanvasHandle | null>(null);
-  // the draft's save state, from the canvas (shown in the top bar)
-  const [save, setSave] = useState<DraftSave | null>(null);
+  const restore = async () => {
+    setRestoring({ busy: true });
+    const result = await restoreFlow(flowId);
+    if (!result.ok) {
+      setRestoring({ busy: false, error: result.error.message });
+      return;
+    }
+
+    // back in its folder (or the root): read again, and the draft saves again (what changed here goes now)
+    setLoaded(previous => (previous?.flow ? { ...previous, flow: result.value } : previous));
+    setReadAgain(n => n + 1);
+    setRestoring({ busy: false });
+    await save?.resume();
+  };
   // the canvas's Flow Invoker calls, as they change (the top bar's Calls)
   const [ownCalls, setOwnCalls] = useState<FlowCall[] | null>(null);
   const download = () => {
@@ -136,8 +157,9 @@ export function FlowEditorPage() {
       setRunning(null);
       return { ok: true, value: null };
     };
-    if (save && !(await save.flush())) {
-      return fail('The flow could not be saved, so it did not run.');
+    const flushed = save ? await save.flush() : 'saved';
+    if (flushed !== 'saved') {
+      return fail(flushed === 'not-saved' ? 'The flow could not be saved, so it did not run.' : 'This flow was archived or removed, so it did not run.');
     }
 
     // Run from here: the component's name as the canvas shows it (the record and its first log line say it)
@@ -267,13 +289,13 @@ export function FlowEditorPage() {
       <header className="flex h-14 shrink-0 items-center gap-2 border-b bg-background px-4">
         <ProjectBreadcrumb project={project.status === 'ready' ? project.project : null} folders={current?.folders} flowName={flowName} />
         <div className="ml-auto flex shrink-0 items-center gap-1">
-          <SaveStatus save={save} />
+          <SaveStatus save={save} archived={archived ? { onRestore: () => void restore(), restoring: restoring.busy, ...(restoring.error ? { error: restoring.error } : {}) } : undefined} />
           <span className="mx-1 h-5 w-px bg-border" aria-hidden />
           {current?.flow && (
             // this flow's calls as the canvas has them now
             <FlowCallsButton projectId={projectId} flowId={flowId} own={ownCalls} />
           )}
-          <FlowActions onDownload={current?.flow ? download : undefined} running={running} onRun={current?.flow ? run : undefined} />
+          <FlowActions onDownload={current?.flow ? download : undefined} running={running} onRun={current?.flow && !archived && !gone ? run : undefined} />
           <span className="mx-1 h-5 w-px bg-border" aria-hidden />
           <ConnectionStatus />
           <ThemeToggle />
@@ -289,7 +311,7 @@ export function FlowEditorPage() {
                 zoom and minimap) the rest */}
             <div className="flex h-full flex-col">
               <div className="relative min-h-0 flex-1">
-                <FlowCanvas exportRef={canvas} onSave={setSave} onRunFrom={runFrom} onPinned={setPinned} onCalls={setOwnCalls} marks={marks} known={knownNow} inputSamples={samplesNow} />
+                <FlowCanvas exportRef={canvas} readOnly={archived} onSave={setSave} onRunFrom={runFrom} onPinned={setPinned} onCalls={setOwnCalls} marks={marks} known={knownNow} inputSamples={samplesNow} />
               </div>
               {panelOpen && (
                 <RunPanel

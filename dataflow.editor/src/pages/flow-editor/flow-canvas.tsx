@@ -29,6 +29,8 @@ import type { ComponentDraft } from '@/editor/component-draft';
 import { ComponentWindow } from '@/editor/component-window';
 import { FloatingWindow, type WindowPosition, type WindowSize } from '@/editor/floating-window';
 import { readViewport, readWindow, rememberViewport, rememberWindow } from '@/editor/window-memory';
+import { cn } from '@/lib/utils';
+import { editing } from '@/editor/read-only';
 import { useFlowDraft, type DraftSave } from '@/editor/flow-save';
 import { edgesWithPorts } from '@/editor/flow-file';
 import { RunFromContext, RunMarksContext, type RunMarks } from '@/editor/run/run-marks';
@@ -100,6 +102,7 @@ const WIDE_WINDOW = { w: 760, h: null };
 
 const noRunFrom = () => {};
 
+
 export function FlowCanvas(props: {
   exportRef?: RefObject<CanvasHandle | null>;
   onSave?: (save: DraftSave) => void;
@@ -114,8 +117,10 @@ export function FlowCanvas(props: {
   onRunFrom?: (nodeId: string) => void;
   /** this flow's calls (its Flow Invokers), each time one is added, removed or changed (the top bar's Calls) */
   onCalls?: (calls: FlowCall[]) => void;
+  /** an archived flow: shown to read (pan, zoom), nothing changes and nothing is saved */
+  readOnly?: boolean;
 }) {
-  const { exportRef, onSave, marks = null, onPinned, known, inputSamples, onRunFrom = noRunFrom, onCalls } = props;
+  const { exportRef, onSave, marks = null, onPinned, known, inputSamples, onRunFrom = noRunFrom, onCalls, readOnly = false } = props;
   const [nodes, setNodes, onNodesChange] = useNodesState<FlowNode>(FIXED_NODES);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   // what the page's Download takes: the canvas as it is now
@@ -124,11 +129,16 @@ export function FlowCanvas(props: {
 
   // ---- the draft on the server (editor/flow-save.ts): opened here, saved by itself; the view comes back where it was
   const opened = useRef<{ nodes: FlowNode[]; edges: Edge[] } | null>(null);
-  const draft = useFlowDraft(flowId, { nodes, edges }, loaded => {
-    opened.current = loaded;
-    setNodes(loaded.nodes);
-    setEdges(loaded.edges);
-  });
+  const draft = useFlowDraft(
+    flowId,
+    { nodes, edges },
+    loaded => {
+      opened.current = loaded;
+      setNodes(loaded.nodes);
+      setEdges(loaded.edges);
+    },
+    readOnly,
+  );
   // once the draft is on the canvas and the canvas is ready: the remembered view, or the whole flow on screen
   useEffect(() => {
     if (!flow || !opened.current || draft.state.status === 'loading') {
@@ -241,7 +251,7 @@ export function FlowCanvas(props: {
         return;
       }
 
-      if (isEditableField(event.target)) {
+      if (isEditableField(event.target) || readOnly) {
         return;
       }
 
@@ -255,7 +265,7 @@ export function FlowCanvas(props: {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [undo, redo, saveNow]);
+  }, [undo, redo, saveNow, readOnly]);
 
   // the code editor (Monaco) in the background: a window with code opens with it at once
   useEffect(preloadCodeEditor, []);
@@ -280,7 +290,7 @@ export function FlowCanvas(props: {
       }
     };
     const onPaste = (event: ClipboardEvent) => {
-      if (!canvasHasFocus(document.activeElement) || !event.clipboardData) {
+      if (readOnly || !canvasHasFocus(document.activeElement) || !event.clipboardData) {
         return;
       }
 
@@ -310,7 +320,7 @@ export function FlowCanvas(props: {
       window.removeEventListener('copy', onCopy);
       window.removeEventListener('paste', onPaste);
     };
-  }, [nodes, edges, record, setNodes, setEdges, flow]);
+  }, [nodes, edges, record, setNodes, setEdges, flow, readOnly]);
 
   const onConnect = useCallback(
     (connection: Connection) => {
@@ -391,7 +401,7 @@ export function FlowCanvas(props: {
 
   const onDrop = (event: DragEvent) => {
     const type = event.dataTransfer.getData(COMPONENT_DRAG_TYPE);
-    if (!type || !flow) {
+    if (!type || !flow || readOnly) {
       return;
     }
 
@@ -589,8 +599,10 @@ export function FlowCanvas(props: {
       <ScriptGlobalsContext.Provider value={globals}>
       <ExpressionVariablesContext.Provider value={expressionVariables}>
         <HistoryContext.Provider value={history}>
-          <div className="relative h-full w-full">
+          {/* read-only: the components take no clicks (their menus, ports and fields), the canvas still pans and zooms */}
+          <div className={cn('relative h-full w-full', readOnly && '[&_.react-flow__node]:pointer-events-none')}>
             <ReactFlow
+              {...editing(readOnly)}
               nodes={shownNodes}
               edges={shownEdges}
               nodeTypes={NODE_TYPES}
@@ -631,8 +643,6 @@ export function FlowCanvas(props: {
               onMoveEnd={(_, view) => rememberViewport(flowId, view)}
               snapToGrid
               snapGrid={[DOT_GAP, DOT_GAP]}
-              deleteKeyCode={['Delete', 'Backspace']}
-              selectionOnDrag
               selectionMode={SelectionMode.Partial}
               multiSelectionKeyCode={['Meta', 'Control', 'Shift']}
               elevateNodesOnSelect={false}
@@ -640,12 +650,13 @@ export function FlowCanvas(props: {
               panOnScroll
               zoomActivationKeyCode={['Meta', 'Control']}
               zoomOnDoubleClick={false}
-              onNodeDoubleClick={(_, node) => isComponent(node) && (!isFixedType(node.data.type) || node.data.type === START) && openWindow(node.id)}
+              onNodeDoubleClick={(_, node) => !readOnly && isComponent(node) && (!isFixedType(node.data.type) || node.data.type === START) && openWindow(node.id)}
               minZoom={0.2}
               proOptions={{ hideAttribution: true }}
             >
               <Background variant={BackgroundVariant.Dots} gap={DOT_GAP} size={DOT_SIZE} color="var(--grid)" />
-              <ComponentPalette />
+              {!readOnly && <ComponentPalette />}
+              {!readOnly && (
               <Panel position="top-right" className="nopan nowheel nodrag flex gap-2" style={{ margin: 12 }}>
                 <div className="flex rounded-md bg-card shadow-md">
                   <Button variant="outline" size="icon-sm" className="rounded-r-none" disabled={!steps.undo} onClick={undo} title="Undo (Ctrl+Z)" aria-label="Undo">
@@ -662,6 +673,7 @@ export function FlowCanvas(props: {
                   <SquareDashed /> Group
                 </Button>
               </Panel>
+              )}
               <ZoomControls />
               {/* the whole flow in small, bottom right: drag on it to pan, scroll on it to zoom */}
               <MiniMap<FlowNode>

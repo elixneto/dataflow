@@ -1,12 +1,28 @@
-import { CircleAlert, CircleCheck, LoaderCircle, RefreshCw } from 'lucide-react';
+import { Archive, ArchiveRestore, CircleAlert, CircleCheck, LoaderCircle, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import type { DraftSave } from '@/editor/flow-save';
 
 /**
  * Where the flow's draft stands, in the top bar: Saving…, Saved, Not saved (with Retry), or changed elsewhere (with
- * Reload). It saves by itself; Ctrl+S saves now.
+ * Reload), archived or removed (nothing to retry). It saves by itself; Ctrl+S saves now. An archived flow (`archived`,
+ * read-only) shows Archived and Restore instead.
  */
-export function SaveStatus({ save }: { save: DraftSave | null }) {
+export function SaveStatus({ save, archived }: { save: DraftSave | null; archived?: { onRestore: () => void; restoring: boolean; error?: string } }) {
+  if (archived) {
+    return (
+      <span className="flex items-center gap-1.5">
+        <Status
+          icon={<Archive className="size-3.5 text-amber-600 dark:text-amber-400" />}
+          text={archived.error ? `Archived: ${archived.error}` : 'Archived (read-only)'}
+          title="This flow is archived: it opens to read, nothing is saved or run. Restore it to change it."
+        />
+        <Button variant="outline" size="sm" className="h-7 px-2 text-xs" disabled={archived.restoring} onClick={archived.onRestore}>
+          {archived.restoring ? <LoaderCircle className="animate-spin" /> : <ArchiveRestore />} Restore
+        </Button>
+      </span>
+    );
+  }
+
   if (!save) {
     return null;
   }
@@ -29,6 +45,16 @@ export function SaveStatus({ save }: { save: DraftSave | null }) {
           </Button>
         </span>
       );
+    case 'gone':
+      return (
+        <Status
+          icon={<CircleAlert className="size-3.5 text-destructive" />}
+          text="This flow was archived or removed"
+          title="This flow was archived or removed: your changes here are not saved"
+        />
+      );
+    case 'read-only':
+      return null;
     case 'conflict':
       return (
         <span className="flex items-center gap-1.5">
