@@ -575,28 +575,28 @@ const METRICS: { label: string; hint: string; right?: boolean }[] = [
     {label: 'Out', hint: 'Envelopes that went out (per output, when it has several)', right: true},
     {
         label: 'Open',
-        hint: 'From its first envelope until it finished: its active and waiting time, and the time it spent waiting for envelopes or for the next component to take them',
+        hint: 'Time open, from its first envelope until it finished.',
         right: true
     },
     {
         label: 'Active',
-        hint: 'Time processing, its own work only (practically the CPU it used): not waiting for anything',
+        hint: 'Time doing its own work.',
         right: true
     },
     {
         label: 'Waiting',
-        hint: 'Time waiting for an outside system: an HTTP call (and its OAuth 2.0 token), database rows, a MongoDB write, a called flow',
+        hint: 'Waiting for an outside system: database, API, a called flow.',
         right: true
     },
     {
         label: 'Memory',
-        hint: 'Most it held at once (the Lookup table, an Aggregate batch, a Sort): envelopes and an estimate of their size',
+        hint: "Envelopes it holds at once, and their size. Only components that collect them (Lookup, Aggregate, Sort…). The run's memory is at the top.",
         right: true
     },
     {label: 'Start', hint: 'When its first envelope arrived', right: true},
     {
         label: 'Timeline',
-        hint: 'When it was open in the run, in the order of the columns: light = open, middle = active (working), dark = waiting for an outside system'
+        hint: 'Light = open, middle = active, dark = waiting.'
     },
 ];
 
