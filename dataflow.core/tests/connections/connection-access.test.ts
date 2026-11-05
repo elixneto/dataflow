@@ -1,9 +1,12 @@
-import {expect, test} from 'bun:test';
+import {beforeEach, expect, test} from 'bun:test';
 import {
-  COMPONENTS, connectionHeaders, connectionIssues, connectionSettings, connectionString, connectionUse, flowRunner, resolveConnection, settingVisible,
+  COMPONENTS, connectionHeaders, forgetOAuthTokens, connectionIssues, connectionSettings, connectionString, connectionUse, flowRunner, resolveConnection, settingVisible,
   type ExecutableFlow,
 } from '../../src/index';
 import {evaluate} from '../helpers';
+
+// each test asks its own OAuth 2.0 token (they live in the process's memory otherwise)
+beforeEach(() => forgetOAuthTokens());
 
 const SQL = {host: 'db.example.com', port: '1433', database: 'crm', user: 'reader', password: 'ERP_PW', encrypt: 'on', trustServerCertificate: 'off'};
 const PROFILES = {

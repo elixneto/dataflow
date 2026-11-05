@@ -15,6 +15,7 @@ export * from '#errors/normalize-error';
 export * from './folders/folder-tree';
 export * from './connections/connection-types';
 export * from './connections/connection-access';
+export * from './connections/oauth-token-cache';
 export * from './connections/connection-profile';
 export * from './connections/sensitive-headers';
 export {Channel} from './channel';
