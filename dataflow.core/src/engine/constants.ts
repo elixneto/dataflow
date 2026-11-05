@@ -10,6 +10,9 @@ export const MAX_FLOW_DEPTH = 10;
 /** How many sub-runs to keep in the component's record. */
 export const MAX_SUB_RUNS = 50;
 
+/** How many envelopes to keep per port in a sub-run's record (the parent's record holds up to MAX_SUB_RUNS of them). */
+export const SUB_RUN_SAMPLE_SIZE = 5;
+
 /** How many envelopes to measure at the start to estimate the size; after that, one every MEASURE_INTERVAL. */
 export const INITIAL_MEASURES = 50;
 export const MEASURE_INTERVAL = 100;

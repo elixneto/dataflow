@@ -284,3 +284,78 @@ describe("a run's errors, stacked", () => {
     expect(html).toContain('×2');
   });
 });
+
+describe('the runs a Flow Invoker called, in the panel', () => {
+  const at = (s: number) => `2026-11-04T12:00:0${s}.000Z`;
+  /** the parent run: Big (standing in for a Flow Invoker) called "Child" twice; the second call's Mapper failed */
+  const withCalls = (childErrors: boolean) => {
+    const record = mockRunRecord(flow, 'validation', new Date('2026-11-04T12:00:00Z'));
+    const child = (n: number, failed: boolean) => {
+      const run = mockRunRecord(flow, 'validation', new Date(at(n)));
+      return {
+        ...run,
+        run: { ...run.run, id: `child-${n}`, flow: 'Child', parentId: record.run.id },
+        status: failed ? ('failed' as const) : ('completed' as const),
+        durationMs: 12,
+        components: run.components.map(c =>
+          c.nodeId === 'f'
+            ? { ...c, label: 'Mapper', logs: [{ at: at(n), level: 'info' as const, message: `mapped call ${n}` }, ...(failed ? [{ at: at(n), level: 'error' as const, message: '$x is not defined' }] : [])] }
+            : c,
+        ),
+      };
+    };
+    return {
+      ...record,
+      components: record.components.map(c =>
+        c.nodeId === 'f'
+          ? {
+              ...c,
+              subRuns: [
+                { id: 'child-1', flow: 'Child', status: 'completed' as const, durationMs: 12, record: child(1, false) },
+                { id: 'child-2', flow: 'Child', status: childErrors ? ('failed' as const) : ('completed' as const), durationMs: 12, record: child(2, childErrors) },
+              ],
+            }
+          : c,
+      ),
+    };
+  };
+  const panel = (record: ReturnType<typeof withCalls>) => renderToStaticMarkup(<RunPanel record={record} running={null} onFocus={() => {}} pinned={new Set()} onPin={() => {}} onClose={() => {}} />);
+
+  test("a called flow's errors are the run's too, under the Flow Invoker, saying where in the called flow", async () => {
+    const { runErrors } = await import('../src/pages/flow-editor/run-view');
+    expect(runErrors(withCalls(true))).toEqual([{ nodeId: 'f', message: '$x is not defined', count: 1, at: at(2), via: 'Child › Mapper' }]);
+    const html = panel(withCalls(true));
+    expect(html).toMatch(/aria-selected="true"[^>]*>errors<span[^>]*>1<\/span>/);
+    expect(html).toMatch(/>Big<\/span>.*Child › Mapper:.*\$x is not defined/);
+  });
+
+  test('the Logs tab lists each called run collapsed where it started, with how it went; open, its lines say the flow and the component', () => {
+    const html = panel(withCalls(false));
+    expect(html).toMatch(/<details[^>]*><summary[^>]*aria-label="Run of Child".*Called <span[^>]*>Child<\/span>: completed in 12 ms/);
+    expect(html).toContain('Child › Mapper');
+    expect(html).toContain('mapped call 1');
+    expect(html).toContain('mapped call 2');
+    expect(html).not.toContain('error line');
+  });
+
+  test('the Metrics tab has a row per called run under the Flow Invoker, closed on its components', () => {
+    const storage = { getItem: () => 'metrics', setItem: () => {} };
+    Object.assign(globalThis, { sessionStorage: storage });
+    try {
+      const html = panel(withCalls(false));
+      expect(html).toMatch(/aria-expanded="false"[^>]*>.*Call 1: <span[^>]*>Child<\/span> completed in 12 ms/);
+      expect(html).toContain('Call 2: ');
+      expect(html).not.toContain('Mapper');
+    } finally {
+      Object.assign(globalThis, { sessionStorage: undefined });
+    }
+  });
+
+  test("a component window's Last run tab lists the called flows, collapsed", async () => {
+    const { ComponentLastRun } = await import('../src/pages/flow-editor/run-panel');
+    const invoker = withCalls(true).components.find(c => c.nodeId === 'f')!;
+    const html = renderToStaticMarkup(<ComponentLastRun c={invoker} />);
+    expect(html).toMatch(/Called flows <span[^>]*>\(the first 2 of 4 calls\)/);
+    expect(html).toMatch(/aria-label="Called flows".*Call 1.*Called <span[^>]*>Child<\/span>: completed in 12 ms.*Call 2.*failed in 12 ms.*1 error line</);
+  });
+});

@@ -1,6 +1,6 @@
-import { useLayoutEffect, useMemo, useRef, useState, type PointerEvent, type ReactNode } from 'react';
-import { ChevronDown, ChevronUp, CircleAlert, CircleCheck, CircleDashed, CircleMinus, CircleStop, CircleX, Clock, LoaderCircle, Pin, Power, Square, X } from 'lucide-react';
-import { ERROR_PORT, inputPorts, type ComponentRun, type EnvelopeData, type LogLine, type RunRecord } from '@dataflow/core';
+import { Fragment, useLayoutEffect, useMemo, useRef, useState, type PointerEvent, type ReactNode } from 'react';
+import { ChevronDown, ChevronRight, ChevronUp, CircleAlert, CircleCheck, CircleDashed, CircleMinus, CircleStop, CircleX, Clock, LoaderCircle, Pin, Power, Square, X } from 'lucide-react';
+import { ERROR_PORT, inputPorts, type ComponentRun, type EnvelopeData, type LogLine, type RunRecord, type SubRun } from '@dataflow/core';
 import { Button } from '@/components/ui/button';
 import type { RunUsage } from '@/data/flows/flows-api';
 import { componentInfo } from '@/editor/catalog';
@@ -8,7 +8,7 @@ import { cn } from '@/lib/utils';
 import { readChoice, rememberChoice } from '@/editor/run/run-choices';
 import { portLabel } from '@/editor/run/port-label';
 import { runActions, type RunAbout } from '@/editor/run/run-marks';
-import { dataTabComponents, dataTabSelection, runErrors, timelineSpan, type RunError, type Shown } from './run-view';
+import { dataTabComponents, dataTabSelection, runErrors, subRunsOf, timelineSpan, type RunError, type Shown } from './run-view';
 import { JsonTree } from '@/editor/run/json-tree';
 
 /*
@@ -293,7 +293,14 @@ function ErrorsTab({ record, errors, onFocus }: { record: Shown; errors: RunErro
             <button type="button" onClick={() => onFocus(e.nodeId)} className="flex w-full items-start gap-3 px-3 py-1.5 text-left hover:bg-accent" title="Show the component">
               <CircleX className="mt-0.5 size-3.5 shrink-0 text-destructive" aria-hidden />
               <span className="w-40 shrink-0 truncate font-medium text-foreground">{c ? nameOf(c) : e.nodeId}</span>
-              <span className="min-w-0 flex-1 font-mono break-words whitespace-pre-wrap text-destructive">{e.message}</span>
+              <span className="min-w-0 flex-1 font-mono break-words whitespace-pre-wrap text-destructive">
+                {e.via && (
+                  <span className="text-muted-foreground" title="In a flow it called">
+                    {e.via}:{' '}
+                  </span>
+                )}
+                {e.message}
+              </span>
               {e.count > 1 && <span className="shrink-0 rounded-full bg-destructive/15 px-1.5 font-mono text-destructive" title={`${e.count} times`}>×{e.count}</span>}
               <span className="shrink-0 font-mono text-muted-foreground">{time(e.at)}</span>
             </button>
@@ -308,14 +315,7 @@ function LogsTab({ record, onFocus, filter, onFilter }: { record: Shown; onFocus
   const { level, node } = filter;
   const setLevel = (next: string) => onFilter({ ...filter, level: next });
   const setNode = (next: string) => onFilter({ ...filter, node: next });
-  const lines = useMemo(
-    () =>
-      record.components
-        .flatMap(c => c.logs.map((line: LogLine) => ({ ...line, nodeId: c.nodeId, label: nameOf(c) })))
-        .filter(l => (level === 'all' || LEVELS.indexOf(l.level as never) >= LEVELS.indexOf(level as never)) && (node === 'all' || l.nodeId === node))
-        .sort((a, b) => a.at.localeCompare(b.at)),
-    [record, level, node],
-  );
+  const items = useMemo(() => logItems(record, level).filter(item => node === 'all' || item.nodeId === node), [record, level, node]);
   const select = 'h-7 rounded-md border bg-transparent px-2 text-xs';
   return (
     <div className="flex flex-col">
@@ -337,20 +337,90 @@ function LogsTab({ record, onFocus, filter, onFilter }: { record: Shown; onFocus
           ))}
         </select>
       </div>
-      {lines.length === 0 && <p className="p-3 text-xs text-muted-foreground">No log lines.</p>}
-      <ul className="font-mono text-xs">
-        {lines.map((l, i) => (
+      {items.length === 0 && <p className="p-3 text-xs text-muted-foreground">No log lines.</p>}
+      <LogList items={items} level={level} onFocus={onFocus} depth={0} />
+    </div>
+  );
+}
+
+/** a line of the Logs tab, or a run a Flow Invoker called (its lines inside, collapsed), each with its component */
+type LogItem = { at: string; nodeId: string; label: string; via: string } & ({ kind: 'line'; line: LogLine } | { kind: 'sub'; sub: SubRun & { record: Shown } });
+
+const atLevel = (line: string, level: string) => level === 'all' || LEVELS.indexOf(line as never) >= LEVELS.indexOf(level as never);
+
+/** whether a run (or a run it called) has a line at the level and up */
+const hasLinesAt = (shown: Shown, level: string): boolean =>
+  shown.components.some(c => c.logs.some(l => atLevel(l.level, level)) || subRunsOf(c).some(sub => hasLinesAt(sub.record, level)));
+
+/**
+ * A run's log lines at the level and up, in time order, with the runs its Flow Invokers called where each started (a
+ * called run without a line at the level is left out). `via`: the called flow, before the component's name.
+ */
+function logItems(shown: Shown, level: string, via = ''): LogItem[] {
+  const name = (c: ComponentRun) => (via ? `${via} › ${nameOf(c)}` : nameOf(c));
+  const items: LogItem[] = shown.components.flatMap(c => [
+    ...c.logs.filter(l => atLevel(l.level, level)).map((line): LogItem => ({ kind: 'line', at: line.at, nodeId: c.nodeId, label: name(c), via, line })),
+    ...subRunsOf(c)
+      .filter(sub => level === 'all' || hasLinesAt(sub.record, level))
+      .map((sub): LogItem => ({ kind: 'sub', at: sub.record.run.startedAt, nodeId: c.nodeId, label: name(c), via, sub })),
+  ]);
+  return items.sort((a, b) => a.at.localeCompare(b.at));
+}
+
+/** how many error lines a run (and the runs it called) has */
+const errorLines = (shown: Shown): number => shown.components.reduce((n, c) => n + c.logs.filter(l => l.level === 'error').length + subRunsOf(c).reduce((m, sub) => m + errorLines(sub.record), 0), 0);
+
+/** the lines, and each called run as a group that opens on its own lines (nested when that one called flows too) */
+function LogList({ items, level, onFocus, depth, focus }: { items: LogItem[]; level: string; onFocus: (nodeId: string) => void; depth: number; focus?: string }) {
+  const indent = { paddingLeft: `${0.75 + depth * 1.25}rem` };
+  return (
+    <ul className="font-mono text-xs">
+      {items.map((item, i) =>
+        item.kind === 'line' ? (
           <li key={i}>
-            <button type="button" onClick={() => onFocus(l.nodeId)} className="flex w-full gap-3 px-3 py-0.5 text-left hover:bg-accent">
-              <span className="shrink-0 text-muted-foreground">{time(l.at)}</span>
-              <span className={cn('w-14 shrink-0', LEVEL_COLOR[l.level])}>{l.level}</span>
-              <span className="w-40 shrink-0 truncate text-foreground">{l.label}</span>
-              <span className="min-w-0 break-words whitespace-pre-wrap">{l.message}</span>
+            <button type="button" onClick={() => onFocus(focus ?? item.nodeId)} className="flex w-full gap-3 px-3 py-0.5 text-left hover:bg-accent" style={indent}>
+              <span className="shrink-0 text-muted-foreground">{time(item.at)}</span>
+              <span className={cn('w-14 shrink-0', LEVEL_COLOR[item.line.level])}>{item.line.level}</span>
+              <span className="w-40 shrink-0 truncate text-foreground" title={item.label}>{item.label}</span>
+              <span className="min-w-0 break-words whitespace-pre-wrap">{item.line.message}</span>
             </button>
           </li>
-        ))}
-      </ul>
-    </div>
+        ) : (
+          <li key={`sub:${item.sub.id}`}>
+            <SubRunGroup item={item} level={level} onFocus={onFocus} depth={depth} focus={focus ?? item.nodeId} />
+          </li>
+        ),
+      )}
+    </ul>
+  );
+}
+
+/** "Called Flow 2: Completed in 12 ms · 2 error lines", collapsed; open, the called run's lines under it */
+function SubRunGroup({ item, level, onFocus, depth, focus }: { item: Extract<LogItem, { kind: 'sub' }>; level: string; onFocus: (nodeId: string) => void; depth: number; focus: string }) {
+  const { sub } = item;
+  const errors = errorLines(sub.record);
+  const status = STATUS[sub.status]?.label ?? sub.status;
+  return (
+    <details className="group/sub">
+      <summary
+        className="flex cursor-pointer list-none gap-3 px-3 py-0.5 hover:bg-accent [&::-webkit-details-marker]:hidden"
+        style={{ paddingLeft: `${0.75 + depth * 1.25}rem` }}
+        aria-label={`Run of ${sub.flow}`}
+        title={sub.error ? `${status}: ${sub.error}` : status}
+      >
+        <span className="shrink-0 text-muted-foreground">{time(item.at)}</span>
+        <span className="flex w-14 shrink-0 items-center gap-1 text-muted-foreground">
+          <ChevronRight className="size-3.5 transition-transform group-open/sub:rotate-90" aria-hidden />
+          <StatusIcon status={sub.status} className="size-3.5" />
+        </span>
+        <span className="w-40 shrink-0 truncate text-foreground" title={item.label}>{item.label}</span>
+        <span className="min-w-0 break-words text-muted-foreground">
+          Called <span className="text-foreground">{sub.flow}</span>: {sub.status === 'running' ? 'running' : `${status.toLowerCase()} in ${ms(sub.durationMs)}`}
+          {errors > 0 && <span className="text-destructive"> · {errors} error line{errors === 1 ? '' : 's'}</span>}
+        </span>
+      </summary>
+      <LogList items={logItems(sub.record, level, item.via ? `${item.via} › ${sub.flow}` : sub.flow)} level={level} onFocus={onFocus} depth={depth + 1} focus={focus} />
+    </details>
   );
 }
 
@@ -418,58 +488,126 @@ function Timeline({ c, runStart, runMs }: { c: ComponentRun; runStart: number; r
   );
 }
 
-/** one row per component: status, envelopes in and out per port, its times, memory and timeline; a click shows it */
+/**
+ * One row per component: status, envelopes in and out per port, its times, memory and timeline; a click shows it. A
+ * Flow Invoker's called runs come after it, collapsed: open, each one's components (on the same time axis).
+ */
 function MetricsTab({ record, onFocus, portName }: { record: Shown; onFocus: (nodeId: string) => void; portName: PortName }) {
   const runStart = Date.parse(record.run.startedAt);
   // the axis: the whole run, or further when a component's times (finer than the run's ms) end after it
   const span = timelineSpan(record, runStart);
-  const cell = 'px-3 py-1.5';
+  const [open, setOpen] = useState<Set<string>>(new Set());
+  const toggle = (key: string) =>
+    setOpen(prev => {
+      const next = new Set(prev);
+      if (!next.delete(key)) {
+        next.add(key);
+      }
+
+      return next;
+    });
   return (
     <table className="w-full min-w-[1100px] text-xs">
       <thead className="sticky top-0 z-10 bg-card text-left text-muted-foreground">
         <tr className="border-b">
           {METRICS.map((h, i) => (
             // the component's name stays in view when the table is wider than the panel
-            <th key={h.label} title={h.hint} className={cn(cell, 'cursor-help font-medium', h.right && 'text-right', h.label === 'Timeline' && 'w-1/4', i === 0 && 'sticky left-0 bg-card')}>
+            <th key={h.label} title={h.hint} className={cn(CELL, 'cursor-help font-medium', h.right && 'text-right', h.label === 'Timeline' && 'w-1/4', i === 0 && 'sticky left-0 bg-card')}>
               {h.label}
             </th>
           ))}
         </tr>
       </thead>
       <tbody>
-        {record.components.map(c => (
-          <tr key={c.nodeId} onClick={() => onFocus(c.nodeId)} title="Show on the canvas" className="group cursor-pointer border-b hover:bg-accent">
-            <td className={cn(cell, 'sticky left-0 bg-card group-hover:bg-accent')}>
-              <span className="flex items-center gap-2">
-                <StatusIcon status={c.status} />
-                <span className="font-medium">{nameOf(c)}</span>
-                {nameOf(c) !== componentInfo(c.type)?.label && <span className="text-muted-foreground">{componentInfo(c.type)?.label}</span>}
-              </span>
-            </td>
-            <td className={cn(cell, 'text-right font-mono')}>{c.type === 'start' && total(c.inputs) === 0 ? '—' : ports(c.inputs, port => inputName(c.type, port))}</td>
-            <td className={cn(cell, 'text-right font-mono')}>{c.type === 'end' ? '—' : ports(c.outputs, port => portName(c.nodeId, c.type, port))}</td>
-            <td className={cn(cell, 'text-right font-mono')}>{ms(c.durationMs)}</td>
-            <td className={cn(cell, 'text-right font-mono')}>{shortMs(c.activeTimeMs)}</td>
-            <td className={cn(cell, 'text-right font-mono', c.waitingMs === undefined && 'text-muted-foreground')}>{shortMs(c.waitingMs)}</td>
-            <td className={cn(cell, 'text-right font-mono')}>
-              {c.memory && c.memory.peakEnvelopes > 0 ? (
-                <span className="flex flex-col items-end">
-                  <span>{bytes(c.memory.peakBytes)}</span>
-                  <span className="text-muted-foreground">{c.memory.peakEnvelopes.toLocaleString('en-US')} env.</span>
-                </span>
-              ) : (
-                <span className="text-muted-foreground">—</span>
-              )}
-            </td>
-            <td className={cn(cell, 'text-right font-mono text-muted-foreground')}>{c.start ? time(c.start) : '—'}</td>
-            <td className={cell}>
-              <Timeline c={c} runStart={runStart} runMs={span} />
-            </td>
-          </tr>
-        ))}
+        <MetricsRows components={record.components} runStart={runStart} span={span} onFocus={onFocus} portName={portName} depth={0} open={open} onToggle={toggle} />
       </tbody>
     </table>
   );
+}
+
+const CELL = 'px-3 py-1.5';
+
+/** the rows of a run's components; under a Flow Invoker, a row per called run that opens on that run's rows */
+function MetricsRows(props: {
+  components: ComponentRun[];
+  runStart: number;
+  span: number;
+  onFocus: (nodeId: string) => void;
+  portName: PortName;
+  depth: number;
+  open: Set<string>;
+  onToggle: (key: string) => void;
+  /** inside a called run: the Flow Invoker a click shows, and the key of the run (its rows are keyed under it) */
+  focus?: string;
+  under?: string;
+}) {
+  const { components, runStart, span, onFocus, portName, depth, open, onToggle, focus, under } = props;
+  const indent = { paddingLeft: `${0.75 + depth * 1.25}rem` };
+  return components.map(c => {
+    const subs = subRunsOf(c);
+    return (
+      <Fragment key={c.nodeId}>
+        <tr onClick={() => onFocus(focus ?? c.nodeId)} title="Show on the canvas" className="group cursor-pointer border-b hover:bg-accent">
+          <td className={cn(CELL, 'sticky left-0 bg-card group-hover:bg-accent')} style={indent}>
+            <span className="flex items-center gap-2">
+              <StatusIcon status={c.status} />
+              <span className="font-medium">{nameOf(c)}</span>
+              {nameOf(c) !== componentInfo(c.type)?.label && <span className="text-muted-foreground">{componentInfo(c.type)?.label}</span>}
+            </span>
+          </td>
+          <td className={cn(CELL, 'text-right font-mono')}>{c.type === 'start' && total(c.inputs) === 0 ? '—' : ports(c.inputs, port => inputName(c.type, port))}</td>
+          <td className={cn(CELL, 'text-right font-mono')}>{c.type === 'end' ? '—' : ports(c.outputs, port => (focus ? portLabel(c.type, {}, port) : portName(c.nodeId, c.type, port)))}</td>
+          <td className={cn(CELL, 'text-right font-mono')}>{ms(c.durationMs)}</td>
+          <td className={cn(CELL, 'text-right font-mono')}>{shortMs(c.activeTimeMs)}</td>
+          <td className={cn(CELL, 'text-right font-mono', c.waitingMs === undefined && 'text-muted-foreground')}>{shortMs(c.waitingMs)}</td>
+          <td className={cn(CELL, 'text-right font-mono')}>
+            {c.memory && c.memory.peakEnvelopes > 0 ? (
+              <span className="flex flex-col items-end">
+                <span>{bytes(c.memory.peakBytes)}</span>
+                <span className="text-muted-foreground">{c.memory.peakEnvelopes.toLocaleString('en-US')} env.</span>
+              </span>
+            ) : (
+              <span className="text-muted-foreground">—</span>
+            )}
+          </td>
+          <td className={cn(CELL, 'text-right font-mono text-muted-foreground')}>{c.start ? time(c.start) : '—'}</td>
+          <td className={CELL}>
+            <Timeline c={c} runStart={runStart} runMs={span} />
+          </td>
+        </tr>
+        {subs.map((sub, index) => {
+          const key = `${under ?? ''}/${c.nodeId}/${sub.id}`;
+          const expanded = open.has(key);
+          const status = STATUS[sub.status]?.label ?? sub.status;
+          return (
+            <Fragment key={sub.id}>
+              <tr className="border-b bg-muted/30">
+                <td colSpan={METRICS.length} className="sticky left-0 p-0">
+                  <button
+                    type="button"
+                    aria-expanded={expanded}
+                    onClick={() => onToggle(key)}
+                    className="flex w-full items-center gap-2 px-3 py-1 text-left text-muted-foreground hover:bg-accent"
+                    style={{ paddingLeft: `${0.75 + (depth + 1) * 1.25}rem` }}
+                    title={sub.error ? `${status}: ${sub.error}` : 'Show what its components did'}
+                  >
+                    <ChevronRight className={cn('size-3.5 transition-transform', expanded && 'rotate-90')} aria-hidden />
+                    <StatusIcon status={sub.status} className="size-3.5" />
+                    <span>
+                      Call {index + 1}: <span className="text-foreground">{sub.flow}</span> {sub.status === 'running' ? 'running' : `${status.toLowerCase()} in ${ms(sub.durationMs)}`}
+                    </span>
+                  </button>
+                </td>
+              </tr>
+              {expanded && (
+                <MetricsRows components={sub.record.components} runStart={runStart} span={span} onFocus={onFocus} portName={portName} depth={depth + 2} open={open} onToggle={onToggle} focus={focus ?? c.nodeId} under={key} />
+              )}
+            </Fragment>
+          );
+        })}
+      </Fragment>
+    );
+  });
 }
 
 /** a component's input and output envelopes (the first ones), side by side, as a table or JSON; Pin output here */
@@ -803,6 +941,27 @@ export function ComponentLastRun({ c, about, portName = defaultPortName }: { c: 
             <span className="shrink-0 text-muted-foreground">{time(l.at)}</span>
             <span className={cn('w-14 shrink-0', LEVEL_COLOR[l.level])}>{l.level}</span>
             <span className="min-w-0 break-words">{l.message}</span>
+          </li>
+        ))}
+      </ul>
+      {subRunsOf(c).length > 0 && <CalledRuns c={c} />}
+    </div>
+  );
+}
+
+/** a Flow Invoker's called runs (the first MAX_SUB_RUNS): each collapsed on how it went, open on its log lines */
+function CalledRuns({ c }: { c: ComponentRun }) {
+  const subs = subRunsOf(c);
+  const kept = c.subRuns?.length ?? 0;
+  return (
+    <div className="max-h-56 shrink-0 overflow-auto border-t">
+      <p className="px-4 pt-2 pb-1 text-xs font-medium">
+        Called flows <span className="font-normal text-muted-foreground">({kept === total(c.inputs) ? kept : `the first ${kept} of ${total(c.inputs)} calls`})</span>
+      </p>
+      <ul aria-label="Called flows" className="pb-1 font-mono text-xs">
+        {subs.map((sub, index) => (
+          <li key={sub.id}>
+            <SubRunGroup item={{ kind: 'sub', at: sub.record.run.startedAt, nodeId: c.nodeId, label: `Call ${index + 1}`, via: '', sub }} level="all" onFocus={() => {}} depth={0} focus={c.nodeId} />
           </li>
         ))}
       </ul>
