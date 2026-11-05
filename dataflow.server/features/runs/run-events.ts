@@ -13,6 +13,29 @@ export type RunEvent = { type: 'progress'; progress: RunProgress } | { type: 'do
 
 const listeners = new Map<string, Set<(event: RunEvent) => void>>();
 
+/** what the Runs page's stream says of a run that changed: which, the top run of its tree, its status now */
+export type RunChange = { id: string; rootId: string; status: string };
+
+const orgListeners = new Map<string, Set<(change: RunChange) => void>>();
+
+/** The organization's runs that change (queued, taken by a worker, ended), for the Runs page (GET /runs/events). */
+export const orgRunEvents = {
+  publish(orgId: string, change: RunChange) {
+    orgListeners.get(orgId)?.forEach(listener => listener(change));
+  },
+  subscribe(orgId: string, listener: (change: RunChange) => void): () => void {
+    const set = orgListeners.get(orgId) ?? new Set();
+    set.add(listener);
+    orgListeners.set(orgId, set);
+    return () => {
+      set.delete(listener);
+      if (set.size === 0 && orgListeners.get(orgId) === set) {
+        orgListeners.delete(orgId);
+      }
+    };
+  },
+};
+
 export const runEvents = {
   publish(runId: string, event: RunEvent) {
     listeners.get(runId)?.forEach(listener => listener(event));
@@ -67,7 +90,12 @@ export async function followRunEvents(db: Database): Promise<() => Promise<void>
       return;
     }
 
-    if (!runEvents.followed(notice.id)) {
+    // the Runs page's stream: a new status (never the progress, a few times a second), told without reading the row
+    if (notice.type !== 'progress' && notice.orgId && notice.status) {
+      orgRunEvents.publish(notice.orgId, { id: notice.id, rootId: notice.rootId ?? notice.id, status: notice.status });
+    }
+
+    if (notice.type === 'status' || !runEvents.followed(notice.id)) {
       return;
     }
 

@@ -44,10 +44,18 @@ const runColumns = () => ({
   rootId: uuid('root_id'),
   parentNodeId: text('parent_node_id'),
   callChain: jsonb('call_chain'),
+  /** what the Runs page lists, in columns of its own (8_runs_list.sql): never read from record or definition there */
+  flowName: text('flow_name'),
+  startedBy: text('started_by'),
+  parentNodeLabel: text('parent_node_label'),
+  batchSize: integer('batch_size'),
+  error: text('error'),
+  envelopesIn: bigint('envelopes_in', { mode: 'number' }),
+  envelopesOut: bigint('envelopes_out', { mode: 'number' }),
 });
 
 /**
- * Follows migrations/1_initial.sql to 7_fire_and_forget.sql: a real run (Run for real, a deployed version, a Flow
+ * Follows migrations/1_initial.sql to 8_runs_list.sql: a real run (Run for real, a deployed version, a Flow
  * Invoker's fire and forget call), queued, running or done, kept with its history. The editor's Run for real runs the
  * flow's draft (draft_hash); a published run, a deployed version (flow_version_id). `record` is the core's RunRecord.
  */

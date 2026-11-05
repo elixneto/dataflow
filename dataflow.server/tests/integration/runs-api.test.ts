@@ -408,7 +408,8 @@ describe('runs api', () => {
     const batches = [[{ n: 1 }, { n: 2 }], [{ n: 3 }, { n: 4 }], [{ n: 5 }]];
     for (const [i, id] of childIds.entries()) {
       const child = await ended(id);
-      expect(child.body).toMatchObject({ status: 'completed', mode: 'execution', flowId: backgroundId, parentId, rootId: parentId, parentNodeId: 'w' });
+      expect(child.body).toMatchObject({ status: 'completed', mode: 'execution', flowId: backgroundId, flowName: 'Background', trigger: 'flow-invoker', parentId, rootId: parentId, parentNodeId: 'w' });
+      expect(typeof child.body.startedAt).toBe('string');
       expect((child.body.record as RunRecord).components.find(c => c.type === 'start')!.outputSample['out-0']).toEqual(batches[i]!);
     }
 

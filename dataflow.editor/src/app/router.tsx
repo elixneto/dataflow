@@ -5,6 +5,8 @@ import { FlowsPage } from '@/pages/flows/flows-page';
 import { HomePage } from '@/pages/home/home-page';
 import { ConnectionsPage } from '@/pages/project-connections/connections-page';
 import { ProjectFlowsPage } from '@/pages/project-flows/project-flows-page';
+import { RunsPage } from '@/pages/runs/runs-page';
+import { OldRunLogsUrl, RunPage } from '@/pages/runs/run-page';
 import { ScriptsPage } from '@/pages/project-scripts/scripts-page';
 import { SecretsPage } from '@/pages/project-secrets/secrets-page';
 import { OldFlowsUrl } from './old-flows-url';
@@ -28,6 +30,9 @@ export const router = createBrowserRouter([
       { path: 'projects/:projectId/secrets', element: <SecretsPage /> },
       // Files is coming (its tab shows "Soon"); its screen stays in pages/project-files for when the server stores files
       { path: 'projects/:projectId/files', element: <Navigate to="../flows" relative="path" replace /> },
+      { path: 'runs', element: <RunsPage /> },
+      { path: 'runs/:runId', element: <RunPage /> },
+      { path: 'runs/:runId/logs', element: <OldRunLogsUrl /> },
     ],
   },
   { path: '/projects/:projectId/flows/:flowId', element: <FlowEditorPage /> },

@@ -10,9 +10,10 @@ import { SaveDraftHandler } from '#features/flows/save-draft/save-draft-handler'
 import { CancelRunHandler } from '#features/runs/cancel-run/cancel-run-handler';
 import { GetRunHandler } from '#features/runs/get-run/get-run-handler';
 import { LastRunHandler } from '#features/runs/last-run/last-run-handler';
+import { ListRunsHandler, RunOverviewHandler, RunTreeHandler } from '#features/runs/list-runs/list-runs-handler';
 import { StartRunHandler } from '#features/runs/start-run/start-run-handler';
 import type { RunProgress, RunRecord } from '@dataflow/core';
-import { runEvents, type RunEvent } from '#features/runs/run-events';
+import { orgRunEvents, runEvents, type RunEvent } from '#features/runs/run-events';
 import { toHttpResult } from '#shared/use-cases/to-http-result';
 import type { AppEnv } from '../app-env';
 import { bodyWith } from './request-input';
@@ -57,9 +58,39 @@ export function flowsRoutes() {
     });
 }
 
-/** /runs/:id: a run's status, and its record once it ended; Stop */
+/** the Runs page's stream says it is alive this often (Bun closes a connection quiet for longer than its idle timeout) */
+export const SSE_PING_MS = 5000;
+
+/** /runs: the organization's runs (the Runs page) and its live changes; /runs/:id: a run's status, and its record once it ended; Stop */
 export function runsRoutes() {
   return new Hono<AppEnv>()
+    .get('/', async c => toHttpResult(c, await new ListRunsHandler().handle(c.req.query(), c.get('useCase'))))
+    .get('/overview', async c => toHttpResult(c, await new RunOverviewHandler().handle(c.req.query(), c.get('useCase'))))
+    // the organization's runs that change (SSE): "change" {id, rootId, status} when one is queued, taken by a worker or
+    // ends (never its progress); "ping" every few seconds, well within the server's idle timeout (server.ts) and a
+    // proxy's: a quiet stream would be closed, and the editor takes a stream silent for long as dead
+    .get('/events', c => {
+      const { orgId } = c.get('useCase');
+      return streamSSE(c, async stream => {
+        let writing = Promise.resolve();
+        const stop = orgRunEvents.subscribe(orgId, change => {
+          writing = writing.then(() => stream.writeSSE({ event: 'change', data: JSON.stringify(change) }));
+        });
+        let open = true;
+        stream.onAbort(() => {
+          open = false;
+          stop();
+        });
+        await stream.writeSSE({ event: 'ready', data: '{}' });
+        while (open) {
+          await stream.sleep(SSE_PING_MS);
+          if (open) {
+            writing = writing.then(() => stream.writeSSE({ event: 'ping', data: '{}' }));
+          }
+        }
+      });
+    })
+    .get('/:id/tree', async c => toHttpResult(c, await new RunTreeHandler().handle({ id: c.req.param('id') }, c.get('useCase'))))
     .get('/:id', async c => {
       const result = await new GetRunHandler().handle({ id: c.req.param('id') }, c.get('useCase'));
       return toHttpResult(c, result);

@@ -160,6 +160,8 @@ export class StartRunHandler implements UseCaseHandler<{ id: string }> {
       runFrom,
       scripts: imported.scripts,
       calledFlows: called.length ? called : null,
+      flowName: row.name,
+      startedBy: ctx.userId,
       ...(given !== undefined ? { input: given } : {}),
     };
     if (mode === 'execution') {
@@ -186,6 +188,7 @@ export class StartRunHandler implements UseCaseHandler<{ id: string }> {
       }
     }
 
+    await notifyRunEvent(ctx.db, { id, type: 'status', orgId: ctx.orgId, rootId: id, status: 'queued' });
     await ctx.db.notify(CHANNELS.queued, 'default');
     return success({ id });
   }

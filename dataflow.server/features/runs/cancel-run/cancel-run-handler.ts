@@ -26,14 +26,15 @@ export class CancelRunHandler implements UseCaseHandler<{ id: string; status: Ru
     }
 
     if (run.status === 'queued') {
-      const record = { ...lostRecord({ id, mode: run.mode, progress: null, startedAt: null, queuedAt: run.queuedAt }, 'Run cancelled before it started.'), durationMs: 0 };
+      const error = 'Run cancelled before it started.';
+      const record = { ...lostRecord({ id, mode: run.mode, progress: null, startedAt: null, queuedAt: run.queuedAt }, error), durationMs: 0 };
       const [cancelled] = await ctx.db.query<{ id: string }>(
-        `UPDATE ${run.table} SET status = 'cancelled', cancel_requested = true, record = $2::text::jsonb, finished_at = now(), duration_ms = 0
+        `UPDATE ${run.table} SET status = 'cancelled', cancel_requested = true, record = $2::text::jsonb, finished_at = now(), duration_ms = 0, error = $3
          WHERE id = $1 AND status = 'queued' RETURNING id`,
-        [id, JSON.stringify(record)],
+        [id, JSON.stringify(record), error],
       );
       if (cancelled) {
-        await notifyRunEvent(ctx.db, { id, type: 'done' });
+        await notifyRunEvent(ctx.db, { id, type: 'done', orgId: run.orgId, rootId: run.rootId ?? run.id, status: 'cancelled' });
         return success({ id, status: 'cancelled' });
       }
       // a supervisor claimed it meanwhile: stopped as a running one

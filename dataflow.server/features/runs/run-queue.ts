@@ -16,13 +16,36 @@ import type { CalledFlow } from './start-run/called-flows';
 export const CHANNELS = {
   /** a run was queued: payload = its worker tag */
   queued: 'runs_queued',
-  /** a run changed (progress or done): payload = {"id","type"} */
+  /** a run changed: payload = RunEventNotice (progress, done, or a new status for the Runs page) */
   events: 'run_events',
   /** Stop was asked on a running run: payload = its id */
   cancel: 'run_cancel',
 } as const;
 
-export type RunEventNotice = { id: string; type: 'progress' | 'done' };
+/**
+ * What a run_events NOTIFY says: `progress` (a few times a second while it runs; only the run's own followers want it),
+ * `done` (it ended) and `status` (it was queued, a worker took it, it was cancelled while queued). `done` and `status`
+ * carry the organization, the top run and the status, so the Runs page's stream filters them without reading a row.
+ */
+export type RunEventNotice = { id: string; type: 'progress' | 'done' | 'status'; orgId?: string; rootId?: string; status?: RunRowStatus };
+
+/** a run's own envelopes: what its Start sent and what reached its End, from its record (or its progress so far) */
+export function envelopeCounts(record: Pick<RunRecord, 'components'>): { envelopesIn?: number; envelopesOut?: number } {
+  const sum = (type: string, side: 'inputs' | 'outputs') => {
+    const component = record.components.find(c => c.type === type);
+    return component ? Object.values(component[side]).reduce((n, v) => n + v, 0) : undefined;
+  };
+  return { envelopesIn: sum('start', 'outputs'), envelopesOut: sum('end', 'inputs') };
+}
+
+/** the notice of a run's new status (done or status), with what the Runs page's stream filters on */
+const statusNotice = (type: 'done' | 'status', row: { id: string; orgId: string; rootId: string | null; status: RunRowStatus }): RunEventNotice => ({
+  id: row.id,
+  type,
+  orgId: row.orgId,
+  rootId: row.rootId ?? row.id,
+  status: row.status,
+});
 
 /** a run is lost when its heartbeat is older than this (its supervisor stopped or lost the database) */
 export const STALE_AFTER_MS = 60_000;
@@ -54,6 +77,7 @@ export async function claimRun(db: Database, tags: string[], workerId: string): 
       [tags, workerId],
     );
     if (row) {
+      await notifyRunEvent(db, statusNotice('status', row));
       return { ...row, table };
     }
   }
@@ -85,9 +109,13 @@ export async function heartbeat(db: Database, runIds: string[]): Promise<void> {
   }
 }
 
-/** The run so far, for whoever follows it. */
+/** The run so far, for whoever follows it; the envelopes its Start sent so far too (the Runs page's "in flight"). */
 export async function saveProgress(db: Database, run: { id: string; table: RunTable }, progress: RunProgress): Promise<void> {
-  await db.query(`UPDATE ${run.table} SET progress = $2::text::jsonb WHERE id = $1 AND status = 'running'`, [run.id, JSON.stringify(progress)]);
+  await db.query(`UPDATE ${run.table} SET progress = $2::text::jsonb, envelopes_in = $3 WHERE id = $1 AND status = 'running'`, [
+    run.id,
+    JSON.stringify(progress),
+    envelopeCounts(progress).envelopesIn ?? null,
+  ]);
   await notifyRunEvent(db, { id: run.id, type: 'progress' });
 }
 
@@ -98,30 +126,39 @@ export type RunUsage = { startRssBytes?: number; peakRssBytes?: number; cpuMs?: 
  * the run is no longer there (a test run replaced by a newer one meanwhile).
  */
 export async function finishRun(db: Database, run: { id: string; table: RunTable }, record: RunRecord, usage: RunUsage = {}): Promise<RunRowStatus | null> {
-  const [row] = await db.query<{ status: RunRowStatus }>(
+  const { envelopesIn, envelopesOut } = envelopeCounts(record);
+  const [row] = await db.query<{ id: string; orgId: string; rootId: string | null; status: RunRowStatus }>(
     `UPDATE ${run.table} SET
        status = CASE WHEN cancel_requested THEN 'cancelled' ELSE $2 END,
        record = $3::text::jsonb, progress = NULL, finished_at = now(), duration_ms = $4,
-       start_rss_bytes = $5, peak_rss_bytes = $6, cpu_ms = $7
+       start_rss_bytes = $5, peak_rss_bytes = $6, cpu_ms = $7,
+       error = $8, envelopes_in = $9, envelopes_out = $10
      WHERE id = $1 AND status IN ('queued', 'running')
-     RETURNING status`,
-    [run.id, record.status, JSON.stringify(record), Math.round(record.durationMs), usage.startRssBytes ?? null, usage.peakRssBytes ?? null, usage.cpuMs === undefined ? null : Math.round(usage.cpuMs)],
+     RETURNING id, org_id AS "orgId", root_id AS "rootId", status`,
+    [
+      run.id, record.status, JSON.stringify(record), Math.round(record.durationMs),
+      usage.startRssBytes ?? null, usage.peakRssBytes ?? null, usage.cpuMs === undefined ? null : Math.round(usage.cpuMs),
+      record.error ?? null, envelopesIn ?? null, envelopesOut ?? null,
+    ],
   );
-  await notifyRunEvent(db, { id: run.id, type: 'done' });
+  await notifyRunEvent(db, row ? statusNotice('done', row) : { id: run.id, type: 'done' });
   return row?.status ?? null;
 }
 
 /** fails one lost run (still running) with what it did so far; whether it was still there to fail */
 async function failLost(db: Database, run: QueuedRun, error: string, stillStale?: number): Promise<boolean> {
   const record = lostRecord(run, error);
-  const [row] = await db.query<{ id: string }>(
-    `UPDATE ${run.table} SET status = 'failed', record = $2::text::jsonb, progress = NULL, finished_at = now(), duration_ms = $3
-     WHERE id = $1 AND status = 'running' ${stillStale === undefined ? '' : 'AND heartbeat_at < now() - make_interval(secs => $4)'}
-     RETURNING id`,
-    stillStale === undefined ? [run.id, JSON.stringify(record), Math.round(record.durationMs)] : [run.id, JSON.stringify(record), Math.round(record.durationMs), stillStale / 1000],
+  const { envelopesIn, envelopesOut } = envelopeCounts(record);
+  const values = [run.id, JSON.stringify(record), Math.round(record.durationMs), error, envelopesIn ?? null, envelopesOut ?? null];
+  const [row] = await db.query<{ id: string; orgId: string; rootId: string | null; status: RunRowStatus }>(
+    `UPDATE ${run.table} SET status = 'failed', record = $2::text::jsonb, progress = NULL, finished_at = now(), duration_ms = $3,
+       error = $4, envelopes_in = $5, envelopes_out = $6
+     WHERE id = $1 AND status = 'running' ${stillStale === undefined ? '' : 'AND heartbeat_at < now() - make_interval(secs => $7)'}
+     RETURNING id, org_id AS "orgId", root_id AS "rootId", status`,
+    stillStale === undefined ? values : [...values, stillStale / 1000],
   );
   if (row) {
-    await notifyRunEvent(db, { id: run.id, type: 'done' });
+    await notifyRunEvent(db, statusNotice('done', row));
   }
 
   return Boolean(row);
@@ -222,7 +259,10 @@ export async function queueCalledRun(db: Database, parent: QueuedRun, request: Q
     parentId: parent.id,
     rootId: parent.rootId ?? parent.id,
     parentNodeId: request.nodeId,
+    parentNodeLabel: request.nodeLabel || null,
     callChain: chain,
+    flowName: called.name,
+    batchSize: Array.isArray(request.input) ? request.input.length : null,
     mode: 'execution',
     draftHash: new Bun.CryptoHasher('sha256').update(JSON.stringify(called.flow)).digest('hex'),
     status: 'queued',
@@ -235,6 +275,7 @@ export async function queueCalledRun(db: Database, parent: QueuedRun, request: Q
     scripts: parent.scripts,
     calledFlows: parent.calledFlows,
   });
+  await notifyRunEvent(db, { id, type: 'status', orgId: parent.orgId, rootId: parent.rootId ?? parent.id, status: 'queued' });
   await db.notify(CHANNELS.queued, parent.workerTag);
   return { id, flowName: called.name };
 }

@@ -151,6 +151,7 @@ function ComponentNodeView({ id, data, selected }: NodeProps<ComponentNode>) {
               style={{ top: portTop(i) }}
               edges={outgoing.filter(c => c.sourceHandle === port.id).length}
               envelopes={ran ? (run.outputs[port.id] ?? 0) : undefined}
+              countBelow={outputs.length === 1}
               onShow={() => mark?.show(port.id)}
             />
           ))}
@@ -167,12 +168,12 @@ function ComponentNodeView({ id, data, selected }: NodeProps<ComponentNode>) {
               <span className="node-port-dot" aria-hidden />
             </Handle>
           )}
-          {/* after a run: the envelopes that went out through the error port, beside its bump (the badge is on the right) */}
+          {/* after a run: the envelopes that went out through the error port, left of its bump (the right side is the output count and the status badge) */}
           {hasErrorPort && ran && (
             <EnvelopeCount
               count={run.outputs[ERROR_PORT] ?? 0}
               onShow={() => mark?.show(ERROR_PORT)}
-              className="top-full left-[calc(50%+22px)] mt-0.5"
+              className="top-full right-[calc(50%+22px)] mt-0.5"
               tone="error"
             />
           )}
@@ -248,8 +249,8 @@ function Plate(props: { inputs: number; outputs: number; errorPort: boolean; sel
  * a port: the dot inside the input's hole or the output's bump (the hole and the bump are the plate's); an output with
  * several edges shows how many under it (2x, 3x)
  */
-function PortHandle(props: { port: PortInfo; kind: 'source' | 'target'; style: CSSProperties; edges: number; envelopes?: number; onShow?: () => void }) {
-  const { port, kind, style, edges, envelopes, onShow } = props;
+function PortHandle(props: { port: PortInfo; kind: 'source' | 'target'; style: CSSProperties; edges: number; envelopes?: number; countBelow?: boolean; onShow?: () => void }) {
+  const { port, kind, style, edges, envelopes, countBelow, onShow } = props;
   const input = kind === 'target';
   const connected = edges > 0;
   return (
@@ -285,10 +286,17 @@ function PortHandle(props: { port: PortInfo; kind: 'source' | 'target'; style: C
           {edges}x
         </span>
       )}
-      {/* after a run: how many envelopes went out through it, inside the card next to the port (outside it would sit on
-          the next component, glued to this one) */}
+      {/* after a run: how many envelopes went out through it. One output: on the bottom edge, just left of the status
+          badge (the name keeps the whole card); several: inside the card next to each port (outside it would sit on the
+          next component, glued to this one) */}
       {!input && envelopes !== undefined && (
-        <EnvelopeCount style={style} count={envelopes} onShow={onShow} className="right-1.5 -translate-y-1/2" tone="ok" />
+        <EnvelopeCount
+          style={countBelow ? { top: CARD_HEIGHT } : style}
+          count={envelopes}
+          onShow={onShow}
+          className={countBelow ? 'right-6 -translate-y-1/2' : 'right-1.5 -translate-y-1/2'}
+          tone="ok"
+        />
       )}
     </>
   );

@@ -1,4 +1,4 @@
-import { FolderKanban, House, Workflow } from 'lucide-react';
+import { FolderKanban, History, House, Workflow } from 'lucide-react';
 import { NavLink, useLocation } from 'react-router';
 import {
   Sidebar,
@@ -7,19 +7,38 @@ import {
   SidebarGroup,
   SidebarHeader,
   SidebarMenu,
+  SidebarMenuBadge,
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarRail,
 } from '@/components/ui/sidebar';
-import { PROJECTS_PATH } from '@/app/paths';
+import { PROJECTS_PATH, RUNS_PATH } from '@/app/paths';
 import { mockUser } from '@/auth/mock-user';
+import { useRunNumbers } from '@/data/runs/use-runs';
 import { NavUser } from './nav-user';
 
 /** a page of the menu: a new page is one more line here */
 const NAV_ITEMS = [
   { to: '/', label: 'Home', icon: House },
   { to: PROJECTS_PATH, label: 'Projects', icon: FolderKanban },
+  { to: RUNS_PATH, label: 'Runs', icon: History },
 ];
+
+/** Runs: how many run now (a dot and the count; nothing when none) */
+function RunningBadge() {
+  const { state } = useRunNumbers();
+  const running = state.status === 'ready' ? state.value.running : 0;
+  if (running === 0) {
+    return null;
+  }
+
+  return (
+    <SidebarMenuBadge className="gap-1 text-sky-600 dark:text-sky-400" title={`${running} running now`}>
+      <span className="size-1.5 rounded-full bg-sky-500" aria-hidden />
+      {running}
+    </SidebarMenuBadge>
+  );
+}
 
 // Home only on '/'; any other item also on its sub-pages (/projects/...)
 function isActive(to: string, pathname: string): boolean {
@@ -63,6 +82,7 @@ export function AppSidebar() {
                     <span>{item.label}</span>
                   </NavLink>
                 </SidebarMenuButton>
+                {item.to === RUNS_PATH && <RunningBadge />}
               </SidebarMenuItem>
             ))}
           </SidebarMenu>

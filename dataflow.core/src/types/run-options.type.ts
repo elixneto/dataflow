@@ -46,6 +46,11 @@ export type RunOptions = {
    * without it, such a call is an error of the envelope. A test run never queues: the call runs beside the run.
    */
   queueFlow?: QueueFlow;
+  /**
+   * The most runs one Flow Invoker fires and forgets in this run (its batches): past it, the batches left grow instead
+   * of making more runs. The server sets it from its workers (4 × WORKERS); without it, no limit.
+   */
+  maxFireAndForgetRuns?: number;
   /** run that called this one (filled in by the Flow Invoker) */
   parentId?: string;
   /** ids of the flows in the call chain so far, to catch circular calls; `rootName`: the first one's name, for the message */

@@ -113,6 +113,13 @@ export async function restoreFlow(id: string): Promise<ApiResult<Flow>> {
 export type RunView = {
   id: string;
   flowId: string;
+  /** the flow's name when it was queued, its project, what started it and when */
+  flowName?: string | null;
+  projectId?: string | null;
+  trigger?: 'manual' | 'webhook' | 'schedule' | 'api' | 'flow-invoker';
+  queuedAt?: string;
+  startedAt?: string | null;
+  finishedAt?: string | null;
   mode: 'validation' | 'execution';
   status: 'queued' | 'running' | 'completed' | 'with-warnings' | 'with-errors' | 'failed' | 'cancelled';
   record: RunRecord | RunProgress | null;

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -12,8 +12,9 @@ import {
 import type { ApiResult } from '@/lib/api';
 
 export type ConfirmTarget = {
-  title: string;
-  description: string;
+  /** text, or text with a name in bold */
+  title: ReactNode;
+  description: ReactNode;
   /** e.g. "Archive", "Delete" */
   confirmLabel: string;
   /** e.g. "Deleting..." */

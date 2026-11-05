@@ -31,6 +31,12 @@ export type SupervisorOptions = {
 type Active = { run: QueuedRun; execution: Execution | null; cancelled: boolean; writing: Promise<void>; next: RunProgress | null };
 
 /**
+ * How many runs one Flow Invoker may fire and forget in a run, per worker of the supervisor that runs it: past that,
+ * its last batches grow instead (more runs than the workers can take only wait in the queue).
+ */
+export const FIRE_AND_FORGET_PER_WORKER = 4;
+
+/**
  * Runs what the api queues: claims queued runs (as many as its workers), prepares each one (its secrets decrypted
  * here), hands it to a worker and writes how it goes and how it ended. Woken by NOTIFY when a run is queued or
  * stopped, and every `pollMs` in case it missed one. Several supervisors may share the database: a run goes to one.
@@ -176,7 +182,7 @@ export class Supervisor {
     void (async () => {
       let ended;
       try {
-        const job = await prepareJob(db, keyring, run);
+        const job = { ...(await prepareJob(db, keyring, run)), maxFireAndForgetRuns: FIRE_AND_FORGET_PER_WORKER * executor.size };
         // a real run's fire and forget calls are queued here, as its children; a test run runs them beside it
         const queueFlow = run.table === 'runs' ? (request: QueueFlowRequest) => this.queueChild(run, request, log) : undefined;
         active.execution = executor.run(job, progress, { queueFlow });

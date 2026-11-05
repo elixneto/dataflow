@@ -170,8 +170,7 @@ export function RunPanel({
     // what is being looked at, kept from one run to the next (the record is gone while the next one starts): the Data
     // tab's component and the Logs tab's filters
     const [selected, setSelected] = useState<string | undefined>(undefined);
-    // info and up: what a component says of itself (counts, times, the run's own lines) is debug
-    const [logsFilter, setLogsFilter] = useState<LogsFilter>({level: 'info', node: 'all'});
+    const [logsFilter, setLogsFilter] = useState<LogsFilter>(DEFAULT_LOGS_FILTER);
     // a count clicked on the canvas: open, on the Data tab, on that component (the request is applied once, when it changes)
     const [shown, setShown] = useState<number | undefined>(undefined);
     if (show && show.at !== shown) {
@@ -272,26 +271,7 @@ export function RunPanel({
             </span>
                     </>
                 ) : null}
-                {!collapsed && record && !error && (
-                    <div role="tablist" className="ml-4 flex gap-1">
-                        {TABS.map(t => (
-                            <button
-                                key={t}
-                                type="button"
-                                role="tab"
-                                aria-selected={tab === t}
-                                onClick={() => setTab(t)}
-                                className={cn('rounded-md px-2.5 py-1 text-xs capitalize transition-colors', tab === t ? 'bg-accent font-medium' : 'text-muted-foreground hover:text-foreground')}
-                            >
-                                {t}
-                                {t === 'errors' && errors.length > 0 && (
-                                    <span
-                                        className="ml-1.5 rounded-full bg-destructive/15 px-1.5 font-mono text-[0.65rem] text-destructive">{errors.reduce((n, e) => n + e.count, 0)}</span>
-                                )}
-                            </button>
-                        ))}
-                    </div>
-                )}
+                {!collapsed && record && !error && <TabBar tab={tab} onTab={setTab} errors={errors} className="ml-4"/>}
                 <div className="ml-auto flex items-center gap-1">
                     {running && onStop && (
                         <Button variant="outline" size="sm" className="h-7" onClick={onStop} disabled={stopping}
@@ -322,7 +302,7 @@ export function RunPanel({
                 <div className="min-h-0 flex-1 overflow-auto">
                     {tab === 'errors' && <ErrorsTab record={record} errors={errors} onFocus={onFocus}/>}
                     {tab === 'logs' &&
-                        <LogsTab record={record} onFocus={onFocus} filter={logsFilter} onFilter={setLogsFilter}/>}
+                        <RunLogs record={record} onFocus={onFocus} filter={logsFilter} onFilter={setLogsFilter}/>}
                     {tab === 'metrics' && <MetricsTab record={record} onFocus={onFocus} portName={portName}/>}
                     {tab === 'data' && (
                         <DataTab record={record} onFocus={onFocus} pinned={pinned} onPin={onPin}
@@ -336,6 +316,76 @@ export function RunPanel({
 }
 
 const LEVELS = ['debug', 'info', 'warning', 'error'] as const;
+
+/** Errors (with how many), Logs, Metrics, Data */
+function TabBar({tab, onTab, errors, className}: { tab: Tab; onTab: (tab: Tab) => void; errors: RunError[]; className?: string }) {
+    return (
+        <div role="tablist" className={cn('flex gap-1', className)}>
+            {TABS.map(t => (
+                <button
+                    key={t}
+                    type="button"
+                    role="tab"
+                    aria-selected={tab === t}
+                    onClick={() => onTab(t)}
+                    className={cn('rounded-md px-2.5 py-1 text-xs capitalize transition-colors', tab === t ? 'bg-accent font-medium' : 'text-muted-foreground hover:text-foreground')}
+                >
+                    {t}
+                    {t === 'errors' && errors.length > 0 && (
+                        <span
+                            className="ml-1.5 rounded-full bg-destructive/15 px-1.5 font-mono text-[0.65rem] text-destructive">{errors.reduce((n, e) => n + e.count, 0)}</span>
+                    )}
+                </button>
+            ))}
+        </div>
+    );
+}
+
+export type RunTab = Tab;
+export const RUN_TABS = TABS;
+
+/** the tab a run opens on: Errors when it ended with errors (not stopped), else Logs */
+export const firstTab = (record: Shown | null): Tab =>
+    record && record.status !== 'running' && !stoppedRun(record) && runErrors(record).length > 0 ? 'errors' : 'logs';
+
+const NOTHING_PINNED = new Set<string>();
+
+/**
+ * A run's tabs away from the canvas (a run's own page): Errors, Logs, Metrics and Data, without pinning; an error
+ * clicked shows its component's log lines, a component clicked in Metrics its envelopes.
+ */
+export function RunDetails({record, tab, onTab, portName = defaultPortName}: {
+    record: Shown;
+    tab: Tab;
+    onTab: (tab: Tab) => void;
+    portName?: PortName
+}) {
+    const errors = useMemo(() => runErrors(record), [record]);
+    const [logsFilter, setLogsFilter] = useState<LogsFilter>(DEFAULT_LOGS_FILTER);
+    const [selected, setSelected] = useState<string | undefined>(undefined);
+    const toLogs = (nodeId: string) => {
+        setLogsFilter(f => ({...f, level: 'all', node: nodeId}));
+        onTab('logs');
+    };
+    const toData = (nodeId: string) => {
+        setSelected(nodeId);
+        onTab('data');
+    };
+    return (
+        <div className="flex h-full min-h-0 flex-col">
+            <TabBar tab={tab} onTab={onTab} errors={errors} className="shrink-0 border-b px-3 py-1.5"/>
+            <div className={cn('min-h-0 flex-1', tab === 'data' ? 'overflow-hidden' : 'overflow-auto')}>
+                {tab === 'errors' && <ErrorsTab record={record} errors={errors} onFocus={toLogs}/>}
+                {tab === 'logs' && <RunLogs record={record} filter={logsFilter} onFilter={setLogsFilter}/>}
+                {tab === 'metrics' && <MetricsTab record={record} onFocus={toData} portName={portName}/>}
+                {tab === 'data' && (
+                    <DataTab record={record} onFocus={() => {
+                    }} pinned={NOTHING_PINNED} portName={portName} selected={selected} onSelect={setSelected}/>
+                )}
+            </div>
+        </div>
+    );
+}
 const LEVEL_COLOR: Record<string, string> = {
     debug: 'text-muted-foreground',
     info: 'text-sky-600 dark:text-sky-400',
@@ -343,8 +393,11 @@ const LEVEL_COLOR: Record<string, string> = {
     error: 'text-destructive'
 };
 
-/** the Logs tab's filters: a level and up, one component */
-type LogsFilter = { level: string; node: string };
+/** the Logs tab's filters: a level and up, one component, a text */
+export type LogsFilter = { level: string; node: string; text: string };
+
+/** info and up: what a component says of itself (counts, times, the run's own lines) is debug */
+export const DEFAULT_LOGS_FILTER: LogsFilter = {level: 'info', node: 'all', text: ''};
 
 /** every log line of the run, by time; a click focuses its component */
 /** the run's errors stacked: one row per component and message, how many times, the first time; a row shows the component */
@@ -395,20 +448,25 @@ function ErrorsTab({record, errors, onFocus}: {
     );
 }
 
-function LogsTab({record, onFocus, filter, onFilter}: {
+/**
+ * A run's log lines with their filters (a level and up, a component, a text), the runs its Flow Invokers called inside
+ * (collapsed); a click on a line focuses its component when `onFocus` is given (the editor's canvas).
+ */
+export function RunLogs({record, onFocus, filter, onFilter}: {
     record: Shown;
-    onFocus: (nodeId: string) => void;
+    onFocus?: (nodeId: string) => void;
     filter: LogsFilter;
     onFilter: (filter: LogsFilter) => void
 }) {
-    const {level, node} = filter;
+    const {level, node, text} = filter;
     const setLevel = (next: string) => onFilter({...filter, level: next});
     const setNode = (next: string) => onFilter({...filter, node: next});
-    const items = useMemo(() => logItems(record, level).filter(item => node === 'all' || item.nodeId === node), [record, level, node]);
+    const match = useMemo<LogMatch>(() => ({level, text: text.trim().toLowerCase()}), [level, text]);
+    const items = useMemo(() => logItems(record, match).filter(item => node === 'all' || item.nodeId === node), [record, match, node]);
     const select = 'h-7 rounded-md border bg-transparent px-2 text-xs';
     return (
         <div className="flex flex-col">
-            <div className="sticky top-0 flex gap-2 border-b bg-card px-3 py-1.5">
+            <div className="sticky top-0 z-10 flex gap-2 border-b bg-card px-3 py-1.5">
                 <select aria-label="Level" value={level} onChange={e => setLevel(e.target.value)} className={select}>
                     <option value="all">All levels</option>
                     {LEVELS.map(l => (
@@ -425,10 +483,13 @@ function LogsTab({record, onFocus, filter, onFilter}: {
                         </option>
                     ))}
                 </select>
+                <input type="search" aria-label="Search the log" placeholder="Search" value={text}
+                       onChange={e => onFilter({...filter, text: e.target.value})}
+                       className={cn(select, 'w-48 min-w-0 placeholder:text-muted-foreground')}/>
             </div>
             {items.length === 0 &&
-                <p className="p-3 text-xs text-muted-foreground">{level === 'all' ? 'No log lines.' : `No log lines at ${level} and up (the components' own lines are debug).`}</p>}
-            <LogList items={items} level={level} onFocus={onFocus} depth={0}/>
+                <p className="p-3 text-xs text-muted-foreground">{match.text ? `No log lines with "${text.trim()}"${level === 'all' ? '' : ` at ${level} and up`}.` : level === 'all' ? 'No log lines.' : `No log lines at ${level} and up (the components' own lines are debug).`}</p>}
+            <LogList items={items} match={match} onFocus={onFocus} depth={0}/>
         </div>
     );
 }
@@ -441,18 +502,29 @@ type LogItem = { at: string; nodeId: string; label: string; via: string } & ({ k
 
 const atLevel = (line: string, level: string) => level === 'all' || LEVELS.indexOf(line as never) >= LEVELS.indexOf(level as never);
 
-/** whether a run (or a run it called) has a line at the level and up */
-const hasLinesAt = (shown: Shown, level: string): boolean =>
-    shown.components.some(c => c.logs.some(l => atLevel(l.level, level)) || subRunsOf(c).some(sub => hasLinesAt(sub.record, level)));
+/** the lines shown: at a level and up, with a text (lower case) in their message or their component's name */
+type LogMatch = { level: string; text: string };
+
+const matches = (line: LogLine, label: string, match: LogMatch) =>
+    atLevel(line.level, match.level) && (!match.text || line.message.toLowerCase().includes(match.text) || label.toLowerCase().includes(match.text));
+
+/** whether a run (or a run it called) has a line that matches */
+const hasLines = (shown: Shown, match: LogMatch, via: string): boolean =>
+    shown.components.some(c => {
+        const label = via ? `${via} › ${nameOf(c)}` : nameOf(c);
+        return c.logs.some(l => matches(l, label, match)) || subRunsOf(c).some(sub => hasLines(sub.record, match, via ? `${via} › ${sub.flow}` : sub.flow));
+    });
 
 /**
- * A run's log lines at the level and up, in time order, with the runs its Flow Invokers called where each started (a
- * called run without a line at the level is left out). `via`: the called flow, before the component's name.
+ * A run's log lines that match, in time order, with the runs its Flow Invokers called where each started (a called
+ * run without a line that matches is left out, unless every line is shown). `via`: the called flow, before the
+ * component's name.
  */
-function logItems(shown: Shown, level: string, via = ''): LogItem[] {
+function logItems(shown: Shown, match: LogMatch, via = ''): LogItem[] {
     const name = (c: ComponentRun) => (via ? `${via} › ${nameOf(c)}` : nameOf(c));
+    const everything = match.level === 'all' && !match.text;
     const items: LogItem[] = shown.components.flatMap(c => [
-        ...c.logs.filter(l => atLevel(l.level, level)).map((line): LogItem => ({
+        ...c.logs.filter(l => matches(l, name(c), match)).map((line): LogItem => ({
             kind: 'line',
             at: line.at,
             nodeId: c.nodeId,
@@ -461,7 +533,7 @@ function logItems(shown: Shown, level: string, via = ''): LogItem[] {
             line
         })),
         ...subRunsOf(c)
-            .filter(sub => level === 'all' || hasLinesAt(sub.record, level))
+            .filter(sub => everything || hasLines(sub.record, match, via ? `${via} › ${sub.flow}` : sub.flow))
             .map((sub): LogItem => ({
                 kind: 'sub',
                 at: sub.record.run.startedAt,
@@ -478,44 +550,56 @@ function logItems(shown: Shown, level: string, via = ''): LogItem[] {
 const errorLines = (shown: Shown): number => shown.components.reduce((n, c) => n + c.logs.filter(l => l.level === 'error').length + subRunsOf(c).reduce((m, sub) => m + errorLines(sub.record), 0), 0);
 
 /** the lines, and each called run as a group that opens on its own lines (nested when that one called flows too) */
-function LogList({items, level, onFocus, depth, focus}: {
+function LogList({items, match, onFocus, depth, focus}: {
     items: LogItem[];
-    level: string;
-    onFocus: (nodeId: string) => void;
+    match: LogMatch;
+    onFocus?: (nodeId: string) => void;
     depth: number;
     focus?: string
 }) {
     const indent = {paddingLeft: `${0.75 + depth * 1.25}rem`};
     return (
         <ul className="font-mono text-xs">
-            {items.map((item, i) =>
-                item.kind === 'line' ? (
+            {items.map((item, i) => {
+                if (item.kind === 'sub') {
+                    return (
+                        <li key={`sub:${item.sub.id}`}>
+                            <SubRunGroup item={item} match={match} onFocus={onFocus} depth={depth}
+                                         focus={focus ?? item.nodeId}/>
+                        </li>
+                    );
+                }
+                const cells = (
+                    <>
+                        <span className="shrink-0 text-muted-foreground">{time(item.at)}</span>
+                        <span className={cn('w-14 shrink-0', LEVEL_COLOR[item.line.level])}>{item.line.level}</span>
+                        <span className="w-1/5 shrink-0 truncate text-foreground"
+                              title={item.label}>{item.label}</span>
+                        <span className="min-w-0 break-words whitespace-pre-wrap">{item.line.message}</span>
+                    </>
+                );
+                return (
                     <li key={i}>
-                        <button type="button" onClick={() => onFocus(focus ?? item.nodeId)}
-                                className="flex w-full gap-3 px-3 py-0.5 text-left hover:bg-accent" style={indent}>
-                            <span className="shrink-0 text-muted-foreground">{time(item.at)}</span>
-                            <span className={cn('w-14 shrink-0', LEVEL_COLOR[item.line.level])}>{item.line.level}</span>
-                            <span className="w-1/5 shrink-0 truncate text-foreground"
-                                  title={item.label}>{item.label}</span>
-                            <span className="min-w-0 break-words whitespace-pre-wrap">{item.line.message}</span>
-                        </button>
+                        {onFocus ? (
+                            <button type="button" onClick={() => onFocus(focus ?? item.nodeId)}
+                                    className="flex w-full gap-3 px-3 py-0.5 text-left hover:bg-accent" style={indent}>
+                                {cells}
+                            </button>
+                        ) : (
+                            <div className="flex w-full gap-3 px-3 py-0.5 hover:bg-accent/50" style={indent}>{cells}</div>
+                        )}
                     </li>
-                ) : (
-                    <li key={`sub:${item.sub.id}`}>
-                        <SubRunGroup item={item} level={level} onFocus={onFocus} depth={depth}
-                                     focus={focus ?? item.nodeId}/>
-                    </li>
-                ),
-            )}
+                );
+            })}
         </ul>
     );
 }
 
-/** "Called Flow 2: Completed in 12 ms · 2 error lines", collapsed; open, the called run's lines under it */
-function SubRunGroup({item, level, onFocus, depth, focus}: {
+/** "Called Flow 2: Completed in 12 ms · 2 error lines", collapsed (open while searching); open, the called run's lines under it */
+function SubRunGroup({item, match, onFocus, depth, focus}: {
     item: Extract<LogItem, { kind: 'sub' }>;
-    level: string;
-    onFocus: (nodeId: string) => void;
+    match: LogMatch;
+    onFocus?: (nodeId: string) => void;
     depth: number;
     focus: string
 }) {
@@ -523,7 +607,7 @@ function SubRunGroup({item, level, onFocus, depth, focus}: {
     const errors = errorLines(sub.record);
     const status = STATUS[sub.status]?.label ?? sub.status;
     return (
-        <details className="group/sub">
+        <details className="group/sub" open={match.text ? true : undefined}>
             <summary
                 className="flex cursor-pointer list-none gap-3 px-3 py-0.5 hover:bg-accent [&::-webkit-details-marker]:hidden"
                 style={{paddingLeft: `${0.75 + depth * 1.25}rem`}}
@@ -543,8 +627,8 @@ function SubRunGroup({item, level, onFocus, depth, focus}: {
                         <span className="text-destructive"> · {errors} error line{errors === 1 ? '' : 's'}</span>}
         </span>
             </summary>
-            <LogList items={logItems(sub.record, level, item.via ? `${item.via} › ${sub.flow}` : sub.flow)}
-                     level={level} onFocus={onFocus} depth={depth + 1} focus={focus}/>
+            <LogList items={logItems(sub.record, match, item.via ? `${item.via} › ${sub.flow}` : sub.flow)}
+                     match={match} onFocus={onFocus} depth={depth + 1} focus={focus}/>
         </details>
     );
 }
@@ -777,7 +861,8 @@ function DataTab(props: {
     record: Shown;
     onFocus: (nodeId: string) => void;
     pinned: Set<string>;
-    onPin: (nodeId: string, pinned: boolean) => void;
+    /** none: no Pin output button (a run's page, away from the canvas) */
+    onPin?: (nodeId: string, pinned: boolean) => void;
     show?: { nodeId: string; port: string; at: number };
     portName: PortName;
     /** the component chosen (kept across runs), and the action to choose one */
@@ -831,7 +916,7 @@ function DataTab(props: {
                                 </button>
                             ))}
                         </div>
-                        {record.status !== 'running' && c.type !== 'start' && c.type !== 'end' && runActions(c, pinned.has(c.nodeId)).pin && (
+                        {onPin && record.status !== 'running' && c.type !== 'start' && c.type !== 'end' && runActions(c, pinned.has(c.nodeId)).pin && (
                             <Button variant="outline" size="sm" className="ml-auto h-7 text-xs"
                                     onClick={() => onPin(c.nodeId, !pinned.has(c.nodeId))}>
                                 <Pin
@@ -1042,7 +1127,7 @@ const USAGE_HINT =
 const componentsActiveMs = (record: Shown) => record.components.reduce((n, c) => n + (c.activeTimeMs ?? 0), 0);
 
 /** "Memory 98 MB peak (+50 MB) · Process CPU 94 ms · Components 3 ms", or dashes for a run without them (older runs) */
-function RunUsageText({usage, record}: { usage?: RunUsage | null; record: Shown }) {
+export function RunUsageText({usage, record}: { usage?: RunUsage | null; record: Shown }) {
     const peak = usage?.peakRssBytes ?? null;
     const start = usage?.startRssBytes ?? null;
     const cpu = usage?.cpuMs ?? null;
@@ -1182,8 +1267,7 @@ function CalledRuns({c}: { c: ComponentRun }) {
                             label: `Call ${index + 1}`,
                             via: '',
                             sub
-                        }} level="all" onFocus={() => {
-                        }} depth={0} focus={c.nodeId}/>
+                        }} match={{level: 'all', text: ''}} depth={0} focus={c.nodeId}/>
                     </li>
                 ))}
             </ul>

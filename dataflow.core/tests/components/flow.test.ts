@@ -215,6 +215,34 @@ describe('Flow Invoker', () => {
       expect(w.logs.some(l => l.message.includes('3 envelope(s) in 2 run(s) queued') && l.message.includes('2 not queued'))).toBe(true);
     });
 
+    test('at most maxFireAndForgetRuns runs: the batches stop closing on their size and the last one takes the rest; none is lost', async () => {
+      const {asked, queueFlow} = queueing();
+      // 5 envelopes in batches of 1, at most 3 runs: 1, 2, then 3+4+5
+      const r = await flowRunner(five(fire('B', 'throw', {...fixed, batchSize: 1})), {mode: 'execution', id: 'p17', evaluate, flows, queueFlow, maxFireAndForgetRuns: 3});
+      expect(r.status).toBe('completed');
+      expect(asked.map(a => a.input)).toEqual([[{n: 1}], [{n: 2}], [{n: 3}, {n: 4}, {n: 5}]]);
+      const w = r.components.find(c => c.nodeId === 'w')!;
+      expect(w.outputs['out-0']).toBe(5);
+      expect(w.logs.filter(l => l.level === 'warning').map(l => l.message)).toEqual(["Limit of 3 fire and forget runs reached (4 × the server's workers): the last batches take more than 1 envelopes each."]);
+      // a test run beside it: the same limit
+      const test = await flowRunner(five(fire('B', 'throw', {...fixed, batchSize: 1})), {mode: 'validation', id: 'p18', evaluate, flows, maxFireAndForgetRuns: 2});
+      expect(test.components.find(c => c.nodeId === 'w')!.subRuns?.map(s => s.envelopes)).toEqual([1, 4]);
+      // exactly as many batches as the limit: each its size, no warning
+      const fits = await flowRunner(five(fire('B', 'throw', {...fixed, batchSize: 1})), {mode: 'execution', id: 'p20', evaluate, flows, queueFlow: queueing().queueFlow, maxFireAndForgetRuns: 5});
+      const fw = fits.components.find(c => c.nodeId === 'w')!;
+      expect(fw.subRuns?.map(s => s.envelopes)).toEqual([1, 1, 1, 1, 1]);
+      expect(fw.logs.filter(l => l.level === 'warning')).toEqual([]);
+    });
+
+    test('parameter values that need a batch of their own past the limit stop the run', async () => {
+      const {asked, queueFlow} = queueing();
+      // times = $n: five different values, at most 2 runs
+      const r = await flowRunner(five(fire('B', 'throw', {parameters: [{name: 'times', value: '$n', expression: true}]})), {mode: 'execution', id: 'p19', evaluate, flows, queueFlow, maxFireAndForgetRuns: 2});
+      expect(r.status).toBe('failed');
+      expect(r.error).toContain('More than 2 fire and forget runs');
+      expect(asked).toEqual([]);
+    });
+
     test("without Send the envelope's DATA: one run per batch, with no input", async () => {
       const {asked, queueFlow} = queueing();
       const r = await flowRunner(five(fire('B', 'throw', {...fixed, sendEnvelope: false, batchSize: 2})), {mode: 'execution', id: 'p14b', evaluate, flows, queueFlow});

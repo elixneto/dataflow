@@ -58,6 +58,8 @@ export type ComponentContext = {
    * the input against its Start type): throws why it would not start. A batch checks each envelope's DATA with it.
    */
   checkFlowCall: (flowId: string, input?: unknown) => void;
+  /** the most runs a Flow Invoker fires and forgets in this run (RunOptions.maxFireAndForgetRuns); none: no limit */
+  maxFireAndForgetRuns?: number;
   /**
    * Query on a database, through the driver the runner registered for that kind. The connection (a profile or the component's
    * inline fields) becomes the connection string here; the run's signal cancels the query.

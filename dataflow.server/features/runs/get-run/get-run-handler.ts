@@ -4,7 +4,7 @@ import type { UseCaseContext } from '#shared/use-cases/use-case-context';
 import type { UseCaseHandler } from '#shared/use-cases/use-case-handler';
 import { fail, success, type UseCaseResult } from '#shared/use-cases/use-case-result';
 import { validate } from '#shared/use-cases/validate';
-import type { RunRowStatus } from '../run';
+import type { Run, RunRowStatus } from '../run';
 import { usageOf } from '../run-events';
 import { calledRunsOf, findRun, type CalledRunView } from '../run-queue';
 
@@ -14,6 +14,13 @@ export const GetRunQuery = z.object({ id: z.uuid('Invalid') });
 export type RunView = {
   id: string;
   flowId: string;
+  /** the flow's name when it was queued, its project, what started it and when (the run's logs page heads with them) */
+  flowName: string | null;
+  projectId: string | null;
+  trigger: Run['trigger'];
+  queuedAt: string;
+  startedAt: string | null;
+  finishedAt: string | null;
   mode: 'validation' | 'execution';
   status: RunRowStatus;
   record: RunRecord | RunProgress | null;
@@ -28,6 +35,9 @@ export type RunView = {
 };
 
 export type RunUsageView = { startRssBytes: number | null; peakRssBytes: number | null; cpuMs: number | null };
+
+/** raw SQL may give a timestamp as a Date or a string */
+const iso = (value: Date | string | null): string | null => (value === null ? null : new Date(value).toISOString());
 
 
 /** A run as the editor follows it (a test run or a real one): its status, and its record (so far while it runs). */
@@ -48,6 +58,12 @@ export class GetRunHandler implements UseCaseHandler<RunView> {
     return success({
       id: run.id,
       flowId: run.flowId,
+      flowName: run.flowName,
+      projectId: run.projectId,
+      trigger: run.trigger,
+      queuedAt: iso(run.queuedAt)!,
+      startedAt: iso(run.startedAt),
+      finishedAt: iso(run.finishedAt),
       mode: run.mode,
       status: run.status,
       record: live ?? (run.record as RunRecord | null) ?? null,

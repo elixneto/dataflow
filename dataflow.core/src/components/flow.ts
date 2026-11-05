@@ -136,14 +136,20 @@ export const flowInvoker: ComponentLogic = {
  * own; a test run runs it beside this one (its End's envelopes go nowhere) and waits for them all at the end, so its
  * record shows them. A called run that fails is its own failure, not this run's; a batch that cannot be queued is an
  * error line of this component (the runner logs it too) and the others go on.
+ *
+ * At most `ctx.maxFireAndForgetRuns` runs (the open batches count): once the next full batch would leave no room, the
+ * batches stop closing on their size and take the rest of the envelopes (none is lost; a warning says so). Parameter
+ * values that need a new batch past the limit stop the run (On error is Throw).
  */
 async function* fireAndForget(source: AsyncIterable<Envelope>, {flowId, parameters, sendEnvelope, batchSize}: {flowId: string; parameters: InvokerParameter[]; sendEnvelope: boolean; batchSize: number}, ctx: ComponentContext): AsyncGenerator<ComponentOutput> {
   type Batch = {parameters: Record<string, string>; items: EnvelopeData[]; count: number};
   const batches = new Map<string, Batch>();
   const beside: Promise<unknown>[] = [];
+  const limit = ctx.maxFireAndForgetRuns ?? Number.POSITIVE_INFINITY;
   let runs = 0;
   let sent = 0;
   let lost = 0;
+  let capped = false;
   const fire = async (batch: Batch) => {
     const call = {parameters: batch.parameters, input: sendEnvelope ? batch.items : undefined};
     try {
@@ -169,12 +175,24 @@ async function* fireAndForget(source: AsyncIterable<Envelope>, {flowId, paramete
     // On error is Throw: an envelope whose call would not start stops the run here
     ctx.checkFlowCall(flowId, sendEnvelope ? doc.DATA : undefined);
     const key = JSON.stringify(Object.entries(values).sort(([a], [b]) => a.localeCompare(b)));
-    const batch = batches.get(key) ?? {parameters: values, items: [], count: 0};
-    batches.set(key, batch);
+    let batch = batches.get(key);
+    if (!batch) {
+      if (runs + batches.size >= limit) {
+        throw new Error(`More than ${limit} fire and forget runs: these parameter values need a batch of their own past the limit (4 × the server's workers).`);
+      }
+      batch = {parameters: values, items: [], count: 0};
+      batches.set(key, batch);
+    }
+    // a full batch kept open at the limit takes one more: the runs left are fewer than the batches would need
+    if (batch.count >= batchSize && !capped) {
+      capped = true;
+      ctx.log('warning', `Limit of ${limit} fire and forget runs reached (4 × the server's workers): the last batches take more than ${batchSize} envelopes each.`);
+    }
     if (sendEnvelope) batch.items.push(doc.DATA);
     batch.count += 1;
     yield {port: 'out-0', doc};
-    if (batch.count >= batchSize) {
+    // firing it would leave no room for the next batch of these values: it stays open and grows instead
+    if (batch.count >= batchSize && runs + batches.size < limit) {
       batches.delete(key);
       await fire(batch);
     }

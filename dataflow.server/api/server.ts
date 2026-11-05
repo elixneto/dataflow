@@ -20,4 +20,5 @@ await followRunEvents(db);
 const app = createApp(db, config.environment, keyring, logger);
 
 logger.info(`api on :${config.port}`, { port: config.port, environment: config.environment, database: describeDatabase(config.databaseUrl), logLevel: config.logLevel });
-export default { port: config.port, fetch: app.fetch };
+// seconds a connection may stay quiet (Bun's default, 10, closes a run's SSE stream while it waits for a worker)
+export default { port: config.port, fetch: app.fetch, idleTimeout: 60 };

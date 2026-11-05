@@ -87,6 +87,8 @@ export type RunJob = {
   /** a run a fire and forget call queued: the flows called down to it, and the first one's name (circular calls, depth) */
   chain?: string[];
   rootName?: string;
+  /** the most runs one Flow Invoker fires and forgets in this run: 4 × the workers of the supervisor that runs it */
+  maxFireAndForgetRuns?: number;
   /** the scripts its TypeScript components import, as they were when queued: {path: code} and {path: hash} */
   scripts?: Record<string, string>;
   scriptHashes?: Record<string, string>;
@@ -214,6 +216,7 @@ export async function runJob(
       runFrom: job.runFrom,
       flows: job.flows,
       ...(job.chain ? { chain: job.chain, rootName: job.rootName } : {}),
+      ...(job.maxFireAndForgetRuns !== undefined ? { maxFireAndForgetRuns: job.maxFireAndForgetRuns } : {}),
       ...(options.queueFlow ? { queueFlow: options.queueFlow } : {}),
       prepareScript: (code, globals) => prepareScript(code, globals, job.scripts ?? {}, job.scriptHashes ?? {}),
       signal: options.signal,

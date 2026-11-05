@@ -112,6 +112,7 @@ export function componentContext(execution: FlowExecution, node: ExecutableNode,
       }
     },
     checkFlowCall: (flowId, input) => void checkedCall(execution, flowId, input),
+    ...(options.maxFireAndForgetRuns !== undefined ? {maxFireAndForgetRuns: options.maxFireAndForgetRuns} : {}),
     queryDatabase: (kind, {connection: use, ...query}) => {
       const driver = options.databases?.[kind];
       if (!driver) throw new Error(`This runner does not query ${kind}.`);

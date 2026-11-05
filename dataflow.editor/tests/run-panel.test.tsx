@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { newFlowFile, type ComponentRun, type FlowFile } from '@dataflow/core';
 import { EnvelopeCount } from '../src/editor/component-node';
 import { mockRunRecord } from './fixtures/mock-run';
-import { RunPanel } from '../src/pages/flow-editor/run-panel';
+import { DEFAULT_LOGS_FILTER, firstTab, RunDetails, RunLogs, RunPanel, type LogsFilter, type RunTab } from '../src/pages/flow-editor/run-panel';
 
 const flow: FlowFile = {
   ...newFlowFile('Orders', 'f1'),
@@ -295,6 +295,49 @@ describe("a run's errors, stacked", () => {
     expect(html).toMatch(/role="alert"[^>]*>.*&quot;Big&quot;: \$x is not defined/);
     expect(html).toMatch(/aria-selected="true"[^>]*>errors<span[^>]*>2<\/span>/);
     expect(html).toContain('×2');
+  });
+});
+
+describe("a run's log on its own page", () => {
+  const record = mockRunRecord(flow, 'execution', new Date('2026-11-04T12:00:00Z'));
+  const logged = {
+    ...record,
+    components: record.components.map(c =>
+      c.nodeId === 'f'
+        ? {
+            ...c,
+            logs: [
+              { at: '2026-11-04T12:00:01.000Z', level: 'info' as const, message: 'Order 42 enriched' },
+              { at: '2026-11-04T12:00:02.000Z', level: 'warning' as const, message: 'Order 43 has no customer' },
+            ],
+          }
+        : c,
+    ),
+  };
+  const logs = (filter: Partial<LogsFilter>, onFocus?: (nodeId: string) => void) =>
+    renderToStaticMarkup(<RunLogs record={logged} filter={{ ...DEFAULT_LOGS_FILTER, ...filter }} onFilter={() => {}} onFocus={onFocus} />);
+
+  test('a search keeps the lines with the text in their message or their component name', () => {
+    const html = logs({ text: 'customer' });
+    expect(html).toContain('Order 43 has no customer');
+    expect(html).not.toContain('Order 42 enriched');
+    expect(logs({ text: 'BIG' })).toContain('Order 42 enriched');
+    expect(logs({ text: 'nothing like it' })).toContain('No log lines with &quot;nothing like it&quot; at info and up.');
+  });
+
+  test('without a canvas to focus, its lines are not buttons', () => {
+    expect(logs({})).not.toContain('<button');
+    expect(logs({}, () => {})).toContain('<button');
+  });
+
+  test("the run's page has the four tabs; its Data has no Pin output (no canvas to pin on)", () => {
+    const tabs = (tab: RunTab) => renderToStaticMarkup(<RunDetails record={logged} tab={tab} onTab={() => {}} />);
+    expect(tabs('metrics')).toMatch(/role="tab" aria-selected="true"[^>]*>metrics/);
+    expect(tabs('metrics')).toContain('Active');
+    const data = tabs('data');
+    expect(data).toContain('aria-label="Components"');
+    expect(data).not.toContain('Pin output');
+    expect(firstTab(logged)).toBe('logs');
   });
 });
 
