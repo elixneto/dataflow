@@ -64,4 +64,29 @@ describe('Flow Invoker', () => {
     expect(circular.status).toBe('failed');
     expect(circular.error).toContain('Circular flow call: Parent → Parent');
   });
+
+  test("an input that does not fit the other flow's Start type is an error of the envelope, without running it", async () => {
+    // B's Start takes {n: number, tag: string}: the grid's envelopes have no tag
+    const typed: ExecutableFlow = {...multiply, inputType: {name: 'Item', shape: {kind: 'object', fields: [
+      {name: 'n', optional: false, shape: {kind: 'number'}},
+      {name: 'tag', optional: false, shape: {kind: 'string'}},
+    ]}}};
+    const r = await flowRunner(parent('B', 'divert'), {mode: 'execution', id: 'p4', evaluate, flows: {B: typed}});
+    expect(r.status).toBe('completed');
+    const w = r.components.find(c => c.nodeId === 'w')!;
+    expect(w.outputs['error']).toBe(2);
+    expect(w.subRuns ?? []).toEqual([]);
+    expect(JSON.stringify(w.outputSample['error'])).toContain('The input does not fit Item (the Start of \\"Multiply\\"): input.tag: missing (required).');
+    // the fitting ones run
+    const fits = {...typed, inputType: {name: 'Item', shape: {kind: 'object' as const, fields: [{name: 'n', optional: false, shape: {kind: 'number' as const}}]}}};
+    const ok = await flowRunner(parent('B'), {mode: 'execution', id: 'p5', evaluate, flows: {B: fits}});
+    expect(ok.status).toBe('completed');
+    expect(ok.components.find(c => c.nodeId === 'w')!.subRuns?.length).toBe(2);
+  });
+
+  test('a flow that cannot be called (unavailable) is an error of each call', async () => {
+    const r = await flowRunner(parent('B'), {mode: 'execution', id: 'p6', evaluate, flows: {B: {...multiply, unavailable: 'it has no End.'}}});
+    expect(r.status).toBe('failed');
+    expect(r.error).toContain('The flow "Multiply" cannot be called: it has no End.');
+  });
 });

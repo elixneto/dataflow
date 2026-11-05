@@ -497,3 +497,28 @@ export function inputIssues(input: unknown, shape: TypeShape): string[] {
 export function needsFilling(field: TypeField): boolean {
   return !field.optional && field.shape.kind !== 'array' && field.shape.kind !== 'record';
 }
+
+/** a shape as TypeScript text, for reading (the Flow Invoker shows what the called flow takes): `{ id: number; tags: string[] }` */
+export function shapeText(shape: TypeShape, depth = 0): string {
+  if (depth > 6) return '…';
+  const fields = (list: TypeField[]) =>
+    list.map(f => `${IDENTIFIER.test(f.name) ? f.name : JSON.stringify(f.name)}${f.optional ? '?' : ''}: ${shapeText(f.shape, depth + 1)}${f.nullable ? ' | null' : ''}`);
+  const wrapped = (s: TypeShape) => {
+    const text = shapeText(s, depth + 1);
+    return s.kind === 'enum' || s.kind === 'union' ? `(${text})[]` : `${text}[]`;
+  };
+  switch (shape.kind) {
+    case 'string':
+    case 'number':
+    case 'boolean':
+      return shape.kind;
+    case 'enum': return shape.options.map(o => JSON.stringify(o)).join(' | ');
+    case 'array': return wrapped(shape.of);
+    case 'tuple': return `[${shape.items.map(i => shapeText(i, depth + 1)).join(', ')}]`;
+    case 'object': return shape.fields.length ? `{ ${fields(shape.fields).join('; ')} }` : '{}';
+    case 'record': return `Record<string, ${shapeText(shape.of, depth + 1)}>`;
+    case 'union':
+      return shape.variants.map(v => `{ ${[`${shape.tag}: ${JSON.stringify(v.value)}`, ...fields(v.fields)].join('; ')} }`).join(' | ');
+    case 'json': return 'unknown';
+  }
+}

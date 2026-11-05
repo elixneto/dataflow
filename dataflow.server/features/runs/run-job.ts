@@ -27,6 +27,7 @@ import { querySqlServer } from '#shared/runner/sqlserver-driver';
 import { aggregateMongoDb, deleteMongoDb, upsertMongoDb } from '#shared/runner/mongodb-driver';
 import { sendHttp } from '#shared/runner/send-http';
 import type { Run } from './run';
+import type { CalledFlow } from './start-run/called-flows';
 
 /** the code of scripts by hash, kept in the supervisor (a hash is one code forever): the latest few MB */
 const blobCache = new Map<string, string>();
@@ -78,6 +79,8 @@ export type RunJob = {
   connections: Record<string, ConnectionProfileData>;
   /** Run from here: the component it starts from and what reached it in the last run */
   runFrom?: RunFromPlan;
+  /** the flows its Flow Invokers may call, by id (each one's Start input type with it) */
+  flows?: Record<string, ExecutableFlow>;
   /** the scripts its TypeScript components import, as they were when queued: {path: code} and {path: hash} */
   scripts?: Record<string, string>;
   scriptHashes?: Record<string, string>;
@@ -142,11 +145,24 @@ export async function prepareJob(db: Database, keyring: Keyring | undefined, run
   const whole = { ...toExecutableFlow(file, projectName), id: run.flowId };
   // Run from here: the component and what follows it, fed with what reached it in the last run
   const from = run.runFrom as RunFromPlan | null;
+  // the called flows, as they were when queued: one that cannot be called still names itself (each call is an error)
+  const flows = Object.fromEntries(
+    ((run.calledFlows as CalledFlow[] | null) ?? []).map((c): [string, ExecutableFlow] => [
+      c.id,
+      {
+        ...(c.flow ? toExecutableFlow(c.flow, projectName) : { project: projectName, flow: c.name, parameters: [], nodes: [], edges: [] }),
+        id: c.id,
+        ...(c.inputType ? { inputType: c.inputType } : {}),
+        ...(c.unavailable ? { unavailable: c.unavailable } : {}),
+      },
+    ]),
+  );
   return {
     id: run.id,
     mode: run.mode,
     flow: from ? applyRunFrom(whole, from) : whole,
     ...(from ? { runFrom: from } : {}),
+    ...(Object.keys(flows).length ? { flows } : {}),
     ...(await scriptsOfRun(db, run.orgId, (run.scripts as Record<string, string> | null) ?? {})),
     parameters: (run.parameters as Record<string, string> | null) ?? {},
     input,
@@ -186,6 +202,7 @@ export async function runJob(
       timeoutMs: RUN_TIMEOUT_MS,
       onProgress: options.onProgress,
       runFrom: job.runFrom,
+      flows: job.flows,
       prepareScript: (code, globals) => prepareScript(code, globals, job.scripts ?? {}, job.scriptHashes ?? {}),
       signal: options.signal,
     });

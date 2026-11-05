@@ -52,6 +52,11 @@ export type SettingField = {
   arrow?: boolean;
   /** code (JSON): edited as a form of the type another setting (a `script-type`) names, when it names one */
   typedBy?: string;
+  /**
+   * list (a Flow Invoker's parameters): one row per parameter of the Start of the flow another setting (a `flow`) names,
+   * each one a value or an expression, in place of names typed by hand
+   */
+  parametersOf?: string;
   /** shown only when another setting (of the same level) has one of these values; several: all of them */
   when?: SettingCondition | SettingCondition[];
 };

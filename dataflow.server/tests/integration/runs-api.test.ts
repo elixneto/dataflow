@@ -310,6 +310,48 @@ describe('runs api', () => {
     expect((await db.query('SELECT id FROM runs WHERE flow_id = $1', [flowId])).length).toBe(2);
     expect((await db.query("SELECT id FROM runs WHERE mode = 'validation'")).length).toBe(0);
   });
+  test("a Flow Invoker calls another flow's draft: its input checked against that flow's Start type, per envelope", async () => {
+    await call('POST', `/projects/${projectId}/scripts`, { path: 'calls/types', kind: 'script' });
+    await call('PUT', `/projects/${projectId}/scripts/content`, { path: 'calls/types', revision: 0, content: 'export interface Item { n: number; tag: string }' });
+    const node = (id: string, type: string, config: Record<string, unknown>, x = 0) => ({ id, type, position: { x, y: 0 }, config });
+    const edge = (source: string, target: string, sourcePort = 'out-0') => ({ source, sourcePort, target, targetPort: 'in-0' });
+    const save = async (name: string, nodes: unknown[], edges: unknown[]) => {
+      const id = (await call('POST', `/projects/${projectId}/flows`, { name })).body.id as string;
+      expect((await call('PUT', `/flows/${id}/draft`, { revision: 0, flow: { version: 1, name, nodes, edges } })).status).toBe(200);
+      return id;
+    };
+    const childId = await save(
+      'Tagged',
+      [
+        node('start', 'start', { acceptsInput: true, inputType: 'calls/types#Item', parameters: [{ name: 'times', type: 'number', default: '1' }] }),
+        node('m', 'mapper', { fields: [{ target: 'total', value: '$n * $PARAMETERS.times', expression: true }] }, 200),
+        node('end', 'end', {}, 400),
+      ],
+      [edge('start', 'm'), edge('m', 'end')],
+    );
+    const parentId = await save(
+      'Caller',
+      [
+        node('start', 'start', {}),
+        node('g', 'datagrid', { columns: [{ name: 'n', type: 'number' }, { name: 'tag', type: 'text' }], rows: [['1', 'a'], ['2', '']] }, 200),
+        node('m', 'mapper', { fields: [{ target: 'tag', value: '$tag || undefined', expression: true }] }, 300),
+        node('w', 'flow', { flowId: childId, sendEnvelope: true, onError: 'divert', parameters: [{ name: 'times', value: '10', expression: false }] }, 400),
+        node('end', 'end', {}, 600),
+      ],
+      [edge('start', 'g'), edge('g', 'm'), edge('m', 'w'), edge('w', 'end'), edge('w', 'end', 'error')],
+    );
+
+    const started = await call('POST', `/flows/${parentId}/runs`, { mode: 'validation' });
+    expect(started.status).toBe(202);
+    const record = (await ended(started.body.id)).body.record as RunRecord;
+    expect(record.status).toBe('completed');
+    const w = record.components.find(c => c.nodeId === 'w')!;
+    // the first fits Item and runs the child (its draft, with the parameter); the second has no tag and does not run it
+    expect(w.outputSample['out-0']).toEqual([{ n: 1, tag: 'a', total: 10 }]);
+    expect(w.outputs['error']).toBe(1);
+    expect(JSON.stringify(w.outputSample['error'])).toContain('The input does not fit Item');
+    expect(w.subRuns?.map(r => [r.flow, r.status])).toEqual([['Tagged', 'completed']]);
+  });
 });
 
 /** Pins and Run from here, through the api and a supervisor: what does not need to run does not call anything. */

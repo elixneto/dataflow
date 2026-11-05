@@ -38,10 +38,12 @@ const runColumns = () => ({
   runFrom: jsonb('run_from'),
   /** the project's scripts as they were when queued, {path: code} (5_scripts.sql) */
   scripts: jsonb('scripts'),
+  /** the flows its Flow Invokers call, as they were when queued: start-run/called-flows.ts's CalledFlow[] (6_called_flows.sql) */
+  calledFlows: jsonb('called_flows'),
 });
 
 /**
- * Follows migrations/1_initial.sql to 5_scripts.sql: a real run (Run for real, a deployed version), queued,
+ * Follows migrations/1_initial.sql to 6_called_flows.sql: a real run (Run for real, a deployed version), queued,
  * running or done, kept with its history. The editor's Run for real runs the flow's draft (draft_hash); a published
  * run, a deployed version (flow_version_id). `record` is the core's RunRecord.
  */

@@ -11,6 +11,7 @@ import { useProjectResources } from './project-resources';
 import { ExpressionBox } from './expression-box';
 import { loadCodeEditor } from './code-editor-loader';
 import { ScriptTypePicker, TypedInputSetting } from './typed-input';
+import { CalledFlowSetting, useCalledStart, type InvokerParameter } from './called-flow';
 
 type Values = Record<string, unknown>;
 
@@ -55,12 +56,52 @@ export function SettingsForm(props: { id: string; nodeId?: string; fields: Setti
                 onChange={value => onChange(withSetting(field, values, value))}
                 json={<Control id={`${id}-${field.key}-json`} field={field} value={settingValue(field, values)} onChange={value => onChange(withSetting(field, values, value))} />}
               />
+            ) : field.parametersOf && typeof values[field.parametersOf] === 'string' && values[field.parametersOf] ? (
+              // a Flow Invoker's parameters: the called flow's Start parameters, one row each
+              <CalledFlowParameters
+                key={field.key}
+                id={`${id}-${field.key}`}
+                field={field}
+                flowId={String(values[field.parametersOf])}
+                values={values}
+                onChange={items => onChange(withSetting(field, values, items))}
+              />
             ) : (
               <Setting key={field.key} id={`${id}-${field.key}`} field={field} value={settingValue(field, values)} onChange={value => onChange(withSetting(field, values, value))} />
             ),
           )}
       </div>
     </NodeContext.Provider>
+  );
+}
+
+/**
+ * The parameters a Flow Invoker passes to the flow it calls: a row per parameter of that flow's Start, and the input it
+ * takes. While its Start loads, nothing; a flow that cannot be read, the plain list (names typed by hand).
+ */
+function CalledFlowParameters(props: { id: string; field: SettingField; flowId: string; values: Values; onChange: (items: InvokerParameter[]) => void }) {
+  const { id, field, flowId, values, onChange } = props;
+  const start = useCalledStart(flowId);
+  const items = Array.isArray(values[field.key]) ? (values[field.key] as InvokerParameter[]) : [];
+  if (start.status === 'loading') {
+    return <p className="text-xs text-muted-foreground">Reading the flow…</p>;
+  }
+
+  if (start.status === 'missing') {
+    return <Setting id={id} field={field} value={items} onChange={value => onChange(value as InvokerParameter[])} />;
+  }
+
+  return (
+    <CalledFlowSetting
+      id={id}
+      start={start}
+      items={items}
+      sendEnvelope={values.sendEnvelope === true}
+      onChange={onChange}
+      renderValue={(valueId, value, placeholder, change) => (
+        <ValueControl id={valueId} field={{ key: 'value', label: 'Value', kind: 'value' }} value={value} placeholder={placeholder} onChange={change} />
+      )}
+    />
   );
 }
 
@@ -328,7 +369,8 @@ function NodeExpressionBox({ id, value, placeholder, onChange }: { id: string; v
 }
 
 /** a fixed value or an expression: the fx button switches (an expression in monospace) */
-function ValueControl({ id, field, value, onChange }: { id: string; field: SettingField; value: unknown; onChange: (value: ExpressionField) => void }) {
+function ValueControl(props: { id: string; field: SettingField; value: unknown; placeholder?: string; onChange: (value: ExpressionField) => void }) {
+  const { id, field, value, placeholder, onChange } = props;
   const current = (value && typeof value === 'object' ? value : settingDefault(field)) as ExpressionField;
   return (
     <div className="flex items-start gap-1">
@@ -347,10 +389,10 @@ function ValueControl({ id, field, value, onChange }: { id: string; field: Setti
       </button>
       {current.expression ? (
         <div className="grid min-w-0 flex-1 gap-1">
-          <NodeExpressionBox id={id} value={current.value} placeholder={field.placeholder} onChange={text => onChange({ ...current, value: text })} />
+          <NodeExpressionBox id={id} value={current.value} placeholder={placeholder ?? field.placeholder} onChange={text => onChange({ ...current, value: text })} />
         </div>
       ) : (
-        <Input id={id} value={current.value} onChange={event => onChange({ ...current, value: event.target.value })} />
+        <Input id={id} value={current.value} placeholder={placeholder} onChange={event => onChange({ ...current, value: event.target.value })} />
       )}
     </div>
   );

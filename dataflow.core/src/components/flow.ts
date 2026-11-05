@@ -8,7 +8,9 @@ import type {ComponentLogic} from '#types/component-logic.type';
  * parameters of its Start (text or expression on the envelope) and, if checked, the envelope's DATA as input.
  * Each envelope that reaches the other flow's End goes out of here with its DATA merged into the caller envelope's
  * (Override = only the other one's). If the other flow fails, it is an error of the caller envelope and follows the "On error"
- * policy: with Divert, the error port can call a third flow. Circular calls and more than 10 levels are blocked.
+ * policy: with Divert, the error port can call a third flow. The DATA sent is checked against the other flow's Start
+ * type first (ExecutableFlow.inputType): one that does not fit is an error of the envelope, and the flow does not run.
+ * Circular calls and more than 10 levels are blocked.
  */
 
 export type InvokerParameter = ExpressionField & {name: string};
@@ -29,7 +31,7 @@ export const flowInvoker: ComponentLogic = {
   settings: [
     {key: 'flowId', label: 'Flow', kind: 'flow', required: true},
     {
-      key: 'parameters', label: 'Parameters', kind: 'list', itemLabel: 'parameter',
+      key: 'parameters', label: 'Parameters', kind: 'list', itemLabel: 'parameter', parametersOf: 'flowId',
       item: [
         {key: 'name', label: 'Name', kind: 'text', required: true},
         {key: 'value', label: 'Value', kind: 'value', spread: true, default: {value: '', expression: false}},
