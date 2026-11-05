@@ -148,6 +148,31 @@
 }
 
 /*
+ * The project's calls graph (project-flows/graph-view.tsx): solid arrows (dashed only where it says so), and React
+ * Flow's zoom buttons and edge labels in the theme's colors (they are white otherwise, in dark too)
+ */
+.calls-graph .react-flow {
+    --xy-controls-button-background-color: var(--card);
+    --xy-controls-button-background-color-hover: var(--accent);
+    --xy-controls-button-color: var(--foreground);
+    --xy-controls-button-color-hover: var(--foreground);
+    --xy-controls-button-border-color: var(--border);
+    --xy-controls-box-shadow: none;
+    --xy-edge-label-background-color: var(--background);
+    --xy-edge-label-color: var(--muted-foreground);
+}
+
+.calls-graph .react-flow__controls {
+    border: 1px solid var(--border);
+    border-radius: 0.375rem;
+    overflow: hidden;
+}
+
+.calls-graph .react-flow__edge .react-flow__edge-path {
+    stroke-dasharray: none;
+}
+
+/*
  * A group (group-node.tsx) draws its own rectangle: React Flow's default look for a 'group' node (dark border, padding,
  * background, the selection shadow) goes. Two classes, as its stylesheet loads after this one.
  */

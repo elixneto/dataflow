@@ -8,6 +8,8 @@ import type { UseCaseHandler } from '#shared/use-cases/use-case-handler';
 import { success, type UseCaseResult } from '#shared/use-cases/use-case-result';
 import { validate } from '#shared/use-cases/validate';
 
+const INVOKER = 'flow';
+
 export const GetFlowCallsQuery = z.object({ projectId: z.uuid('Invalid') });
 
 /** a flow of the project as the calls name it: where it is, and whether it can be called (active, in an active folder) */
@@ -46,7 +48,13 @@ export class GetFlowCallsHandler implements UseCaseHandler<FlowCallsResponse> {
       available: available(row),
     }));
     // only the flows that can run make calls; an archived one still names what it pointed at
-    const calls = flowCalls(tree.flows.filter(available).map(row => toExecutableFlow(readDraft(row).flow, project.value.name)));
+    // a Flow Invoker left with its default name is named as such (not by its type, "flow")
+    const named = (label: string | undefined) => (label === INVOKER ? 'Flow Invoker' : label);
+    const calls = flowCalls(tree.flows.filter(available).map(row => toExecutableFlow(readDraft(row).flow, project.value.name))).map(c => ({
+      ...c,
+      nodeLabel: named(c.nodeLabel)!,
+      ...(c.onErrorOfLabel ? { onErrorOfLabel: named(c.onErrorOfLabel) } : {}),
+    }));
     return success({ flows, calls, cycles: callCycles(calls) });
   }
 }
