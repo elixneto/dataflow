@@ -1,5 +1,8 @@
 import type {ExecutableFlow} from '#types/executable-flow.type';
 import {MAX_FLOW_DEPTH} from '#engine/constants';
+import {componentSettings, settingVisible} from '../components/settings';
+import {scriptImports} from '../scripts/script-path';
+import {inputTypeRef} from '../scripts/type-shape';
 
 /** A call from one flow to another (a Flow Invoker node). */
 export type FlowCall = {
@@ -123,4 +126,34 @@ export function callTree(calls: FlowCall[], root: string): {nodes: CallTreeNode[
   };
   const nodes = grow(root, [root], 1);
   return {nodes, truncated};
+}
+
+/**
+ * A project script a flow uses: imported by a TypeScript component's code (`import`), or named as a type by a setting
+ * (`type`: the Start's input type, any setting of kind script-type that is in use).
+ */
+export type ScriptUse = {from: string; path: string; nodeId: string; nodeLabel: string; how: 'import' | 'type'};
+
+/** Every script the flows use, once per component and script. */
+export function flowScriptUses(flows: ExecutableFlow[]): ScriptUse[] {
+  return flows.flatMap(wf =>
+    wf.nodes.flatMap(n => {
+      const uses = new Map<string, ScriptUse>();
+      const add = (path: string, how: ScriptUse['how']) => {
+        if (!uses.has(path)) uses.set(path, {from: wf.id ?? '', path, nodeId: n.id, nodeLabel: n.label, how});
+      };
+      if (n.type === 'typescript' && typeof n.config.code === 'string') scriptImports(n.config.code).forEach(path => add(path, 'import'));
+      const fields = componentSettings(n.type);
+      for (const field of fields.filter(f => f.kind === 'script-type' && settingVisible(f, n.config, fields))) {
+        const ref = inputTypeRef(n.config[field.key]);
+        if (ref) add(ref.path, 'type');
+      }
+      return [...uses.values()];
+    }),
+  );
+}
+
+/** What each script imports from the others: one per importing script and imported path. */
+export function scriptLinks(scripts: {path: string; content: string}[]): {from: string; to: string}[] {
+  return scripts.flatMap(s => scriptImports(s.content).filter(to => to !== s.path).map(to => ({from: s.path, to})));
 }

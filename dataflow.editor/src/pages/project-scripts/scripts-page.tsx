@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useState } from 'react';
-import { useParams } from 'react-router';
+import { useParams, useSearchParams } from 'react-router';
 import { ChevronRight, Copy, Ellipsis, FileCode2, Folder, FolderOpen, FolderPlus, LoaderCircle, Pencil, Plus, Trash } from 'lucide-react';
 import { scriptImport } from '@dataflow/core';
 import { ConfirmDialog, type ConfirmTarget } from '@/components/confirm-dialog';
@@ -60,7 +60,7 @@ function treeRows(folders: string[], scripts: string[], open: { has: (path: stri
 /**
  * A project's scripts (/projects/:projectId/scripts): TypeScript modules in nested folders that a TypeScript component
  * imports by their path (`@myproject/scripts/<path>`). The tree on the left, the selected script's code on the right,
- * saved a second after the last key (or at Ctrl+S).
+ * saved a second after the last key (or at Ctrl+S). ?script=<path> opens that script first.
  */
 export function ScriptsPage() {
   const { projectId = '' } = useParams();
@@ -72,7 +72,10 @@ export function ScriptsPage() {
   const [closed, setClosed] = useState<Set<string>>(() => new Set());
   const open = { has: (path: string) => !closed.has(path) };
   const [chosen, setSelected] = useState<string | null>(null);
-  const selected = chosen ?? scripts.scripts[0]?.path ?? null;
+  // ?script=<path> opens that script (the project's Graph links to it)
+  const [params] = useSearchParams();
+  const linked = params.get('script');
+  const selected = chosen ?? (linked && scripts.scripts.some(s => s.path === linked) ? linked : null) ?? scripts.scripts[0]?.path ?? null;
   const [dialog, setDialog] = useState<PathDialogTarget | null>(null);
   const [confirm, setConfirm] = useState<ConfirmTarget | null>(null);
   const [copied, setCopied] = useState(false);

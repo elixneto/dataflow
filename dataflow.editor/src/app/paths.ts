@@ -14,3 +14,6 @@ export const projectPath = (projectId: string, folderId?: string) =>
 
 /** a flow in the editor */
 export const flowPath = (projectId: string, flowId: string) => `/projects/${projectId}/flows/${flowId}`;
+
+/** a project's script in the Scripts tab */
+export const scriptPath = (projectId: string, path: string) => `${projectTabPath(projectId, 'scripts')}?script=${encodeURIComponent(path)}`;

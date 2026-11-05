@@ -1,5 +1,5 @@
 import {expect, test} from 'bun:test';
-import {callCycles, callPath, callTree, flowCalls, flowDependencies} from '#validation/flow-dependencies';
+import {callCycles, callPath, callTree, flowCalls, flowDependencies, flowScriptUses, scriptLinks} from '#validation/flow-dependencies';
 import type {ExecutableFlow} from '#types/executable-flow.type';
 
 const flow = (id: string, calls: string[]): ExecutableFlow => ({
@@ -63,4 +63,23 @@ test('call paths, cycles and the call tree: down the chain, a cycle closed where
   while (deepest.children.length) deepest = deepest.children[0]!;
   expect(deepest.depth).toBe(11);
   expect(deepest.tooDeep).toBe(true);
+});
+
+test('scripts: what a TypeScript component imports, the Start input type (only while it takes input), and the imports between scripts', () => {
+  const uses: ExecutableFlow = {
+    id: 'f', project: 'P', flow: 'F', parameters: [], edges: [],
+    nodes: [
+      {id: 'start', type: 'start', label: 'Start', config: {acceptsInput: true, inputType: 'upload/types#Order'}},
+      {id: 'ts', type: 'typescript', label: 'Prices', config: {code: "import {round} from '@myproject/scripts/lib/math';\nimport type {Order} from '@myproject/scripts/upload/types';"}},
+    ],
+  };
+  expect(flowScriptUses([uses]).map(u => [u.path, u.nodeLabel, u.how])).toEqual([
+    ['upload/types', 'Start', 'type'],
+    ['lib/math', 'Prices', 'import'],
+    ['upload/types', 'Prices', 'import'],
+  ]);
+  // a Start that takes no input: its type is not in use
+  const off = {...uses, nodes: [{...uses.nodes[0]!, config: {acceptsInput: false, inputType: 'upload/types#Order'}}]};
+  expect(flowScriptUses([off])).toEqual([]);
+  expect(scriptLinks([{path: 'upload/types', content: "import {round} from '@myproject/scripts/lib/math';"}, {path: 'lib/math', content: ''}])).toEqual([{from: 'upload/types', to: 'lib/math'}]);
 });

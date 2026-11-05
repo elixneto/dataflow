@@ -1,6 +1,7 @@
 /*
  * How the user likes the screens, remembered in this browser (the last choice is the one that shows next time):
- * Tree, Cards or Graph for a project's contents, and whether the flow editor's components panel is open. Storage can be
+ * Tree, Cards or Graph for a project's contents, whether the Graph shows the scripts, and whether the flow editor's
+ * components panel is open. Storage can be
  * blocked (private mode): then the default, and the choice lasts until the page closes.
  */
 
@@ -8,6 +9,7 @@ export type ProjectView = 'tree' | 'cards' | 'graph';
 
 export const VIEW_KEY = 'dataflow.projectView';
 export const PALETTE_KEY = 'dataflow.paletteOpen';
+export const GRAPH_SCRIPTS_KEY = 'dataflow.graphScripts';
 
 type Storage = Pick<globalThis.Storage, 'getItem' | 'setItem'>;
 
@@ -41,3 +43,10 @@ export const readPaletteOpen = (storage: Storage | undefined = browserStorage())
 
 export const savePaletteOpen = (open: boolean, storage: Storage | undefined = browserStorage()) =>
   save(PALETTE_KEY, open ? 'open' : 'closed', storage);
+
+/** the project's Graph shows the scripts at first */
+export const readGraphScripts = (storage: Storage | undefined = browserStorage()): boolean =>
+  read(GRAPH_SCRIPTS_KEY, ['shown', 'hidden'] as const, 'shown', storage) === 'shown';
+
+export const saveGraphScripts = (shown: boolean, storage: Storage | undefined = browserStorage()) =>
+  save(GRAPH_SCRIPTS_KEY, shown ? 'shown' : 'hidden', storage);
