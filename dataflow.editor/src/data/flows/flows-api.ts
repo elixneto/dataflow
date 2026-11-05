@@ -162,6 +162,8 @@ export type FlowCalls = {
   scriptImports: { from: string; to: string }[];
 };
 
-export function getFlowCalls(projectId: string): Promise<ApiResult<FlowCalls>> {
-  return api<FlowCalls>(`/projects/${projectId}/calls`);
+export async function getFlowCalls(projectId: string): Promise<ApiResult<FlowCalls>> {
+  const result = await api<FlowCalls>(`/projects/${projectId}/calls`);
+  // a server from before the scripts sends none of their fields: no scripts then
+  return result.ok ? { ...result, value: { ...result.value, scripts: result.value.scripts ?? [], scriptUses: result.value.scriptUses ?? [], scriptImports: result.value.scriptImports ?? [] } } : result;
 }
