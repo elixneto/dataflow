@@ -10,7 +10,7 @@ export type InvokerParameter = ExpressionField & { name: string };
 /** what a Flow Invoker shows of the flow it calls: the Start of its draft (the published version, once there is one) */
 export type CalledStart = { status: 'loading' } | { status: 'missing' } | { status: 'ready'; acceptsInput: boolean; inputType: string; parameters: FlowParameter[] };
 
-/** The Start of the called flow, read from its draft (again when the flow changes and when the window comes back into focus). */
+/** The Start of the called flow, read from its draft when the settings open and again when another flow is chosen. */
 export function useCalledStart(flowId: string): CalledStart {
   // the Start read and the flow it is of: another flow chosen, loading until its own is read
   const [read, setRead] = useState<{ flowId: string; start: CalledStart } | null>(null);
@@ -33,10 +33,8 @@ export function useCalledStart(flowId: string): CalledStart {
         setRead({ flowId, start: { status: 'ready', acceptsInput, inputType, parameters } });
       });
     load();
-    window.addEventListener('focus', load);
     return () => {
       alive = false;
-      window.removeEventListener('focus', load);
     };
   }, [flowId]);
   return read && read.flowId === flowId ? read.start : { status: 'loading' };

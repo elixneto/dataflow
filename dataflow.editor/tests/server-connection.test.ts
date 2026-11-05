@@ -44,3 +44,42 @@ describe('server ping', () => {
     expect(await pingServer(20)).toBeNull();
   });
 });
+
+describe('when the server is checked', () => {
+  const realFetch = globalThis.fetch;
+  const urls: string[] = [];
+  let status = 200;
+  const tick = () => new Promise(resolve => setTimeout(resolve, 30));
+
+  afterEach(() => {
+    globalThis.fetch = realFetch;
+    urls.length = 0;
+  });
+
+  test('once when watched, not again while online; a request that reached the server brings it back from offline', async () => {
+    globalThis.fetch = (async (url: string) => {
+      urls.push(url);
+      return status === 200 ? Response.json({ ok: true, environment: 'DEV' }) : new Response(null, { status });
+    }) as unknown as typeof fetch;
+    const { watchServer, serverConnection, reportUnavailable, reportReachable } = await import('../src/lib/server-connection');
+    const stop = watchServer(() => {});
+    await tick();
+    expect(serverConnection()).toEqual({ state: 'online', environment: 'DEV' });
+    expect(urls).toEqual(['/api/health']);
+    // online: nothing polls, and an answered request changes nothing
+    reportReachable();
+    await tick();
+    expect(urls).toHaveLength(1);
+    // a request that could not reach it: offline, and the checks start again (the first one after 1 s)
+    status = 502;
+    reportUnavailable();
+    expect(serverConnection()).toEqual({ state: 'offline' });
+    // a request answered meanwhile: checked right away, online again
+    status = 200;
+    reportReachable();
+    await tick();
+    expect(serverConnection()).toEqual({ state: 'online', environment: 'DEV' });
+    expect(urls).toHaveLength(2);
+    stop();
+  });
+});

@@ -1,5 +1,5 @@
 import { mockUser } from '@/auth/mock-user';
-import { reportUnavailable } from './server-connection';
+import { reportReachable, reportUnavailable } from './server-connection';
 
 /*
  * Calls to dataflow.server. In dev Vite proxies /api to it (vite.config.ts). Who is calling goes in X-Org-Id and
@@ -42,11 +42,14 @@ export async function api<T>(path: string, init: { method?: string; body?: unkno
 
   const body: unknown = await response.json().catch(() => undefined);
   if (response.ok) {
+    reportReachable();
     return { ok: true, value: body as T };
   }
 
   const error = (body as { error?: ApiError } | undefined)?.error;
   if (error?.code && error.message) {
+    // an answer of ours: the server is there
+    reportReachable();
     return { ok: false, error };
   }
 
