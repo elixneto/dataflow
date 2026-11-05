@@ -1,4 +1,4 @@
-import type { FlowCall, FlowFile, RunProgress, RunRecord } from '@dataflow/core';
+import type { FlowCall, FlowFile, ScriptUse, RunProgress, RunRecord } from '@dataflow/core';
 import { api, type ApiResult } from '@/lib/api';
 import type { Flow, Folder, ProjectContents } from './flow';
 
@@ -156,6 +156,10 @@ export type FlowCalls = {
   flows: { id: string; name: string; folder: string; available: boolean }[];
   calls: FlowCall[];
   cycles: string[][];
+  /** the project's scripts (paths), the ones the flows use, and what each script imports from the others */
+  scripts: string[];
+  scriptUses: ScriptUse[];
+  scriptImports: { from: string; to: string }[];
 };
 
 export function getFlowCalls(projectId: string): Promise<ApiResult<FlowCalls>> {

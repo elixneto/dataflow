@@ -159,5 +159,18 @@ describe('folders and flows api', () => {
     expect(body.flows.find(f => f.id === gone)).toMatchObject({ available: false });
     expect(body.flows.find(f => f.id === one)).toMatchObject({ available: true, folder: '' });
     expect((await call('GET', `/projects/${crypto.randomUUID()}/calls`)).status).toBe(404);
+
+    // the scripts: a TypeScript component that imports one, which imports another
+    const uses = calling(one, 'Calls 1', [two]);
+    uses.flow.nodes.splice(1, 0, { id: 'ts', type: 'typescript', label: 'Prices', position: { x: 160, y: 200 }, config: { code: "import {round} from '@myproject/scripts/lib/prices';" } } as never);
+    uses.flow.edges.push({ source: 'start', sourcePort: 'out-0', target: 'ts', targetPort: 'in-0' }, { source: 'ts', sourcePort: 'out-0', target: 'end', targetPort: 'in-0' });
+    await db.query(`UPDATE flows SET draft_definition = $1 WHERE id = $2`, [JSON.stringify(uses), one]);
+    for (const [path, content] of [['lib/prices', "import {two} from '@myproject/scripts/lib/math';\nexport const round = 1;"], ['lib/math', 'export const two = 2;']]) {
+      expect((await call('POST', `/projects/${projectId}/scripts`, { path, kind: 'script', content })).status).toBe(201);
+    }
+    const withScripts = (await call('GET', `/projects/${projectId}/calls`)).body as { scripts: string[]; scriptUses: { from: string; path: string; nodeId: string; nodeLabel: string; how: string }[]; scriptImports: { from: string; to: string }[] };
+    expect(withScripts.scripts).toEqual(['lib/math', 'lib/prices']);
+    expect(withScripts.scriptUses).toEqual([{ from: one, path: 'lib/prices', nodeId: 'ts', nodeLabel: 'Prices', how: 'import' }]);
+    expect(withScripts.scriptImports).toEqual([{ from: 'lib/prices', to: 'lib/math' }]);
   });
 });

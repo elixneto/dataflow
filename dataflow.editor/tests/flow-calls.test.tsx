@@ -15,6 +15,9 @@ const data = {
   ],
   calls: [call('a', 'b'), call('b', 'a'), call('a', 'c'), call('d', 'a', 'Run Flow 1'), call('a', 'gone')],
   cycles: [['a', 'b', 'a']],
+  scripts: [],
+  scriptUses: [],
+  scriptImports: [],
 };
 const view = (calls: FlowCall[]) =>
   renderToStaticMarkup(
