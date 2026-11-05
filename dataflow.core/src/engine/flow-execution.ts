@@ -368,7 +368,8 @@ export class FlowExecution {
     } catch (e) {
       rec.status = 'failed';
       const message = e instanceof Error ? e.message : String(e);
-      log('error', message);
+      // Stop policy: the error is already in this component's log (above), once
+      if (!(e instanceof RunInterrupted)) log('error', message);
       this.failure ??= e instanceof RunInterrupted ? message : `"${node.label}": ${message}`;
       this.abortAll();
     } finally {

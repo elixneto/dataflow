@@ -8,7 +8,10 @@ test('an expression with an error stops the run (default policy)', async () => {
   withError.nodes[1].config = {fields: [{target: 'x', value: '$doesNotExist.y', expression: true}]};
   const r = await flowRunner(withError, {mode: 'execution', id: 't2', evaluate});
   expect(r.status).toBe('failed');
-  expect(r.components.find(c => c.nodeId === 'm')!.status).toBe('failed');
+  const m = r.components.find(c => c.nodeId === 'm')!;
+  expect(m.status).toBe('failed');
+  // the error once in its log (not again when the run stops)
+  expect(m.logs.filter(l => l.level === 'error')).toHaveLength(1);
 });
 
 test('Continue: on error, the incoming envelope moves on unchanged', async () => {
