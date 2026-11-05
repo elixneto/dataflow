@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { Popover } from 'radix-ui';
-import { CircleAlert, ExternalLink, GitFork, RefreshCw } from 'lucide-react';
+import { CircleAlert, ExternalLink, GitFork } from 'lucide-react';
 import { flowPath } from '@/app/paths';
 import { callPath, callTree, MAX_FLOW_DEPTH, type CallTreeNode, type FlowCall } from '@dataflow/core';
 import { Button } from '@/components/ui/button';
@@ -74,9 +74,6 @@ export function FlowCallsView({ projectId, flowId, data, calls }: { projectId: s
           ))}
         </ul>
       </section>
-      <p className="flex items-center gap-1 text-xs text-muted-foreground">
-        <RefreshCw className="size-3" aria-hidden /> From the drafts as saved, this flow as it is on the canvas.
-      </p>
     </div>
   );
 }
