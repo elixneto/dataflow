@@ -6,3 +6,5 @@ dist
 .env
 
 dataflow.server/data.local*
+dataflow.perf/results/*
+!dataflow.perf/results/.gitkeep

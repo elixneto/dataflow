@@ -8,7 +8,7 @@
 
 ## Overview
 
-`dataflow.perf` (daqui em diante, *o perf*) é um pacote do monorepo que roda cenários de performance do engine do dataflow com `bun run perf`. Cada cenário é um ou mais flows em arquivo (o YAML que o Download do editor gera), com dados gerados de forma determinística, executados pelo `flowRunner` do core num processo Bun novo, contra MongoDB e SQL Server em containers dedicados, cada um com limite de CPU e RAM, e uma API HTTP fake num processo local. O relatório sai em texto no terminal: para cada run, as métricas de tempo, memória, CPU e envelopes por segundo que as réguas do cenário escolhem, com a execução anterior ao lado. Os resultados ficam num arquivo local, fora do git.
+`dataflow.perf` (daqui em diante, *o perf*) é um pacote do monorepo que roda cenários de performance do engine do dataflow com `bun run perf`. Cada cenário é um ou mais flows em arquivo (o YAML que o Download do editor gera), com dados gerados de forma determinística, executados pelo `flowRunner` do core num processo Bun novo, contra MongoDB e SQL Server em containers dedicados, cada um com limite de CPU e RAM, e uma API HTTP fake num processo local. O relatório sai em texto no terminal e numa página web estática (`dataflow.perf/report/`) que lê os resultados: a visão geral de todos os cenários, o histórico de cada um em gráfico e as execuções escolhidas comparadas lado a lado. `bun run perf --serve --open` a serve com os resultados e abre o navegador. Os resultados ficam num arquivo local, fora do git.
 
 Um *envelope* é a unidade que o engine processa: um registro (um objeto `DATA` com os campos do dado) que atravessa os componentes do flow um a um. Uma linha do SQL Server, um documento do MongoDB ou um item de um array de entrada viram um envelope cada. Todas as métricas de volume deste documento contam envelopes.
 
@@ -31,7 +31,7 @@ A solução é um conjunto de cenários versionados no repositório, com um coma
 *   Cada execução grava uma linha JSON (com `schemaVersion`, commit, flag de alterações não commitadas, os fatos da máquina, o cenário com seed e tamanho, as tags das imagens e todas as amostras) em `dataflow.perf/results/`, fora do git.
 *   Código de saída 0; 1 quando um run medido falha; 2 quando a infraestrutura falha (Docker, carga). `--quick` roda com N menor e sem aquecimento.
 *   O perf mede sempre a mesma configuração de drivers que o worker do server roda: ele chama o `runJob` do server, não monta a sua própria.
-*   A ferramenta só serve se o ruído for menor que o que ela quer mostrar: a dispersão (máximo menos mínimo sobre a mediana) do `in-memory-pipeline` com N = 5 deve ficar abaixo de 10 % na máquina de referência do autor; se não ficar, o relatório diz "ruído alto" e o passo seguinte é aumentar N ou fixar a CPU, antes de calibrar qualquer limite.
+*   A ferramenta só serve se o ruído for menor que o que ela quer mostrar: a dispersão (máximo menos mínimo sobre a mediana) do `in-memory-pipeline` com N = 5 deve ficar abaixo de 10 % na máquina de referência do autor; se não ficar, o relatório diz "high noise" e o passo seguinte é aumentar N ou fixar a CPU, antes de calibrar qualquer limite.
 *   Os flows de cenário são validados pelo `bun run test` normal com o `validateFlowFile` do core, para que uma mudança de formato quebre no dia a dia, não meses depois.
 *   O engine roda isolado: o server, o Postgres e as portas 5180, 5190 e 5432 do ambiente de dev não são tocados.
 
@@ -44,7 +44,7 @@ A solução é um conjunto de cenários versionados no repositório, com um coma
 *   Bloquear merge ou rodar no CI.
 *   Simular falhas reais de rede. A lentidão e os erros vêm só da API fake.
 *   Réguas de Fire and Forget (disparar um flow sem esperar o resultado) e de workers múltiplos (vários processos de execução em paralelo), até essas funções existirem.
-*   Relatório em HTML ou no editor. Só texto no terminal.
+*   Relatório dentro do editor, ou publicado em algum lugar. A página é estática e local; o servidor do `--serve` só entrega os arquivos dela e os resultados, em `127.0.0.1`.
 *   Abrir as runs do perf no editor ou apontar "o componente que mais mudou": as runs não passam pelo server (não existem lá) e não há comparação nesta versão.
 *   Monitorar produção.
 
@@ -52,7 +52,7 @@ A solução é um conjunto de cenários versionados no repositório, com um coma
 
 *   **Métricas de memória por componente**: `ComponentRun.memory.peakBytes` existe no core. Falta confirmar se ele serve como régua ou só como informação, dado que mede amostras de envelopes e não o processo.
 
-Decisões do autor após a revisão (2026-11-05): sem limites nem `--strict` nesta versão; campos brutos no JSONL em vez de hashes e digests; API fake como processo local; o perf chama o `runJob` do server (exposto por `exports`) em vez de copiar a montagem dos drivers.
+Decisões do autor após a revisão (2026-11-05): sem limites nem `--strict` nesta versão; campos brutos no JSONL em vez de hashes e digests; API fake como processo local; o perf chama o `runJob` do server (exposto por `exports`) em vez de copiar a montagem dos drivers. Depois da primeira execução: uma página estática que lê os resultados (JSONL) e permite abrir cada cenário e comparar as execuções, além do texto no terminal (o brief tinha decidido só texto), e resultados compactos (`schemaVersion` 2), porque o registro inteiro do engine fazia o JSONL passar de 50 MB em uma tarde.
 
 Dependência fora do escopo: `validateFlowFile` recusa qualquer versão diferente de 1 e ainda não existe conversão de versões antigas. Ela precisa existir no core antes de a versão 2 do formato aparecer; a CUJ 3 é o que avisa.
 
@@ -85,7 +85,7 @@ Como o server executa um flow hoje: a API grava a run no Postgres e avisa por NO
 O perf é um workspace Bun (`@dataflow/perf`) com três partes: um **orquestrador** (`src/cli.ts`), um **processo de medição** por run (`src/run-once.ts`) e uma **API HTTP fake** (`fake-api/`) que o orquestrador sobe como processo local quando um cenário a pede. O orquestrador nunca roda um flow: ele sobe containers e a API fake, carrega dados, zera destinos, dispara o processo de medição N+1 vezes, agrega e imprime. O processo de medição é o único lugar onde o engine executa, e ele o faz pelo mesmo `runJob` que o worker do server usa: o perf mede a configuração de drivers que a produção roda, e um driver novo no `runJob` entra no perf sem ninguém mexer nele. O processo morre no fim de cada run, por isso cada run começa sem heap herdado de runs anteriores.
 
 ```text
-bun run perf [cenário...] [--runs N] [--quick] [--size S] [--list]
+bun run perf [cenário...] [--runs N] [--quick] [--size S] [--list] [--serve] [--open]
         │
         ▼
 ┌──────────────────────── dataflow.perf/src/cli.ts (orquestrador) ─────────────────────────┐
@@ -102,7 +102,7 @@ bun run perf [cenário...] [--runs N] [--quick] [--size S] [--list]
                 ▼                                           ▼
 ┌──── src/run-once.ts (medição) ─────┐     ┌──────────────────────────────────────────────┐
 │ flows YAML ─► flowFromYaml         │     │ mssql     :14330  2 CPU / 2,5 GB  vol. mssql │
-│          ─► toExecutableFlow       │ ──► │ mongodb   :27018  1 CPU / 1 GB    vol. mongo │
+│          ─► toExecutableFlow       │ ──► │ mongodb   :27030  1 CPU / 1 GB    vol. mongo │
 │ RunJob: flow, flows, connections,  │     └──────────────────────────────────────────────┘
 │   secrets, parameters, input       │ ──► fake-api :5195 (processo local do orquestrador)
 │ pré-aquece drivers e scripts       │
@@ -135,7 +135,7 @@ Recebe por argumentos o id do cenário, o tamanho, a seed e o número da iteraç
 A medição em si:
 
 1. `Bun.gc(true)` e `process.memoryUsage()` uma vez (início: `rss`, `heapUsed`).
-2. Um `Worker` do Bun (`new Worker(new URL('./memory-sampler.ts', import.meta.url))`) que lê `process.memoryUsage.rss()` a cada 10 ms e guarda o máximo. O RSS é do processo inteiro, então o worker vê a memória do thread principal; e como ele tem o próprio event loop, continua amostrando enquanto o engine ocupa o thread principal. Isso importa: o engine passa envelopes por promessas (microtasks), sem ceder a timers, então um `setInterval` no thread principal só dispararia quando o flow terminasse. Ao fim, o worker devolve o pico e o número de amostras por `postMessage`.
+2. Uma thread (`Worker` de `node:worker_threads`, `src/memory-sampler.ts`) que começa a amostrar ao carregar, avisa que está pronta (o relógio só começa depois) e lê `process.memoryUsage.rss()` a cada 10 ms e guarda o máximo. O RSS é do processo inteiro, então o worker vê a memória do thread principal; e como ele tem o próprio event loop, continua amostrando enquanto o engine ocupa o thread principal. Isso importa: o engine passa envelopes por promessas (microtasks), sem ceder a timers, então um `setInterval` no thread principal só dispararia quando o flow terminasse. Ao fim, o worker devolve o pico e o número de amostras por `postMessage`.
 3. `process.cpuUsage()` antes e depois (user + system).
 4. `await runJob(job, {signal})`.
 5. Encerra o worker, mais uma leitura de RSS (o fim) e de `heapUsed`.
@@ -155,21 +155,23 @@ Os cinco cenários iniciais (componentes do core: Mapper calcula campos; Filter 
 
 | Cenário | Serviços | O que mede | Tamanho (quick) |
 |---|---|---|---|
-| `in-memory-pipeline` | nenhum | Start com entrada → Mapper → Filter → Router → TypeScript → End. CPU e alocação do engine puro. | 300 000 (30 000) envelopes |
+| `in-memory-pipeline` | nenhum | Start com entrada → Mapper → Filter → Router → TypeScript → End. CPU e alocação do engine puro. | 10 000 (1 000) envelopes |
 | `flow-invoker-fanout` | nenhum | Start com entrada → Flow Invoker (flow filho com Mapper) → End. Custo de um `flowRunner` por envelope. | 20 000 (2 000) envelopes |
-| `sqlserver-to-mongodb` | mssql, mongodb | SQL Server Query (stream com backpressure) → Mapper → MongoDB Upsert (lote 500). Origem SQL, destino Mongo. | 100 000 (10 000) linhas |
-| `mongodb-pipeline-aggregate` | mongodb | MongoDB Pipeline (com `$group` no banco) → Filter → Aggregate (lotes de 500) → TypeScript (soma do lote) → Sort → Limit → End. Acumuladores e a memória que eles seguram. | 200 000 (20 000) documentos |
+| `sqlserver-to-mongodb` | mssql, mongodb | SQL Server Query (stream com backpressure) → Mapper → MongoDB Upsert (lote 500). Origem SQL, destino Mongo. | 50 000 (5 000) linhas |
+| `mongodb-pipeline-aggregate` | mongodb | MongoDB Pipeline (com `$group` no banco) → Filter → Aggregate (lotes de 500) → TypeScript (soma do lote) → Sort → Limit → End. Acumuladores e a memória que eles seguram. | 100 000 (10 000) documentos |
 | `http-slow-api` | fake-api | Start com entrada (ids) → HTTP Request (8 ao mesmo tempo, 20 ms ± 10 ms, 2 % de falhas desviadas pela porta de erro) → Mapper → End. Espera externa e tratamento de erro. | 2 000 (200) requisições |
 
 Os dois primeiros não precisam de Docker e servem de smoke test em máquinas sem Docker; o quinto também não precisa de Docker.
 
+Os tamanhos saíram da primeira execução (2026-11-05, Ryzen 9 7900, 32 GB): a suíte completa leva cerca de 5 minutos com os containers em execução. O `in-memory-pipeline` foi planejado com 300 000 envelopes e não cabe: cada `evaluate` do runner cria um contexto `node:vm` novo (`vm.runInNewContext`), que custa ~0,13 ms e deixa ~110 KB de lixo que o GC só recolhe tarde; com 4 avaliações por envelope, 30 000 envelopes levaram 18 s e o RSS subiu 13 GB (um `Bun.gc(true)` depois devolve tudo). Foi o primeiro achado do perf, e já foi corrigido: o runner passou a ter `createEvaluate()`, um avaliador por run que compila cada expressão uma vez e a roda num contexto `node:vm` só daquela run, esvaziado a cada chamada e com os objetos nativos congelados. O `runJob` cria um por run, então runs nunca compartilham contexto. No `in-memory-pipeline` (10 000 envelopes, mesma máquina) o tempo do engine caiu de 5 544 ms para 489 ms e o pico de memória de 3,74 GB para 52,5 MB. Os tamanhos ficam como estão por enquanto, para o histórico continuar comparável; podem subir numa próxima calibragem.
+
 ### Dados e destinos
 
-A carga é feita pelo orquestrador, nunca pelo dataflow, e só nos cenários com `mssql` ou `mongodb` em `services`. É feita **uma vez por cenário e seed, no `size` máximo do cenário**: os flows leem o subconjunto que a run pede por parâmetro (`WHERE id <= @size` no SQL Server, `$limit` no pipeline), então `--quick`, `--size` e o tamanho completo compartilham os mesmos dados e não recarregam nada. Um `--size` maior que o `size` do cenário recarrega nesse tamanho.
+A carga é feita pelo orquestrador, nunca pelo dataflow, e só nos cenários com `mssql` ou `mongodb` em `services`. É feita **uma vez por cenário e seed, no `size` máximo do cenário**: os flows leem o subconjunto que a run pede por parâmetro (`WHERE id <= @size` no SQL Server, `orderId <= size` no pipeline), então `--quick`, `--size` e o tamanho completo compartilham os mesmos dados e não recarregam nada. Um `--size` maior que o `size` do cenário recarrega nesse tamanho.
 
 `load(ctx)` começa apagando os objetos de origem que vai criar (tabela, coleção), carrega em lote pelo cliente do banco, e só no fim o orquestrador grava o marcador (`dbo._perf_meta` no SQL Server, coleção `_perf_meta` no MongoDB): a chave é o id do cenário e o valor é o texto `<dataVersion>:<seed>:<tamanho carregado>`, mais a data. Marcador ausente ou diferente significa carga incompleta ou dados de outra versão, e a carga roda de novo do zero. Os volumes nomeados do compose guardam os dados entre execuções e entre reinícios do Docker.
 
-`reset(ctx)` zera só os destinos: a coleção que o Upsert escreve; `POST /_reset` na API fake. As origens não são tocadas.
+`reset(ctx)` zera só os destinos: a coleção que o Upsert escreve (mantendo um índice único em `id`, sem o qual cada upsert varre a coleção e o cenário mediria o MongoDB, não o engine: 9,4 s contra 1 s de espera em 10 000 linhas); `POST /_reset` na API fake. As origens não são tocadas.
 
 ### A API fake (`fake-api/`)
 
@@ -198,11 +200,24 @@ Uma **amostra** é o JSON de um run. Um **registro de extratores** (`src/metrics
 
 Uma **régua** é `{metric, direction: 'lower-is-better' | 'higher-is-better'}`: diz qual métrica o relatório mostra para o cenário e em que direção uma mudança é melhora. Não há limite nem veredito nesta versão (Non-Goals). Para cada régua o relatório mostra a **mediana** das N runs medidas, o mínimo, o máximo e a coluna "anterior" (a mediana da última execução do mesmo cenário e tamanho nesta máquina). O aquecimento e os runs com `status === 'failed'` ficam fora da conta; sem nenhum run válido, ou quando alguma amostra não tem a métrica, a linha diz "indisponível". Um run `failed` marca o cenário como falho no relatório e no JSONL, e o comando sai com 1.
 
-O relatório é texto puro: cabeçalho do cenário (commit, dirty, máquina, serviços, tamanho, N), uma tabela com as réguas (métrica, direção, mediana, mín, máx, anterior), uma tabela dos componentes (mediana de `activeMs` e `waitingMs` por componente, ordenada por `activeMs`), a linha da API fake quando houver, e o status de cada run. No fim de tudo, um resumo por cenário.
+O relatório é texto puro: cabeçalho do cenário (commit, dirty, máquina, serviços, tamanho, N), uma tabela com as réguas (métrica, direção, mediana, mín, máx, anterior), uma tabela dos componentes (mediana de `activeMs` e `waitingMs` por componente, ordenada por `activeMs`), a linha da API fake quando houver, e o status de cada run. No fim de tudo, um resumo por cenário e como abrir a página.
+
+A página do relatório (`report/`: `index.html`, `style.css`, `app.ts`, `model.ts`) é estática e versionada; os dados vêm dos `results/*.jsonl`. Ela não muda a cada execução: o `app.ts` é empacotado para o navegador (`Bun.build`) e copiado com a página para `results/report/` no fim de toda execução e no `--serve`. Uma página aberta como arquivo (`file://`) não pode ler outro arquivo local com `fetch`, por isso há dois jeitos de abrir:
+
+*   `bun run perf --serve` (ou `--serve --open`, que abre o navegador): um servidor mínimo em `http://127.0.0.1:5196` entrega a página e `results.jsonl`, que junta os `.jsonl` de todas as máquinas; recarregar a página relê os resultados. `bun run perf <cenário> --serve` abre direto no cenário; `bun run perf --open` roda e depois serve.
+*   Abrir `results/report/index.html` direto: a página pede para escolher ou arrastar os `.jsonl`.
+
+Três vistas, com todo o estado no hash da URL (`#/s/<cenário>?size=&sel=<execuções>`), de modo que voltar, recarregar e um link compartilhado mostram a mesma coisa:
+
+*   **Visão geral**: para cada cenário, a última execução completa nesta máquina (tamanho, tempo do engine, variação contra a anterior do mesmo tamanho, um gráfico pequeno do histórico, quantas execuções, quando, commit e marcas de parcial, runs com falha, ruído, `--quick` e alterações não commitadas). Com resultados de mais de uma máquina, um seletor escolhe qual.
+*   **Cenário**: abas por tamanho (resultados de tamanhos diferentes não se comparam); um gráfico do histórico de cada métrica, com a faixa mín–máx; a tabela das execuções, da mais nova para a mais antiga, com a variação de cada métrica contra a execução anterior. Clicar num ponto do gráfico ou na caixa da tabela põe ou tira a execução da comparação; por padrão ficam as duas últimas.
+*   **Comparação** (embaixo da vista do cenário): as execuções escolhidas lado a lado, a mais antiga como referência. Mostra as métricas com a variação de cada uma contra a referência (verde quando foi para o lado melhor da direção, vermelho quando piorou, cinza abaixo de 2 %), o tempo ativo e de espera de cada componente com a mesma variação, e as runs de cada execução (status, tempo, CPU, memória, amostras, erro, a API fake, versões do Bun e do Docker).
+
+O `model.ts` tem as funções puras dessas vistas, sem DOM e sem Node, testadas pelo `bun test`. Ele declara o subconjunto da linha de resultado que lê (`ReportLine`), e um teste atribui um `ResultLine` real a esse tipo, para que uma mudança no formato quebre o `bun run typecheck`.
 
 ### Resultados (`results/<hostname>.jsonl`)
 
-Uma linha por cenário executado, `schemaVersion: 1`, só com campos brutos (um comparador futuro deriva o que precisar; `schemaVersion` cobre mudanças de formato):
+Uma linha por cenário executado, `schemaVersion: 2`, só com campos brutos (um comparador futuro deriva o que precisar; `schemaVersion` cobre mudanças de formato). Cada amostra guarda o registro do run **compacto** (`src/compact.ts`): status, tempos, contagens de envelopes e memória retida por componente, quantas linhas de erro ele registrou e a primeira; os logs e as amostras de envelopes do engine ficam de fora (na versão 1 eram 99 % do arquivo: 58 MB em 21 execuções, contra 0,14 MB depois):
 
 ```text
 { schemaVersion, at, partial,
@@ -222,7 +237,7 @@ O arquivo é um por máquina, nomeado pelo `hostname` (letras, dígitos e `-`). 
 Projeto `name: dataflow-perf`, arquivo próprio dentro de `dataflow.perf/`. Dois serviços, cada um com `deploy.resources.limits` (o `docker compose` v2 aplica `cpus` e `memory` sem Swarm), healthcheck e volume nomeado. As imagens têm tag fixa (nada de `latest`):
 
 *   `mssql`: `mcr.microsoft.com/mssql/server:2022-CU16-ubuntu-22.04` com `ACCEPT_EULA=Y`, `MSSQL_PID=Express`, `MSSQL_SA_PASSWORD` fixa (cumpre a complexidade que o SQL Server exige), porta `14330:1433`, 2 CPUs, 2,5 GB; healthcheck `/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$MSSQL_SA_PASSWORD" -C -Q "SELECT 1"` (o `sqlcmd` não está no PATH da imagem; se a tag escolhida não trouxer o `mssql-tools18`, o healthcheck vira um probe TCP na 1433 com `bash -c '</dev/tcp/127.0.0.1/1433'`). O Express exige os mesmos 2 GB para subir; o limite fica acima disso.
-*   `mongodb`: `mongo:8.0.9`, porta `27018:27017`, 1 CPU, 1 GB; healthcheck `mongosh --quiet --eval "db.runCommand({ping:1}).ok"`.
+*   `mongodb`: `mongo:8.0.9`, porta `27030:27017`, 1 CPU, 1 GB; healthcheck `mongosh --quiet --eval "db.runCommand({ping:1}).ok"`.
 
 `docker compose up -d --wait <serviços>` sobe só os que o cenário lista e volta quando os healthchecks passam. O orquestrador imprime, antes, quanto de memória os serviços pedem e quanto o Docker tem, e para com uma mensagem de correção quando não cabe. O SQL Server não tem imagem ARM64: em Apple Silicon o orquestrador avisa que roda emulado e que os resultados não se comparam com os de outras máquinas, e continua.
 
@@ -238,13 +253,13 @@ O repositório instala com o linker isolado do Bun (nada é içado para o `node_
 
 | Risco | Tratamento |
 |---|---|
-| Ruído de 10 a 30 % run a run num notebook com Docker Desktop | Aquecimento descartado, N = 5, mediana e dispersão sempre visíveis; "ruído alto" quando a dispersão passa de 10 %; critério de aceitação nos Goals |
+| Ruído de 10 a 30 % run a run num notebook com Docker Desktop | Aquecimento descartado, N = 5, mediana e dispersão sempre visíveis; "high noise" quando a dispersão passa de 10 %; critério de aceitação nos Goals |
 | Cold-start do processo novo (drivers, conexões, bundle) dentro do `durationMs` | Pré-aquecimento antes do relógio (seção do processo de medição) |
 | Flow sem I/O não cede a timers: amostragem e timeout do engine não disparam | Amostragem num `Worker`; kill pelo orquestrador em `timeoutMs` + 30 s |
 | `runJob` fixa o timeout do engine em 10 minutos | O kill do orquestrador usa o `timeoutMs` do cenário, sempre menor |
 | API fake no mesmo host que o processo medido | Aceito: é um servidor de `setTimeout` a ~400 req/s; o `/_stats` mostra a latência dela para separar os dois |
 | SQL Server Express exige 2 GB; o stack pede até 3,5 GB; sem imagem ARM64 | Checagem de `docker info` antes de subir, com a correção; aviso de emulação em Apple Silicon |
-| Docker parado, ou portas 14330, 27018, 5195 ocupadas | Mensagem com a causa e o comando para liberar; código de saída 2 |
+| Docker parado, ou portas 14330, 27030, 5195, 5196 ocupadas | Mensagem com a causa e o comando para liberar; código de saída 2 |
 | `up --wait` sem fim se um healthcheck nunca passa (SQL Server > 60 s para subir) | `--wait-timeout 180` e mensagem com `docker compose logs <serviço>` |
 | Carga interrompida deixa dados parciais | Marcador gravado só no fim; origem apagada antes de cada carga |
 | Volumes e `results/*.jsonl` crescem sem limite | `docker compose -p dataflow-perf down -v` documentado no README; `results/` é local e apagável |
@@ -356,7 +371,7 @@ O repositório instala com o linker isolado do Bun (nada é içado para o `node_
 *   **Comparação com execuções anteriores**: mediana das últimas K execuções da mesma máquina e cenário, tolerância `max(X %, k × dispersão)`, "ruído alto demais para julgar", `--baseline`; com ela, limites nas réguas e `--strict`.
 *   **Mais cenários**: Lookup com duas origens, Mongo Delete, TypeScript que chama a API fake, flows aninhados em profundidade.
 *   **Réguas de fila e workers**: quando Fire and Forget e workers múltiplos existirem, um modo que passe pelo server.
-*   **Relatório em HTML ou no editor**.
+*   **Relatório no editor**: as runs do perf numa tela do editor, com o mesmo histórico.
 
 --------------------------------------------------------------------------------
 
@@ -422,7 +437,7 @@ Sem código aqui: assinaturas, formas de dado e comportamento. Caminhos relativo
 ##### 9. `./dataflow.perf/README.md` (Create)
 
 *   **Type / Scope**: Documentação do pacote.
-*   **Proposed Changes**: Como rodar (`bun run perf`, as quatro flags, flags sempre depois do nome do script), o que precisa (Docker Desktop com 6 GB para containers nos cenários de banco, portas 14330/27018/5195 livres), onde ficam os resultados, como limpar (`docker compose -p dataflow-perf down -v`, apagar `results/`), como criar um cenário (pasta, `scenario.ts`, YAML pelo Download do editor usando `connection: 'perf-sqlserver'` ou `'perf-mongodb'`, `data.ts` com `DATA_VERSION`), como desenvolver a API fake (`bun run fake-api`), e os avisos (Apple Silicon emulado, memória).
+*   **Proposed Changes**: Como rodar (`bun run perf`, as quatro flags, flags sempre depois do nome do script), o que precisa (Docker Desktop com 6 GB para containers nos cenários de banco, portas 14330/27030/5195 livres), onde ficam os resultados, como limpar (`docker compose -p dataflow-perf down -v`, apagar `results/`), como criar um cenário (pasta, `scenario.ts`, YAML pelo Download do editor usando `connection: 'perf-sqlserver'` ou `'perf-mongodb'`, `data.ts` com `DATA_VERSION`), como desenvolver a API fake (`bun run fake-api`), e os avisos (Apple Silicon emulado, memória).
 
 ##### 10. `./dataflow.perf/results/.gitkeep` (Create)
 
@@ -432,7 +447,7 @@ Sem código aqui: assinaturas, formas de dado e comportamento. Caminhos relativo
 ##### 11. `./dataflow.perf/docker-compose.perf.yml` (Create)
 
 *   **Type / Scope**: Containers do perf.
-*   **Proposed Changes**: `name: dataflow-perf`. Serviços `mssql` e `mongodb` como na seção Containers: imagens `mcr.microsoft.com/mssql/server:2022-CU16-ubuntu-22.04` e `mongo:8.0.9`, `deploy.resources.limits` (`cpus: "2"`, `memory: 2560M`; `cpus: "1"`, `memory: 1024M`), portas `14330:1433` e `27018:27017`, volumes nomeados `mssql` e `mongodb`, healthchecks com os comandos da seção Containers (`interval: 5s`, `retries: 36` para o `mssql`), `restart: unless-stopped`. Variáveis do SQL Server: `ACCEPT_EULA: "Y"`, `MSSQL_PID: Express`, `MSSQL_SA_PASSWORD: Perf-Passw0rd!` (a mesma constante `SA_PASSWORD` de `src/stack.ts`; o teste `stack.test.ts` confere que são iguais). Comentário no topo dizendo que é independente do `docker-compose.yml` da raiz.
+*   **Proposed Changes**: `name: dataflow-perf`. Serviços `mssql` e `mongodb` como na seção Containers: imagens `mcr.microsoft.com/mssql/server:2022-CU16-ubuntu-22.04` e `mongo:8.0.9`, `deploy.resources.limits` (`cpus: "2"`, `memory: 2560M`; `cpus: "1"`, `memory: 1024M`), portas `14330:1433` e `27030:27017`, volumes nomeados `mssql` e `mongodb`, healthchecks com os comandos da seção Containers (`interval: 5s`, `retries: 36` para o `mssql`), `restart: unless-stopped`. Variáveis do SQL Server: `ACCEPT_EULA: "Y"`, `MSSQL_PID: Express`, `MSSQL_SA_PASSWORD: Perf-Passw0rd!` (a mesma constante `SA_PASSWORD` de `src/stack.ts`; o teste `stack.test.ts` confere que são iguais). Comentário no topo dizendo que é independente do `docker-compose.yml` da raiz.
 
 #### A API fake
 
@@ -477,12 +492,12 @@ Sem código aqui: assinaturas, formas de dado e comportamento. Caminhos relativo
 ##### 18. `./dataflow.perf/src/stack.ts` (Create)
 
 *   **Type / Scope**: Docker e API fake.
-*   **Proposed Changes**: Constantes `PACKAGE_ROOT`, `COMPOSE_FILE`, `PERF_PORTS = {mssql: 14330, mongodb: 27018, fakeApi: 5195}`, `SA_PASSWORD = 'Perf-Passw0rd!'`, `MONGO_URL = 'mongodb://127.0.0.1:27018'`, `FAKE_API_URL = 'http://127.0.0.1:5195'`, `IMAGES = {mssql: 'mcr.microsoft.com/mssql/server:2022-CU16-ubuntu-22.04', mongodb: 'mongo:8.0.9'}`, `SERVICE_LIMITS: Record<'mssql' | 'mongodb', {cpus: number; memoryBytes: number}>` (iguais ao compose). `checkDocker(): Promise<{memTotalBytes: number; arch: string; version: string}>` via `docker info --format json` (campos `MemTotal`, `Architecture`, `ServerVersion`); lança com a correção quando o Docker não responde ou quando a soma dos `memoryBytes` dos serviços passa de `MemTotal` (quanto falta e onde mudar no Docker Desktop). `ensureServices(services)`: `docker compose -f COMPOSE_FILE up -d --wait --wait-timeout 180 <serviços>` com a saída repassada; falha vira erro com `docker compose -p dataflow-perf logs <serviço>` sugerido. `startFakeApi(): Promise<{stop(): void}>`: `Bun.spawn([process.execPath, join(PACKAGE_ROOT, 'fake-api/server.ts')], {env: {...process.env, PORT: '5195'}})`, espera `GET /health` responder (até 10 s), erro com a causa se a porta estiver ocupada; `stop` encerra o processo. `warnIfEmulated(docker)` avisa quando `arch` é `aarch64`/`arm64` e `mssql` está nos serviços. Tudo com `Bun.spawn`, `stdout: 'pipe'`.
+*   **Proposed Changes**: Constantes `PACKAGE_ROOT`, `COMPOSE_FILE`, `PERF_PORTS = {mssql: 14330, mongodb: 27030, fakeApi: 5195}`, `SA_PASSWORD = 'Perf-Passw0rd!'`, `MONGO_URL = 'mongodb://127.0.0.1:27030'`, `FAKE_API_URL = 'http://127.0.0.1:5195'`, `IMAGES = {mssql: 'mcr.microsoft.com/mssql/server:2022-CU16-ubuntu-22.04', mongodb: 'mongo:8.0.9'}`, `SERVICE_LIMITS: Record<'mssql' | 'mongodb', {cpus: number; memoryBytes: number}>` (iguais ao compose). `checkDocker(): Promise<{memTotalBytes: number; arch: string; version: string}>` via `docker info --format json` (campos `MemTotal`, `Architecture`, `ServerVersion`); lança com a correção quando o Docker não responde ou quando a soma dos `memoryBytes` dos serviços passa de `MemTotal` (quanto falta e onde mudar no Docker Desktop). `ensureServices(services)`: `docker compose -f COMPOSE_FILE up -d --wait --wait-timeout 180 <serviços>` com a saída repassada; falha vira erro com `docker compose -p dataflow-perf logs <serviço>` sugerido. `startFakeApi(): Promise<{stop(): void}>`: `Bun.spawn([process.execPath, join(PACKAGE_ROOT, 'fake-api/server.ts')], {env: {...process.env, PORT: '5195'}})`, espera `GET /health` responder (até 10 s), erro com a causa se a porta estiver ocupada; `stop` encerra o processo. `warnIfEmulated(docker)` avisa quando `arch` é `aarch64`/`arm64` e `mssql` está nos serviços. Tudo com `Bun.spawn`, `stdout: 'pipe'`.
 
 ##### 19. `./dataflow.perf/src/load.ts` (Create)
 
 *   **Type / Scope**: Carga e reset dos dados (o `data.ts` de cada cenário é o gerador; este módulo é quem o chama).
-*   **Proposed Changes**: `openLoadContext(scenario, size, seed): Promise<LoadContext & {close(): Promise<void>}>`: para `mssql`, um `ConnectionPool` do `mssql` em `master` (`Server=127.0.0.1,14330;Database=master;User Id=sa;Password=...;Encrypt=false;TrustServerCertificate=true`), `IF DB_ID('perf') IS NULL CREATE DATABASE perf`, e depois `sqlserver.query`/`sqlserver.bulk` ligados a `perf` (um segundo pool); `bulk` usa `sql.Table` + `request.bulk` em blocos de 10 000 linhas. Para `mongodb`, `new MongoClient(MONGO_URL).db('perf')`. Para `fake-api`, `fetch` em `/_reset` e `/_stats`. `dataMarker(scenario, size, seed): string` = `` `${dataVersion}:${seed}:${size}` ``. `ensureData(ctx, scenario, size, seed)`: sem `mssql`/`mongodb` nos serviços, não faz nada; senão lê o marcador (`SELECT marker FROM dbo._perf_meta WHERE scenario = @id` / `db.collection('_perf_meta').findOne({_id: id})`), e se for igual ao marcador de `max(size, scenario.size)` imprime "dados conferem, carga pulada" e volta; senão chama `scenario.load(ctx)` com `ctx.size = max(size, scenario.size)` e grava o marcador por último (`dbo._perf_meta(scenario nvarchar(64) PRIMARY KEY, marker nvarchar(64), at datetime2)` / `{_id, marker, at}`). `resetTargets(ctx, scenario)`: `scenario.reset(ctx)`.
+*   **Proposed Changes**: `openLoadContext(scenario, size, seed): Promise<LoadContext & {close(): Promise<void>}>`: para `mssql`, um `ConnectionPool` do `mssql` em `master` (`Server=127.0.0.1,14330;Database=master;User Id=sa;Password=...;Encrypt=false;TrustServerCertificate=true`), `IF DB_ID('perf') IS NULL CREATE DATABASE perf`, e depois `sqlserver.query`/`sqlserver.bulk` ligados a `perf` (um segundo pool); `bulk` usa `sql.Table` + `request.bulk` em blocos de 10 000 linhas. Para `mongodb`, `new MongoClient(MONGO_URL).db('perf')`. Para `fake-api`, `fetch` em `/_reset` e `/_stats`. `dataMarker(scenario, size, seed): string` = `` `${dataVersion}:${seed}:${size}` ``. `ensureData(ctx, scenario, size, seed)`: sem `mssql`/`mongodb` nos serviços, não faz nada; senão lê o marcador (`SELECT marker FROM dbo._perf_meta WHERE scenario = @id` / `db.collection('_perf_meta').findOne({_id: id})`), e se for igual ao marcador de `max(size, scenario.size)` imprime "data matches, load skipped" e volta; senão chama `scenario.load(ctx)` com `ctx.size = max(size, scenario.size)` e grava o marcador por último (`dbo._perf_meta(scenario nvarchar(64) PRIMARY KEY, marker nvarchar(64), at datetime2)` / `{_id, marker, at}`). `resetTargets(ctx, scenario)`: `scenario.reset(ctx)`.
 
 ##### 20. `./dataflow.perf/src/measure.ts` (Create)
 
@@ -492,12 +507,12 @@ Sem código aqui: assinaturas, formas de dado e comportamento. Caminhos relativo
 ##### 21. `./dataflow.perf/src/memory-sampler.ts` (Create)
 
 *   **Type / Scope**: Worker de amostragem.
-*   **Proposed Changes**: Corpo de um `Worker` do Bun: ao receber `{type: 'start', intervalMs}` liga um `setInterval` que guarda `Math.max(peak, process.memoryUsage.rss())` e conta as amostras; ao receber `{type: 'stop'}` responde `{peakRssBytes, samples}` e encerra. Um módulo à parte porque o `Worker` precisa de um arquivo próprio.
+*   **Proposed Changes**: Corpo de uma thread de `node:worker_threads`: ao carregar, liga um `setInterval` de 10 ms que guarda `Math.max(peak, process.memoryUsage.rss())` e conta as amostras, e manda `{type: 'ready'}`; ao receber `{type: 'stop'}` responde `{peakRssBytes, samples}` e o processo de medição a encerra (`terminate`). Um módulo à parte porque o `Worker` precisa de um arquivo próprio.
 
 ##### 22. `./dataflow.perf/src/run-once.ts` (Create)
 
 *   **Type / Scope**: O processo de medição.
-*   **Proposed Changes**: Lê `id, size, seed, iteration` de `process.argv`. `loadFlowFiles(id)` e `executableFlows(files, id)` de `flows.ts`. Monta o `RunJob` (tipo de `@dataflow/server/run-job`): `{id: crypto.randomUUID(), mode: 'execution', flow: main, parameters: {size: String(size)}, input: scenario.input?.(size, seed), secrets: PERF_SECRETS, variables: {}, connections: PERF_CONNECTIONS, flows, projectName: 'perf', flowName: main.flow}`. Pré-aquecimento conforme a seção do processo de medição, por serviço do cenário, com `querySqlServer`, `aggregateMongoDb`, `sendHttp` de `@dataflow/server/runner/*` e `prepareScript(code, {}, {}, {})` por nó `typescript` do flow principal. Depois: `Bun.gc(true)`; `memoryUsage()` inicial; `Worker` de `memory-sampler.ts` com `intervalMs: 10`; `process.cpuUsage()`; `const record = await runJob(job, {signal: new AbortController().signal})` (o `runJob` já devolve um `RunRecord` `failed` quando o engine lança); `cpuUsage(start)`; `stop` no worker e leitura final de RSS e heap; `closeSqlServerPools()` e `closeMongoClients()` de `@dataflow/server/runner/sqlserver-driver` e `.../mongodb-driver`; `console.log(JSON.stringify(sample))`; `process.exit(0)`. Qualquer exceção fora do `runJob`: mensagem no stderr e `exit(2)`.
+*   **Proposed Changes**: Lê `id, size, seed, iteration` de `process.argv`. `loadFlowFiles(id)` e `executableFlows(files, id)` de `flows.ts`. Monta o `RunJob` (tipo de `@dataflow/server/run-job`): `{id: crypto.randomUUID(), mode: 'execution', flow: main, parameters: {size: String(size)}, input: scenario.input?.(size, seed), secrets: PERF_SECRETS, variables: {}, connections: PERF_CONNECTIONS, flows, projectName: 'perf', flowName: main.flow}`. Pré-aquecimento conforme a seção do processo de medição, por serviço do cenário, com `querySqlServer`, `aggregateMongoDb`, `sendHttp` de `@dataflow/server/runner/*` e `prepareScript(code, {}, {}, {})` por nó `typescript` do flow principal. Depois: `Bun.gc(true)`; `memoryUsage()` inicial; a thread de `memory-sampler.ts`, esperando o `ready`; `process.cpuUsage()`; `const record = await runJob(job, {signal: new AbortController().signal})` (o `runJob` já devolve um `RunRecord` `failed` quando o engine lança); `cpuUsage(start)`; `stop` no worker e leitura final de RSS e heap; `closeSqlServerPools()` e `closeMongoClients()` de `@dataflow/server/runner/sqlserver-driver` e `.../mongodb-driver`; `Bun.write(Bun.stdout, JSON.stringify(sample) + '\n')`; `process.exit(0)`. Qualquer exceção fora do `runJob`: mensagem no stderr e `exit(2)`.
 
 ##### 23. `./dataflow.perf/src/flows.ts` (Create)
 
@@ -517,7 +532,7 @@ Sem código aqui: assinaturas, formas de dado e comportamento. Caminhos relativo
 ##### 26. `./dataflow.perf/src/report.ts` (Create)
 
 *   **Type / Scope**: Texto no terminal.
-*   **Proposed Changes**: `printPlan(scenario: Scenario, options: {runs: number; quick: boolean; size: number}, previous?: RulerResult[])` (a estimativa de tempo é a `median` de `durationMs` em `previous`), `printScenario(line: ResultLine)` (cabeçalho; tabela das réguas com métrica, direção, mediana, mín, máx, anterior, ou "indisponível"; tabela dos componentes por mediana de `component.<label>.activeMs` e `waitingMs`, ordenada por `activeMs`; linha da API fake; status por run com o número de amostras de memória; "ruído alto" quando `(max − min) ÷ median` de `durationMs` passa de 0,10), `printSummary(lines: ResultLine[])`. Colunas alinhadas com `padEnd`, bytes em MB com uma casa, tempos em ms abaixo de 10 s e em s acima. Sem cores por padrão; cores só com `FORCE_COLOR`, como o `scripts/dev.ts`.
+*   **Proposed Changes**: `printPlan(scenario: Scenario, options: {runs: number; quick: boolean; size: number}, previous?: RulerResult[])` (a estimativa de tempo é a `median` de `durationMs` em `previous`), `printScenario(line: ResultLine)` (cabeçalho; tabela das réguas com métrica, direção, mediana, mín, máx, anterior, ou "indisponível"; tabela dos componentes por mediana de `component.<label>.activeMs` e `waitingMs`, ordenada por `activeMs`; linha da API fake; status por run com o número de amostras de memória; "high noise" quando `(max − min) ÷ median` de `durationMs` passa de 0,10), `printRun(sample, runs)` (uma linha por run, enquanto rodam), `printSummary(lines: ResultLine[], notRun: string[])` (os cenários que a infraestrutura impediu aparecem como "not run"). Colunas alinhadas com `padEnd`, bytes em KB abaixo de 1 MB e em MB acima, com uma casa, tempos em ms abaixo de 10 s e em s acima. Texto puro, sem cores; as mensagens em inglês, como o resto do código do repositório.
 
 ##### 27. `./dataflow.perf/src/results.ts` (Create)
 
@@ -534,7 +549,7 @@ Sem código aqui: assinaturas, formas de dado e comportamento. Caminhos relativo
 ##### 29. `./dataflow.perf/scenarios/in-memory-pipeline/scenario.ts`, `flows/in-memory-pipeline.yaml`, `data.ts` (Create)
 
 *   **Type / Scope**: Cenário sem container.
-*   **Proposed Changes**: `services: []`, `size: 300_000`, `quickSize: 30_000`, `seed: 1`, `timeoutMs: 120_000`, `throughputNode: 'Start'`, `input(size, seed)` devolve o array de `data.ts`: `{id: number; name: string; amount: number; category: 'a' | 'b'; createdAt: string}` (`DATA_VERSION = 1`). Flow: Start (`acceptsInput: true`) → Mapper (`fields: [{target: 'total', value: '$amount * 1.1', expression: true}, {target: 'year', value: '$createdAt.slice(0, 4)', expression: true}]`; itens de lista com `spread: true` são planos, `{target, value, expression}`, como em `dataflow.core/tests/helpers.ts`) → Filter (`condition: '$amount > 0'`) → Router (`cases: [{label: 'a', condition: "$category === 'a'"}]`, saída `a` e saída `else`, as duas ligadas ao mesmo TypeScript) → TypeScript (`override: true`, `code`: `function process(input) { return { ...input, total: Math.round(input.total) }; }`; sem Override o retorno iria para `DATA.result`) → End. Réguas: `durationMs` (lower), `envelopesPerSecond` (higher), `memoryDeltaBytes` (lower), `cpuPercent` (lower). `load` e `reset` vazios. As chaves de config são as de `dataflow.core/src/components/{mapper,filter,router,typescript}.ts`.
+*   **Proposed Changes**: `services: []`, `size: 10_000`, `quickSize: 1_000`, `seed: 1`, `timeoutMs: 120_000`, `throughputNode: 'Start'`, `input(size, seed)` devolve o array de `data.ts`: `{id: number; name: string; amount: number; category: 'a' | 'b'; createdAt: string}` (`DATA_VERSION = 1`). Flow: Start (`acceptsInput: true`) → Mapper (`fields: [{target: 'total', value: '$amount * 1.1', expression: true}, {target: 'year', value: '$createdAt.slice(0, 4)', expression: true}]`; itens de lista com `spread: true` são planos, `{target, value, expression}`, como em `dataflow.core/tests/helpers.ts`) → Filter (`condition: '$amount > 0'`) → Router (`cases: [{label: 'a', condition: "$category === 'a'"}]`, a saída `a` vai ao TypeScript e a saída `else` direto ao End, porque uma porta de entrada aceita uma aresta só e apenas o End aceita várias) → TypeScript (`override: true`, `code`: `function process($input) { return { ...$input, total: Math.round($input.total) }; }`; sem Override o retorno iria para `DATA.result`) → End. Réguas: `durationMs` (lower), `envelopesPerSecond` (higher), `memoryDeltaBytes` (lower), `cpuPercent` (lower). `load` e `reset` vazios. As chaves de config são as de `dataflow.core/src/components/{mapper,filter,router,typescript}.ts`.
 
 ##### 30. `./dataflow.perf/scenarios/flow-invoker-fanout/scenario.ts`, `flows/flow-invoker-fanout.yaml`, `flows/perf-child-mapper.yaml`, `data.ts` (Create)
 
@@ -544,12 +559,12 @@ Sem código aqui: assinaturas, formas de dado e comportamento. Caminhos relativo
 ##### 31. `./dataflow.perf/scenarios/sqlserver-to-mongodb/scenario.ts`, `flows/sqlserver-to-mongodb.yaml`, `data.ts` (Create)
 
 *   **Type / Scope**: Cenário com dois bancos.
-*   **Proposed Changes**: `services: ['mssql', 'mongodb']`, `size: 100_000`, `quickSize: 10_000`, `seed: 1`, `timeoutMs: 300_000`, `throughputNode: 'SQL Server Query'`. `data.ts`: linhas `{id: number; name: string; email: string; balance: number; since: Date}` (`DATA_VERSION = 1`). `load`: `DROP TABLE IF EXISTS dbo.Customer`, `CREATE TABLE dbo.Customer (id int PRIMARY KEY, name nvarchar(80), email nvarchar(120), balance decimal(12,2), since datetime2)`, `ctx.sqlserver.bulk('dbo.Customer', colunas, linhas)`. `reset`: `ctx.mongo.collection('customers').deleteMany({})`. Flow: Start (`parameters: [{name: 'size', type: 'number', default: '100000'}]`; o `default` é texto, como `startConfig` lê, e o tipo `number` faz `$PARAMETERS.size` chegar como número) → SQL Server Query (`connection: 'perf-sqlserver'`, `sql: 'SELECT id, name, email, balance, since FROM dbo.Customer WHERE id <= @size ORDER BY id'`, `parameters: [{name: 'size', value: '$PARAMETERS.size', expression: true}]`) → Mapper (`fields: [{target: 'fullName', value: '$name.toUpperCase()', expression: true}, {target: 'balanceCents', value: 'Math.round($balance * 100)', expression: true}]`) → MongoDB Upsert (`connection: 'perf-mongodb'`, `database: ''`, `collection: 'customers'`, `filter: [{field: 'id', value: '$id', expression: true}]`, `source: 'data'`, `batchSize: 500`) → End. Réguas: `durationMs` (lower), `envelopesPerSecond` (higher), `memoryDeltaBytes` (lower), `component.SQL Server Query.waitingMs` (lower), `component.MongoDB Upsert.waitingMs` (lower).
+*   **Proposed Changes**: `services: ['mssql', 'mongodb']`, `size: 50_000`, `quickSize: 5_000`, `seed: 1`, `timeoutMs: 300_000`, `throughputNode: 'SQL Server Query'`. `data.ts`: linhas `{id: number; name: string; email: string; balance: number; since: Date}` (`DATA_VERSION = 1`). `load`: `DROP TABLE IF EXISTS dbo.Customer`, `CREATE TABLE dbo.Customer (id int PRIMARY KEY, name nvarchar(80), email nvarchar(120), balance decimal(12,2), since datetime2)`, `ctx.sqlserver.bulk('dbo.Customer', colunas, linhas)`. `reset`: `deleteMany({})` em `customers` e `createIndex({id: 1}, {unique: true})` (idempotente). Flow: Start (`parameters: [{name: 'size', type: 'number', default: '50000'}]`; o `default` é texto, como `startConfig` lê, e o tipo `number` faz `$PARAMETERS.size` chegar como número) → SQL Server Query (`connection: 'perf-sqlserver'`, `sql: 'SELECT id, name, email, balance, since FROM dbo.Customer WHERE id <= @size ORDER BY id'`, `parameters: [{name: 'size', value: '$PARAMETERS.size', expression: true}]`) → Mapper (`fields: [{target: 'fullName', value: '$name.toUpperCase()', expression: true}, {target: 'balanceCents', value: 'Math.round($balance * 100)', expression: true}]`) → MongoDB Upsert (`connection: 'perf-mongodb'`, `database: ''`, `collection: 'customers'`, `filter: [{field: 'id', value: '$id', expression: true}]`, `source: 'data'`, `batchSize: 500`) → End. Réguas: `durationMs` (lower), `envelopesPerSecond` (higher), `memoryDeltaBytes` (lower), `component.SQL Server Query.waitingMs` (lower), `component.MongoDB Upsert.waitingMs` (lower).
 
 ##### 32. `./dataflow.perf/scenarios/mongodb-pipeline-aggregate/scenario.ts`, `flows/mongodb-pipeline-aggregate.yaml`, `data.ts` (Create)
 
 *   **Type / Scope**: Cenário com MongoDB.
-*   **Proposed Changes**: `services: ['mongodb']`, `size: 200_000`, `quickSize: 20_000`, `seed: 1`, `timeoutMs: 300_000`, `throughputNode: 'MongoDB Pipeline'`. `data.ts`: documentos `{orderId: number; customerId: number; status: 'paid' | 'cancelled'; total: number; items: {sku: string; qty: number}[]; placedAt: Date}` com `placedAt` entre 2025-01-01 e 2025-12-31 e `customerId` em `[1, size / 20]` (`DATA_VERSION = 1`). `load`: `drop()` da coleção `orders`, `insertMany` em blocos de 10 000 (`ordered: false`), índice em `{placedAt: 1}`. `reset` vazio (só leitura). Flow: Start (`parameters: [{name: 'size', type: 'number', default: '200000'}]`) → MongoDB Pipeline (`connection: 'perf-mongodb'`, `database: ''`, `collection: 'orders'`, pipeline: `[{$match: {placedAt: {$gte: {$date: '2025-01-01T00:00:00Z'}}}}, {$sort: {orderId: 1}}, {$limit: $PARAMETERS.size}, {$group: {_id: '$customerId', total: {$sum: '$total'}, orders: {$sum: 1}, cancelled: {$sum: {$cond: [{$eq: ['$status', 'cancelled']}, 1, 0]}}}}]`; o texto do pipeline é uma expressão JS avaliada por envelope (`pipelineExpression` de `mongodb-pipeline.ts`), por isso `$PARAMETERS.size` entra direto) → Filter (`condition: '$cancelled < $orders'`) → Aggregate (`size: 500`, `field: 'items'`) → TypeScript (`override: true`, `function process(input) { return { count: input.items.length, total: input.items.reduce((s, i) => s + i.total, 0) }; }`) → Sort (`keys: [{value: '$total', direction: 'desc'}]`) → Limit (`mode: 'top'`, `count: 100`) → End. O `throughputNode` conta os grupos que saem do pipeline (≈ `size` ÷ 20), não os documentos lidos; a coluna de tamanho da tabela de cenários é o que o banco lê. Réguas: `durationMs` (lower), `memoryDeltaBytes` (lower), `component.Aggregate.peakBytes` (lower), `component.Sort.peakBytes` (lower), `component.MongoDB Pipeline.waitingMs` (lower).
+*   **Proposed Changes**: `services: ['mongodb']`, `size: 100_000`, `quickSize: 10_000`, `seed: 1`, `timeoutMs: 300_000`, `throughputNode: 'MongoDB Pipeline'`. `data.ts`: documentos `{orderId: number; customerId: number; status: 'paid' | 'cancelled'; total: number; items: {sku: string; qty: number}[]; placedAt: Date}` com `placedAt` entre 2025-01-01 e 2025-12-31 e `customerId` em `[1, size / 20]` (`DATA_VERSION = 1`). `load`: `drop()` da coleção `orders`, `insertMany` em blocos de 10 000 (`ordered: false`), índice em `{orderId: 1}`. `reset` vazio (só leitura). Flow: Start (`parameters: [{name: 'size', type: 'number', default: '100000'}]`) → MongoDB Pipeline (`connection: 'perf-mongodb'`, `database: ''`, `collection: 'orders'`, pipeline: `[{$match: {orderId: {$lte: $PARAMETERS.size}}}, {$group: {_id: '$customerId', total: {$sum: '$total'}, orders: {$sum: 1}, cancelled: {$sum: {$cond: [{$eq: ['$status', 'cancelled']}, 1, 0]}}}}]`; o texto do pipeline é uma expressão JS avaliada por envelope (`pipelineExpression` de `mongodb-pipeline.ts`), por isso `$PARAMETERS.size` entra direto) → Filter (`condition: '$cancelled < $orders'`) → Aggregate (`size: 500`, `field: 'items'`) → TypeScript (`override: true`, `function process($input) { return { count: $input.items.length, total: $input.items.reduce((sum, i) => sum + i.total, 0) }; }`) → Sort (`keys: [{value: '$total', direction: 'desc'}]`) → Limit (`mode: 'top'`, `count: 100`) → End. O `throughputNode` conta os grupos que saem do pipeline (≈ `size` ÷ 20), não os documentos lidos; a coluna de tamanho da tabela de cenários é o que o banco lê. Réguas: `durationMs` (lower), `memoryDeltaBytes` (lower), `component.Aggregate.peakBytes` (lower), `component.Sort.peakBytes` (lower), `component.MongoDB Pipeline.waitingMs` (lower).
 
 ##### 33. `./dataflow.perf/scenarios/http-slow-api/scenario.ts`, `flows/http-slow-api.yaml`, `data.ts` (Create)
 
@@ -581,12 +596,34 @@ Sem código aqui: assinaturas, formas de dado e comportamento. Caminhos relativo
 ##### 38. `./dataflow.perf/tests/results.test.ts` (Create)
 
 *   **Type / Scope**: Teste unitário.
-*   **Proposed Changes**: Com `dir` numa pasta temporária: `appendResult` escreve uma linha JSON por chamada com `schemaVersion: 1`; `lastResult` devolve a última do cenário e tamanho pedidos e ignora `partial: true`; `resultsPath` reduz um `hostname` com espaços e maiúsculas a `[a-z0-9-]`.
+*   **Proposed Changes**: Com `dir` numa pasta temporária: `appendResult` escreve uma linha JSON por chamada com o `SCHEMA_VERSION` atual; `lastResult` devolve a última do cenário e tamanho pedidos e ignora `partial: true`; `historyOf` e `latestPerScenario` devolvem o histórico de um cenário e o último resultado de cada um; `resultsPath` reduz um `hostname` com espaços e maiúsculas a `[a-z0-9-]`.
 
 ##### 39. `./dataflow.perf/tests/stack.test.ts` (Create)
 
 *   **Type / Scope**: Teste unitário.
 *   **Proposed Changes**: Lê o `docker-compose.perf.yml` com `yaml` e confere: `name: dataflow-perf`; nenhuma porta publicada igual a 5180, 5190 ou 5432, e as publicadas são as de `PERF_PORTS`; `MSSQL_SA_PASSWORD` igual a `SA_PASSWORD`; `deploy.resources.limits.memory` de cada serviço, convertido de `M`/`G` para bytes, igual a `SERVICE_LIMITS[serviço].memoryBytes`; cada `image` igual a `IMAGES[serviço]` e sem `latest`.
+
+#### Acrescentados depois da primeira execução
+
+##### 40. `./dataflow.perf/src/compact.ts` (Create)
+
+*   **Type / Scope**: Registro compacto.
+*   **Proposed Changes**: `type CompactComponent` (de `ComponentRun`: `nodeId`, `label`, `type`, `status`, `durationMs`, `activeTimeMs`, `waitingMs`, `memory`, `inputs`, `outputs`, mais `subRuns` como contagem, `errors` e `firstError` com até 300 caracteres) e `type CompactRecord` (o `RunRecord` com esses componentes). `compactRecord(record)` é idempotente. O `run-once.ts` compacta antes de escrever a amostra; `Sample.record` passa a ser `CompactRecord`.
+
+##### 41. `./dataflow.perf/report/index.html`, `report/style.css`, `report/model.ts`, `report/app.ts`, `report/tsconfig.json` (Create)
+
+*   **Type / Scope**: A página do relatório (estática, sem dependências, tema claro ou escuro do sistema).
+*   **Proposed Changes**: `index.html` carrega `style.css` e `app.js` como script clássico (`defer`), não como módulo: o Chrome recusa `<script type="module">` numa página aberta como arquivo. `model.ts`: o tipo `ReportLine` e as funções `parseResults`, `summaries`, `sizesOf`, `executionsOf`, `changeOf` (limiar de 2 %), `noise`, `compareMetrics`, `compareComponents`, `seriesOf`, `defaultSelection`. `app.ts`: lê `results.jsonl` do servidor ou, aberto como arquivo, pelo seletor ou arrastando o arquivo; monta as três vistas a partir do hash; todo texto vindo dos resultados é escapado. `tsconfig.json` próprio, com a `lib` DOM, que o resto do pacote não tem; o `typecheck` do pacote roda os dois.
+
+##### 42. `./dataflow.perf/src/report-site.ts` e `./dataflow.perf/src/format.ts` (Create); `./dataflow.perf/src/stack.ts` (Modify)
+
+*   **Type / Scope**: Montagem e servidor da página; formatação compartilhada.
+*   **Proposed Changes**: `buildReport(dir?)`: empacota `report/app.ts` com `Bun.build` (alvo navegador, formato IIFE) e copia `index.html` e `style.css` para `results/report/`. `allResults(dir?)`: junta os `*.jsonl`. `serveReport(port?, dir?)`: monta a página e serve `/`, `app.js`, `style.css` e `/results.jsonl` em `127.0.0.1`, e devolve 404 para qualquer outro caminho. `format.ts`: `formatMetric` e `formatMs`, sem imports, usados pelo terminal e pela página. `PERF_PORTS.report = 5196`. O `cli.ts` ganha `--serve` (serve até o Ctrl+C, abrindo no cenário quando há um só) e `--open` (abre o navegador; depois de uma execução, serve e abre); no fim de toda execução monta a página e diz como abri-la.
+
+##### 43. `./dataflow.perf/tests/compact.test.ts`, `tests/model.test.ts`, `tests/report-site.test.ts` (Create)
+
+*   **Type / Scope**: Testes unitários.
+*   **Proposed Changes**: `compactRecord` mantém o que as métricas leem, conta os erros, é idempotente e deixa a linha 50 vezes menor. O modelo: linhas quebradas são puladas, a ordem é a das datas, a última execução de cada cenário vem com a anterior do mesmo tamanho, as métricas e os componentes são comparados contra a referência na direção certa, e um `ResultLine` real é atribuível a `ReportLine`. O site: a página montada não carrega nada de fora e o `app.js` é um bundle só; os `.jsonl` são juntados; o servidor entrega a página e os resultados e devolve 404 para o resto.
 
 ### Verification Plan
 
@@ -596,13 +633,14 @@ Sem código aqui: assinaturas, formas de dado e comportamento. Caminhos relativo
 *   **Test Coverage Requirement**: Nenhuma meta numérica. O que precisa estar coberto: validação dos flows de todos os cenários, extratores, mediana e dispersão, determinismo da API fake, formato do JSONL, invariantes do compose.
 *   **E2E/Integration (manual, com Docker)**:
     1. `bun run perf --list` lista cinco cenários.
-    2. `bun run perf in-memory-pipeline --quick` termina em menos de 1 minuto sem tocar no Docker, grava uma linha em `results/` e mostra o pico de memória acima do início com mais de 100 amostras (o `Worker` amostrou durante o flow).
-    3. `bun run perf sqlserver-to-mongodb` sobe só `mssql` e `mongodb` (`docker ps` não mostra nada da API fake), carrega os dados uma vez (a segunda execução, e também `--quick`, imprimem "dados conferem, carga pulada"), e `docker compose -p dataflow ps` do dev fica como estava.
+    2. `bun run perf in-memory-pipeline --quick` termina em menos de 1 minuto sem tocar no Docker, grava uma linha em `results/` e mostra o pico de memória acima do início e cerca de uma amostra de memória a cada 10 ms do run (a thread amostrou durante o flow; na primeira execução, 492 a 526 amostras em runs de 5,4 a 5,7 s).
+    3. `bun run perf sqlserver-to-mongodb` sobe só `mssql` e `mongodb` (`docker ps` não mostra nada da API fake), carrega os dados uma vez (a segunda execução, e também `--quick`, imprimem "data matches, load skipped"), e `docker compose -p dataflow ps` do dev fica como estava.
     4. `bun run perf` completo com os containers já em execução: tempo total anotado no relatório (meta: abaixo de 15 minutos; informativo).
     5. `Ctrl+C` no meio de um cenário deixa uma linha com `partial: true`, os containers em execução e nenhum processo da API fake vivo.
     6. Com `bun run dev` rodando ao mesmo tempo, o editor em :5180 continua funcionando durante o passo 3.
     7. `bun run perf http-slow-api --quick` duas vezes: `fakeApi.failures` igual nas duas; a segunda mostra a coluna "anterior" preenchida.
-    8. Acrescentar um driver fictício ao `runJob` do server e conferir, pelo stderr de um run, que o `run-once.ts` o recebeu sem alteração no perf; reverter.
+    8. `bun run perf --serve --open` abre a visão geral; clicar num cenário mostra o histórico e as duas últimas execuções comparadas; tirar uma pela caixa da tabela muda o hash e a comparação; aberta como arquivo, a página pede o `.jsonl` e, com ele, mostra o mesmo. A linha nova do JSONL tem poucos KB por cenário.
+    9. Acrescentar um driver fictício ao `runJob` do server e conferir, pelo stderr de um run, que o `run-once.ts` o recebeu sem alteração no perf; reverter.
 
 --------------------------------------------------------------------------------
 

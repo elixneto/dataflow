@@ -1,0 +1,50 @@
+# The databases of the performance scenarios (bun run perf), apart from the development stack (docker-compose.yml at
+# the root): its own project, ports and volumes, so `docker compose -p dataflow-perf down -v` never reaches the
+# development Postgres. The orchestrator starts only the services a scenario lists and leaves them running.
+name: dataflow-perf
+
+services:
+  mssql:
+    image: mcr.microsoft.com/mssql/server:2022-CU16-ubuntu-22.04
+    restart: unless-stopped
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_PID: Express
+      MSSQL_SA_PASSWORD: Perf-Passw0rd!
+    ports:
+      - "14330:1433"
+    volumes:
+      - mssql:/var/opt/mssql
+    deploy:
+      resources:
+        limits:
+          cpus: "2"
+          memory: 2560M
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P \"$$MSSQL_SA_PASSWORD\" -C -Q \"SELECT 1\" -b -o /dev/null"]
+      interval: 5s
+      timeout: 5s
+      retries: 36
+      start_period: 10s
+
+  mongodb:
+    image: mongo:8.0.9
+    restart: unless-stopped
+    ports:
+      - "27030:27017"
+    volumes:
+      - mongodb:/data/db
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 1024M
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.runCommand({ping: 1}).ok"]
+      interval: 5s
+      timeout: 5s
+      retries: 24
+
+volumes:
+  mssql:
+  mongodb:

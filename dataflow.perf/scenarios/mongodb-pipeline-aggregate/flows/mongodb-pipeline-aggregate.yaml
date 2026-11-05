@@ -1,0 +1,122 @@
+version: 1
+id: mongodb-pipeline-aggregate
+name: "perf: MongoDB pipeline and aggregate"
+nodes:
+  - id: start
+    type: start
+    label: Start
+    position:
+      x: 0
+      y: 0
+    config:
+      parameters:
+        - name: size
+          type: number
+          default: "100000"
+  - id: pipeline
+    type: mongodb-pipeline
+    label: MongoDB Pipeline
+    position:
+      x: 260
+      y: 0
+    config:
+      connection: perf-mongodb
+      database: ""
+      collection: orders
+      pipeline: |
+        [
+          { $match: { orderId: { $lte: $PARAMETERS.size } } },
+          {
+            $group: {
+              _id: '$customerId',
+              total: { $sum: '$total' },
+              orders: { $sum: 1 },
+              cancelled: { $sum: { $cond: [{ $eq: ['$status', 'cancelled'] }, 1, 0] } },
+            },
+          },
+        ]
+      timeoutS: 300
+  - id: filter
+    type: filter
+    label: Filter
+    position:
+      x: 520
+      y: 0
+    config:
+      condition: $cancelled < $orders
+  - id: aggregate
+    type: aggregate
+    label: Aggregate
+    position:
+      x: 780
+      y: 0
+    config:
+      size: 500
+      field: items
+  - id: typescript
+    type: typescript
+    label: TypeScript
+    position:
+      x: 1040
+      y: 0
+    config:
+      code: |
+        function process($input) {
+          return { count: $input.items.length, total: $input.items.reduce((sum, i) => sum + i.total, 0) };
+        }
+    override: true
+  - id: sort
+    type: sort
+    label: Sort
+    position:
+      x: 1300
+      y: 0
+    config:
+      keys:
+        - value: $total
+          direction: desc
+  - id: limit
+    type: limit
+    label: Limit
+    position:
+      x: 1560
+      y: 0
+    config:
+      mode: top
+      count: 100
+  - id: end
+    type: end
+    label: End
+    position:
+      x: 1820
+      y: 0
+    config: {}
+edges:
+  - source: start
+    sourcePort: out-0
+    target: pipeline
+    targetPort: in-0
+  - source: pipeline
+    sourcePort: out-0
+    target: filter
+    targetPort: in-0
+  - source: filter
+    sourcePort: out-0
+    target: aggregate
+    targetPort: in-0
+  - source: aggregate
+    sourcePort: out-0
+    target: typescript
+    targetPort: in-0
+  - source: typescript
+    sourcePort: out-0
+    target: sort
+    targetPort: in-0
+  - source: sort
+    sourcePort: out-0
+    target: limit
+    targetPort: in-0
+  - source: limit
+    sourcePort: out-0
+    target: end
+    targetPort: in-0

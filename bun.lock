@@ -51,6 +51,22 @@
         "vite": "^8.3.5",
       },
     },
+    "dataflow.perf": {
+      "name": "@dataflow/perf",
+      "version": "0.1.0",
+      "dependencies": {
+        "@dataflow/core": "workspace:*",
+        "@dataflow/server": "workspace:*",
+        "mongodb": "^7.8.0",
+        "mssql": "^12.7.13",
+        "yaml": "^2.9.1",
+      },
+      "devDependencies": {
+        "@types/bun": "^1.4.4",
+        "@types/mssql": "^12.3.0",
+        "typescript": "~7.0.2",
+      },
+    },
     "dataflow.server": {
       "name": "@dataflow/server",
       "version": "0.1.0",
@@ -172,6 +188,8 @@
     "@dataflow/core": ["@dataflow/core@workspace:dataflow.core"],
 
     "@dataflow/editor": ["@dataflow/editor@workspace:dataflow.editor"],
+
+    "@dataflow/perf": ["@dataflow/perf@workspace:dataflow.perf"],
 
     "@dataflow/server": ["@dataflow/server@workspace:dataflow.server"],
 

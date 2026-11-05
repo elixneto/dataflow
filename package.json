@@ -2,19 +2,20 @@
   "name": "dataflow",
   "private": true,
   "version": "0.1.0",
-  "description": "Visual data flows: core (TS engine) and server (Bun: api, supervisor, workers). POC_v0/ is the proof of concept, kept for reference.",
+  "description": "Visual data flows: core (TS engine), server (Bun: api, supervisor, workers) and perf (engine performance scenarios, bun run perf). POC_v0/ is the proof of concept, kept for reference.",
   "type": "module",
   "engines": {
     "node": ">=26",
     "bun": ">=1.4.4"
   },
-  "workspaces": ["dataflow.core", "dataflow.server", "dataflow.editor"],
+  "workspaces": ["dataflow.core", "dataflow.server", "dataflow.editor", "dataflow.perf"],
   "scripts": {
     "dev": "bun scripts/dev.ts",
     "start": "bun scripts/dev.ts",
     "editor": "bun run --cwd=dataflow.editor dev",
-    "test": "bun test --cwd=dataflow.core && bun test --cwd=dataflow.server && bun test --cwd=dataflow.editor",
-    "typecheck": "bun run --cwd=dataflow.core typecheck && bun run --cwd=dataflow.server typecheck && bun run --cwd=dataflow.editor typecheck",
+    "test": "bun test --cwd=dataflow.core && bun test --cwd=dataflow.server && bun test --cwd=dataflow.editor && bun test --cwd=dataflow.perf",
+    "typecheck": "bun run --cwd=dataflow.core typecheck && bun run --cwd=dataflow.server typecheck && bun run --cwd=dataflow.editor typecheck && bun run --cwd=dataflow.perf typecheck",
+    "perf": "bun dataflow.perf/src/cli.ts",
     "migrate": "bun run --cwd=dataflow.server migrate"
   }
 }

@@ -1,0 +1,69 @@
+version: 1
+id: http-slow-api
+name: "perf: slow HTTP API"
+nodes:
+  - id: start
+    type: start
+    label: Start
+    position:
+      x: 0
+      y: 0
+    config:
+      acceptsInput: true
+  - id: http
+    type: http-request
+    label: HTTP Request
+    position:
+      x: 260
+      y: 0
+    config:
+      method: GET
+      url:
+        value: "`http://127.0.0.1:5195/items/${$id}?delayMs=20&failRate=0.02&jitterMs=10&seed=7`"
+        expression: true
+      timeoutS: 30
+      concurrency: 8
+      failOnError: true
+      onError: divert
+  - id: mapper
+    type: mapper
+    label: Mapper
+    position:
+      x: 520
+      y: 0
+    config:
+      fields:
+        - target: price
+          value: $response.body.price
+          expression: true
+  - id: discard
+    type: discard
+    label: Discard
+    position:
+      x: 520
+      y: 200
+    config: {}
+  - id: end
+    type: end
+    label: End
+    position:
+      x: 780
+      y: 0
+    config: {}
+edges:
+  - source: start
+    sourcePort: out-0
+    target: http
+    targetPort: in-0
+  - source: http
+    sourcePort: out-0
+    target: mapper
+    targetPort: in-0
+  - source: http
+    sourcePort: error
+    target: discard
+    targetPort: in-0
+  - source: mapper
+    sourcePort: out-0
+    target: end
+    targetPort: in-0

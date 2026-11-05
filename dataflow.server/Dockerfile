@@ -13,9 +13,10 @@ COPY package.json bun.lock ./
 COPY dataflow.core/package.json dataflow.core/
 COPY dataflow.server/package.json dataflow.server/
 COPY dataflow.editor/package.json dataflow.editor/
+COPY dataflow.perf/package.json dataflow.perf/
 RUN bun install --frozen-lockfile --production --filter '@dataflow/server'
 
-# the code (.dockerignore keeps out node_modules, .env files, tests and the editor)
+# the code (.dockerignore keeps out node_modules, .env files, tests, the editor and the perf package)
 COPY dataflow.core/src dataflow.core/src
 COPY dataflow.server dataflow.server
 

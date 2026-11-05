@@ -21,7 +21,7 @@ import { projectSecrets } from '#features/secrets/secret-store';
 import { VariableRepository } from '#features/variables/variable-repository';
 import type { Keyring } from '#shared/crypto/keyring';
 import type { Database } from '#shared/database/database';
-import { evaluate } from '#shared/runner/evaluate';
+import { createEvaluate } from '#shared/runner/evaluate';
 import { prepareScript } from '#shared/runner/prepare-script';
 import { querySqlServer } from '#shared/runner/sqlserver-driver';
 import { aggregateMongoDb, deleteMongoDb, upsertMongoDb } from '#shared/runner/mongodb-driver';
@@ -187,7 +187,8 @@ export async function runJob(
       mode: job.mode,
       id: job.id,
       parameterValues: job.parameters,
-      evaluate,
+      // one expression context for the whole run (and the flows it calls), never shared with another run
+      evaluate: createEvaluate(),
       http: options.http ?? sendHttp,
       // the databases' drivers (SQL Server Query; MongoDB Pipeline, Upsert, Delete): in a test run, what writes does
       // not reach them (the engine's gate), a Delete only counts

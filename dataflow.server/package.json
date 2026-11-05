@@ -7,6 +7,10 @@
     "#shared/*": "./shared/*.ts",
     "#features/*": "./features/*.ts"
   },
+  "exports": {
+    "./run-job": "./features/runs/run-job.ts",
+    "./runner/*": "./shared/runner/*.ts"
+  },
   "scripts": {
     "dev": "bun --watch api/server.ts",
     "migrate": "bun shared/database/migrate-cli.ts",

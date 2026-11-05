@@ -1,0 +1,29 @@
+{
+  "name": "@dataflow/perf",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "imports": {
+    "#perf/*": "./src/*.ts",
+    "#scenarios/*": "./scenarios/*.ts",
+    "#fake-api/*": "./fake-api/*.ts"
+  },
+  "scripts": {
+    "perf": "bun src/cli.ts",
+    "test": "bun test",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p report/tsconfig.json",
+    "fake-api": "bun fake-api/server.ts"
+  },
+  "dependencies": {
+    "@dataflow/core": "workspace:*",
+    "@dataflow/server": "workspace:*",
+    "mongodb": "^7.8.0",
+    "mssql": "^12.7.13",
+    "yaml": "^2.9.1"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.4.4",
+    "@types/mssql": "^12.3.0",
+    "typescript": "~7.0.2"
+  }
+}
