@@ -6,8 +6,11 @@
 
 export type ConnectionTestInput = { config: Record<string, string>; secrets: Record<string, string> };
 
+/** what it reached ("Connected to <that>."), or the whole message to show */
+export type ConnectionTestResult = string | { message: string };
+
 export interface ConnectionTest {
-  test(input: ConnectionTestInput): Promise<string>;
+  test(input: ConnectionTestInput): Promise<ConnectionTestResult>;
 }
 
 export const TEST_TIMEOUT_MS = 10_000;

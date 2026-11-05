@@ -4,6 +4,7 @@ import type { UseCaseContext } from '#shared/use-cases/use-case-context';
 import { fail, success, type UseCaseResult } from '#shared/use-cases/use-case-result';
 import { safeMessage, type ConnectionTest } from './connection-test';
 import { MongoDbConnectionTest } from './mongodb-connection-test';
+import { RestOAuth2ConnectionTest } from './rest-oauth2-connection-test';
 import { SqlServerConnectionTest } from './sqlserver-connection-test';
 
 export type TestConnectionResponse = { message: string; ms: number };
@@ -14,7 +15,17 @@ export type ConnectionTests = Partial<Record<ConnectionTypeName, ConnectionTest>
 export const LIVE_TESTS: ConnectionTests = {
   mongodb: new MongoDbConnectionTest(),
   sqlserver: new SqlServerConnectionTest(),
+  'rest-oauth2': new RestOAuth2ConnectionTest(),
 };
+
+/** an API profile holds how to get in, not what to call: the HTTP Request that uses it sets the URL */
+const NOTHING_TO_CALL: ConnectionTypeName[] = ['rest-basic', 'http-client'];
+
+/** what a complete profile without a live test answers */
+export const untestedMessage = (type: ConnectionTypeName) =>
+  NOTHING_TO_CALL.includes(type)
+    ? 'Complete. Nothing to call yet: the HTTP Request that uses it sets the URL.'
+    : "Complete. A live test comes with this connection's component.";
 
 /**
  * Tests a profile, saved or still in its form. It must be complete (the name aside) and every secret it names must be
@@ -49,7 +60,7 @@ export async function testProfile(
 
   const live = tests[fields.type];
   if (!live) {
-    return success({ message: 'Complete; a live test comes with the connectors.', ms: ms() });
+    return success({ message: untestedMessage(fields.type), ms: ms() });
   }
 
   // the secret fields that apply, by the name they hold: typed in the form, or stored (decrypted)
@@ -72,7 +83,7 @@ export async function testProfile(
 
   try {
     const reached = await live.test({ config: value.config, secrets });
-    return success({ message: `Connected to ${reached}.`, ms: ms() });
+    return success({ message: typeof reached === 'string' ? `Connected to ${reached}.` : reached.message, ms: ms() });
   } catch (error) {
     return fail('unavailable', safeMessage(error, Object.values(secrets)));
   }
