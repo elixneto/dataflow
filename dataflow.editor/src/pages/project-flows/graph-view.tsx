@@ -226,8 +226,6 @@ function Graph({ projectId }: { projectId: string }) {
       </div>
       <p className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
         <span>Click a box: what depends on it (amber) and what it uses (blue).</span>
-        {withScripts && <span className="text-violet-700 dark:text-violet-300">Violet: a script a flow or another script uses.</span>}
-        <span className="text-destructive">Red: a circular call, it fails.</span>
         <span>Dashed: only on another call's error, or to an archived or removed flow.</span>
       </p>
     </div>
