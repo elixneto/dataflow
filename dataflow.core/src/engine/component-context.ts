@@ -74,11 +74,19 @@ export function componentContext(execution: FlowExecution, node: ExecutableNode,
           }
         }
       };
-      return options.prepareScript(code, {run, parameters, secrets: options.secrets ?? {}, variables: options.variables ?? {}, log: (m, level = 'info') => log(level, m), wait});
+      const script = await options.prepareScript(code, {run, parameters, secrets: options.secrets ?? {}, variables: options.variables ?? {}, log: (m, level = 'info') => log(level, m), wait});
+      // calling the script is this component's own work: its active time from here (see Stopwatch)
+      return (input: unknown) => {
+        stopwatch.resume();
+        return script(input);
+      };
     },
-    fieldValue: (field, doc) => (field.expression
-      ? options.evaluate(field.value, envelopeVariables(doc, options.secrets, options.variables))
-      : field.value),
+    fieldValue: (field, doc) => {
+      if (!field.expression) return field.value;
+      // evaluating is this component's own work: its active time from here, whoever ran just before (see Stopwatch)
+      stopwatch.resume();
+      return options.evaluate(field.value, envelopeVariables(doc, options.secrets, options.variables));
+    },
     wait: async promise => {
       stopwatch.stop();
       try {
@@ -207,6 +215,9 @@ export function componentContext(execution: FlowExecution, node: ExecutableNode,
       }
     },
     mask,
-    holding: (envelopes, held) => execution.memoryOf(node.id).holding(envelopes, held),
+    holding: (envelopes, held) => {
+      stopwatch.resume();
+      execution.memoryOf(node.id).holding(envelopes, held);
+    },
   };
 }

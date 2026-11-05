@@ -30,8 +30,12 @@ test('active time does not count the wait, and Aggregate reports the batch peak'
   });
   expect(r.status).toBe('completed');
   const byId = (id: string) => r.components.find(c => c.nodeId === id)!;
-  // the script awaits inside: counts as active
-  expect(byId('ts').activeTimeMs!).toBeGreaterThan(150);
+  // the script sleeps 30 ms per envelope without passing it through the engine's wait (the server's runner does, and
+  // it shows as Waiting): sleeping is not its own work, so it is not active either; it shows in its open time
+  expect(byId('ts').activeTimeMs!).toBeLessThan(30);
+  expect(byId('ts').durationMs!).toBeGreaterThan(150);
+  // one thread runs one component at a time: the components' active times add up to no more than the run
+  expect(r.components.reduce((sum, c) => sum + (c.activeTimeMs ?? 0), 0)).toBeLessThanOrEqual(r.durationMs);
   // the Mapper spent the run waiting for the script: it is active much less than it lasted
   expect(byId('m').durationMs!).toBeGreaterThan(100);
   expect(byId('m').activeTimeMs!).toBeLessThan(byId('m').durationMs! / 2);

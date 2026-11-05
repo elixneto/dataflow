@@ -25,7 +25,9 @@ export type ComponentRun = {
   durationMs?: number;
   /**
    * Time the component spent processing, not counting the wait for envelopes nor for the next component.
-   * Since everything runs on a single thread, it is practically its CPU. Includes what the script awaits inside (e.g. an HTTP call).
+   * Since everything runs on a single thread, it is practically its CPU: one component's time is never also counted for
+   * another, so the components' active times add up to no more than the run. What a script awaits counts as Waiting
+   * when it goes through the engine's wait (the server's runner does that for its fetch and timers), and is not active.
    */
   activeTimeMs?: number;
   /**

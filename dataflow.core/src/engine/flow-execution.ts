@@ -71,7 +71,7 @@ export class FlowExecution {
       nodeId: node.id, label: node.label, type: node.type, status: 'not-run',
       inputs: {}, outputs: {}, logs: [], inputSample: [], outputSample: {},
     }]));
-    this.stopwatches = new Map(wf.nodes.map(node => [node.id, new Stopwatch()]));
+    this.stopwatches = new Map(wf.nodes.map(node => [node.id, new Stopwatch(true)]));
     this.memories = new Map(wf.nodes.map(node => [node.id, new MemoryMeter()]));
     this.waits = new Map(wf.nodes.map(node => [node.id, new Stopwatch()]));
     // one channel per edge
