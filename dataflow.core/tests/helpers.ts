@@ -1,8 +1,8 @@
 import vm from 'node:vm';
-import type {ExecutableFlow} from '../src/index';
+import {expressionScope, type ExecutableFlow} from '../src/index';
 
 /** Evaluates expressions the way the runner does (node:vm), with a short timeout. */
-export const evaluate = (expr: string, vars: Record<string, unknown>) => vm.runInNewContext(`(${expr})`, {...vars}, {timeout: 200});
+export const evaluate = (expr: string, vars: Record<string, unknown>) => vm.runInNewContext(`(${expr})`, expressionScope(expr, vars), {timeout: 200});
 
 /** Start → Mapper (a parameter with startedAt and a fixed text) → End. Tests that change it work on a structuredClone. */
 export const mapperFlow: ExecutableFlow = {

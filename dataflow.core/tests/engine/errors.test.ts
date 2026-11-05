@@ -81,7 +81,7 @@ test('an input with two edges joins the normal output and the error handling one
   expect(r.components.find(c => c.nodeId === 'end')!.inputs['in-0']).toBe(2);
   // what goes out through the error port carries DATA.errors
   expect(r.components.find(c => c.nodeId === 'handle')!.inputSample[0].errors).toEqual([
-    {error: 'ReferenceError', message: expect.stringContaining('$failure is not defined'), component: 'Mapper'},
+    {error: 'TypeError', message: expect.stringContaining('$failure'), component: 'Mapper'},
   ]);
   // the error was diverted and handled: the run is a success
   expect(r.components.find(c => c.nodeId === 'ok')!.status).toBe('completed');
