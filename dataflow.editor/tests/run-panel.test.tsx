@@ -248,3 +248,38 @@ describe('which run a Last run tab shows', () => {
     expect(renderToStaticMarkup(<ComponentLastRun c={filter} about={{ mode: 'execution', startedAt: new Date().toISOString() }} />)).toMatch(/>Run for real<\/span> · today /);
   });
 });
+
+describe("a run's errors, stacked", () => {
+  const at = (s: number) => `2026-11-04T12:00:0${s}.000Z`;
+  const failed = () => {
+    const record = mockRunRecord(flow, 'validation', new Date('2026-11-04T12:00:00Z'));
+    return {
+      ...record,
+      status: 'failed' as const,
+      error: '"Big": $x is not defined',
+      components: record.components.map(c =>
+        c.nodeId === 'f'
+          ? { ...c, status: 'failed' as const, logs: [
+              { at: at(2), level: 'error' as const, message: '$x is not defined' },
+              { at: at(1), level: 'warning' as const, message: 'Diverted to the error port: bad' },
+              { at: at(3), level: 'error' as const, message: '$x is not defined' },
+            ] }
+          : c.type === 'end'
+            ? { ...c, logs: [...c.logs, { at: at(4), level: 'error' as const, message: 'Run r1 finished (Failed) in 3 ms.' }] }
+            : c,
+      ),
+    };
+  };
+
+  test('one per component and message, with how many times, the first time first; not the End closing line nor warnings', async () => {
+    const { runErrors } = await import('../src/pages/flow-editor/run-view');
+    expect(runErrors(failed())).toEqual([{ nodeId: 'f', message: '$x is not defined', count: 2, at: at(2) }]);
+  });
+
+  test('a run that ended with errors opens on the Errors tab, with the count, and says why it failed above the tabs', () => {
+    const html = renderToStaticMarkup(<RunPanel record={failed()} running={null} onFocus={() => {}} pinned={new Set()} onPin={() => {}} onClose={() => {}} />);
+    expect(html).toMatch(/role="alert"[^>]*>.*&quot;Big&quot;: \$x is not defined/);
+    expect(html).toMatch(/aria-selected="true"[^>]*>errors<span[^>]*>2<\/span>/);
+    expect(html).toContain('×2');
+  });
+});

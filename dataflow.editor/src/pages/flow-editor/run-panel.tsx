@@ -8,7 +8,7 @@ import { cn } from '@/lib/utils';
 import { readChoice, rememberChoice } from '@/editor/run/run-choices';
 import { portLabel } from '@/editor/run/port-label';
 import { runActions, type RunAbout } from '@/editor/run/run-marks';
-import { dataTabComponents, dataTabSelection, timelineSpan, type Shown } from './run-view';
+import { dataTabComponents, dataTabSelection, runErrors, timelineSpan, type RunError, type Shown } from './run-view';
 import { JsonTree } from '@/editor/run/json-tree';
 
 /*
@@ -16,7 +16,7 @@ import { JsonTree } from '@/editor/run/json-tree';
  * dragged by the top edge and kept in this browser tab; it collapses to its header (status, time, envelopes).
  */
 
-type Tab = 'logs' | 'metrics' | 'data';
+type Tab = 'errors' | 'logs' | 'metrics' | 'data';
 
 const HEIGHT_KEY = 'dataflow.runPanel.height';
 const DEFAULT_HEIGHT = 300;
@@ -41,7 +41,7 @@ const rememberHeight = (h: number) => {
 
 const TAB_KEY = 'dataflow.run.tab';
 const VIEW_KEY = 'dataflow.run.dataView';
-const TABS = ['logs', 'metrics', 'data'] as const;
+const TABS = ['errors', 'logs', 'metrics', 'data'] as const;
 const VIEWS = ['table', 'json'] as const;
 
 const ms = (value?: number) => (value === undefined ? '—' : value < 1000 ? `${Math.round(value)} ms` : `${(value / 1000).toFixed(2)} s`);
@@ -124,6 +124,16 @@ export function RunPanel({ record, usage, running, queued, onStop, stopping, onF
     setCollapsed(false);
     setTabState('data');
     setSelected(show.nodeId);
+  }
+  // a run that ended with errors opens on them, once (then the tab chosen stays)
+  const errors = useMemo(() => (record ? runErrors(record) : []), [record]);
+  const [errorsShownFor, setErrorsShownFor] = useState<string | undefined>(undefined);
+  const ended = record !== null && record !== undefined && record.status !== 'running';
+  if (ended && errors.length > 0 && !stoppedRun(record) && errorsShownFor !== record.run.id) {
+    setErrorsShownFor(record.run.id);
+    if (!show) {
+      setTabState('errors');
+    }
   }
   const [drag, setDrag] = useState<{ y: number; h: number } | null>(null);
 
@@ -212,6 +222,9 @@ export function RunPanel({ record, usage, running, queued, onStop, stopping, onF
                 className={cn('rounded-md px-2.5 py-1 text-xs capitalize transition-colors', tab === t ? 'bg-accent font-medium' : 'text-muted-foreground hover:text-foreground')}
               >
                 {t}
+                {t === 'errors' && errors.length > 0 && (
+                  <span className="ml-1.5 rounded-full bg-destructive/15 px-1.5 font-mono text-[0.65rem] text-destructive">{errors.reduce((n, e) => n + e.count, 0)}</span>
+                )}
               </button>
             ))}
           </div>
@@ -231,8 +244,16 @@ export function RunPanel({ record, usage, running, queued, onStop, stopping, onF
           </Button>
         </div>
       </header>
+      {!collapsed && record && !error && 'error' in record && record.error && !stoppedRun(record) && (
+        // why the run failed, in sight without looking for it
+        <p role="alert" className="flex shrink-0 items-start gap-2 border-b bg-destructive/10 px-3 py-1.5 text-sm text-destructive">
+          <CircleX className="mt-0.5 size-4 shrink-0" aria-hidden />
+          <span className="min-w-0 break-words whitespace-pre-wrap">{record.error}</span>
+        </p>
+      )}
       {!collapsed && record && !error && (
         <div className="min-h-0 flex-1 overflow-auto">
+          {tab === 'errors' && <ErrorsTab record={record} errors={errors} onFocus={onFocus} />}
           {tab === 'logs' && <LogsTab record={record} onFocus={onFocus} filter={logsFilter} onFilter={setLogsFilter} />}
           {tab === 'metrics' && <MetricsTab record={record} onFocus={onFocus} portName={portName} />}
           {tab === 'data' && (
@@ -251,6 +272,38 @@ const LEVEL_COLOR: Record<string, string> = { debug: 'text-muted-foreground', in
 type LogsFilter = { level: string; node: string };
 
 /** every log line of the run, by time; a click focuses its component */
+/** the run's errors stacked: one row per component and message, how many times, the first time; a row shows the component */
+function ErrorsTab({ record, errors, onFocus }: { record: Shown; errors: RunError[]; onFocus: (nodeId: string) => void }) {
+  if (errors.length === 0) {
+    return (
+      <p className="flex items-center gap-2 p-3 text-xs text-muted-foreground">
+        <CircleCheck className="size-3.5" aria-hidden />
+        {record.status === 'running' ? 'No errors so far.' : 'No errors.'}
+      </p>
+    );
+  }
+
+  const byId = new Map(record.components.map(c => [c.nodeId, c]));
+  return (
+    <ul aria-label="Errors" className="text-xs">
+      {errors.map(e => {
+        const c = byId.get(e.nodeId);
+        return (
+          <li key={`${e.nodeId}:${e.message}`} className="border-b last:border-b-0">
+            <button type="button" onClick={() => onFocus(e.nodeId)} className="flex w-full items-start gap-3 px-3 py-1.5 text-left hover:bg-accent" title="Show the component">
+              <CircleX className="mt-0.5 size-3.5 shrink-0 text-destructive" aria-hidden />
+              <span className="w-40 shrink-0 truncate font-medium text-foreground">{c ? nameOf(c) : e.nodeId}</span>
+              <span className="min-w-0 flex-1 font-mono break-words whitespace-pre-wrap text-destructive">{e.message}</span>
+              {e.count > 1 && <span className="shrink-0 rounded-full bg-destructive/15 px-1.5 font-mono text-destructive" title={`${e.count} times`}>×{e.count}</span>}
+              <span className="shrink-0 font-mono text-muted-foreground">{time(e.at)}</span>
+            </button>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
 function LogsTab({ record, onFocus, filter, onFilter }: { record: Shown; onFocus: (nodeId: string) => void; filter: LogsFilter; onFilter: (filter: LogsFilter) => void }) {
   const { level, node } = filter;
   const setLevel = (next: string) => onFilter({ ...filter, level: next });

@@ -25,3 +25,34 @@ export function dataTabSelection(record: Shown, chosen: string | undefined): str
 export function timelineSpan(record: Shown, runStart: number): number {
   return Math.max(record.durationMs, ...record.components.map(c => (c.start ? Date.parse(c.start) - runStart + (c.durationMs ?? 0) : 0)));
 }
+
+/** one error of a run, stacked: the component, the message and how many times it came (the first time) */
+export type RunError = { nodeId: string; message: string; count: number; at: string };
+
+/** the End's closing line ("Run … finished (Failed) …"): a summary, not an error of its own */
+const CLOSING_LINE = /^Run \S+ finished \(/;
+
+/**
+ * The run's errors, from its components' error lines (not the log's other lines): the same message of the same
+ * component once, with its count, in the order they first came.
+ */
+export function runErrors(record: Shown): RunError[] {
+  const stacked = new Map<string, RunError>();
+  for (const c of record.components) {
+    for (const line of c.logs) {
+      if (line.level !== 'error' || (c.type === 'end' && CLOSING_LINE.test(line.message))) {
+        continue;
+      }
+
+      const key = `${c.nodeId}\n${line.message}`;
+      const seen = stacked.get(key);
+      if (seen) {
+        seen.count += 1;
+      } else {
+        stacked.set(key, { nodeId: c.nodeId, message: line.message, count: 1, at: line.at });
+      }
+    }
+  }
+
+  return [...stacked.values()].sort((a, b) => a.at.localeCompare(b.at));
+}
