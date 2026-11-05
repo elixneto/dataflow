@@ -22,6 +22,7 @@ import { Button } from '@/components/ui/button';
 import '@xyflow/react/dist/style.css';
 import { componentSettings, connectionProblem, flowCalls, type FlowCall, dataTypeFromSamples, END, ERROR_PORT, inputVariables, scriptGlobals, settingsDefaults, START, startParameters, systemVariables, type EnvelopeData, type KnownVariables } from '@dataflow/core';
 import { arrange } from '@/editor/arrange';
+import { bridges, edgesAfterDelete } from '@/editor/bridge-delete';
 import { fittedConnections } from '@/editor/auto-connect';
 import { CATEGORIES, componentInfo, isFixedType } from '@/editor/catalog';
 import type { ComponentDraft } from '@/editor/component-draft';
@@ -551,10 +552,12 @@ export function FlowCanvas(props: {
     setEdges(current => edgesWithPorts(updated, current));
     closeWindow(id);
   };
+  const pendingBridges = useRef<ReturnType<typeof bridges>>([]);
   const removeComponent = (id: string) => {
     record();
     setNodes(current => current.filter(n => n.id !== id));
-    setEdges(current => current.filter(e => e.source !== id && e.target !== id));
+    // C1 → C2 → C3 without C2: C1 → C3 (editor/bridge-delete.ts)
+    setEdges(current => edgesAfterDelete(new Set([id]), current, typeOfNode));
     closeWindow(id);
   };
   // each window's own way to close (it asks first when it has unsaved changes), used by its X and Esc
@@ -604,9 +607,22 @@ export function FlowCanvas(props: {
               onNodeDragStart={onNodeDragStart}
               onNodeDragStop={(_, __, moved) => connectFitted(moved, flow?.getNodes() ?? nodes)}
               onSelectionDragStart={record}
-              onBeforeDelete={async () => {
+              onBeforeDelete={async ({ nodes: going, edges: goingEdges }) => {
                 record();
+                // C1 → C2 → C3 without C2: C1 → C3, added once the delete is done (editor/bridge-delete.ts)
+                const all = flow?.getEdges() ?? edges;
+                const ids = new Set(going.map(n => n.id));
+                const removed = new Set(goingEdges.map(e => e.id));
+                const kept = all.filter(e => !removed.has(e.id) && !ids.has(e.source) && !ids.has(e.target));
+                pendingBridges.current = bridges(ids, all, kept, typeOfNode);
                 return true;
+              }}
+              onDelete={() => {
+                const added = pendingBridges.current;
+                pendingBridges.current = [];
+                if (added.length > 0) {
+                  setEdges(current => added.reduce((next, bridge) => addEdge(bridge, next), current));
+                }
               }}
               onNodeDrag={onNodeDrag}
               // opens with the whole flow on screen (Start and End at first), never zoomed past 100%, clear of the palette
