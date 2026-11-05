@@ -129,6 +129,8 @@ async function cachedBundle(code: string, scripts: Record<string, string>, hashe
 export const prepareScript = async (code: string, globals: Parameters<PrepareScript>[1], scripts: Record<string, string> = {}, hashes: Record<string, string> = {}) => {
   const js = await cachedBundle(code, scripts, hashes);
   const log = (...parts: unknown[]) => globals.log(text(parts));
+  // the script's console, at the component's log levels
+  const at = (level: 'debug' | 'warning' | 'error') => (...parts: unknown[]) => globals.log(text(parts), level);
   // the script's timers still to fire (each one a wait until it fires or is cleared)
   const timers = new Map<ReturnType<typeof setTimeout>, () => void>();
   const context = vm.createContext({
@@ -137,7 +139,7 @@ export const prepareScript = async (code: string, globals: Parameters<PrepareScr
     $VARIABLES: globals.variables,
     $FLOW_CURRENT_RUN: globals.run,
     log,
-    console: { log, info: log, warn: log, error: log, debug: log },
+    console: { log, info: log, warn: at('warning'), error: at('error'), debug: at('debug') },
     // what the script waits for outside counts as Waiting, not Active: its calls (until the whole body is in) and its
     // timers (a sleep)
     fetch: (...args: Parameters<typeof fetch>) => globals.wait(fetch(...args).then(bodyRead)),

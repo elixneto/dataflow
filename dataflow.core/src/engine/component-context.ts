@@ -73,7 +73,7 @@ export function componentContext(execution: FlowExecution, node: ExecutableNode,
           }
         }
       };
-      return options.prepareScript(code, {run, parameters, secrets: options.secrets ?? {}, variables: options.variables ?? {}, log: m => log('info', m), wait});
+      return options.prepareScript(code, {run, parameters, secrets: options.secrets ?? {}, variables: options.variables ?? {}, log: (m, level = 'info') => log(level, m), wait});
     },
     fieldValue: (field, doc) => (field.expression
       ? options.evaluate(field.value, envelopeVariables(doc, options.secrets, options.variables))
