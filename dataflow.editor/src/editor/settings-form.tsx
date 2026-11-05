@@ -216,7 +216,7 @@ function ConnectionPicker({ id, types, value, onChange }: { id: string; types: s
   const profiles = resources.connections.filter(c => types.includes(c.type));
   return (
     <div className="flex items-center gap-2">
-      <select id={id} value={value} className={SELECT} onChange={event => onChange(event.target.value)}>
+      <select id={id} value={value} className={SELECT} onFocus={resources.refresh} onChange={event => onChange(event.target.value)}>
         <option value="">None (set it here)</option>
         {profiles.map(profile => (
           <option key={profile.id} value={profile.id}>
@@ -235,7 +235,7 @@ function SecretPicker({ id, value, onChange }: { id: string; value: string; onCh
   const resources = useProjectResources();
   return (
     <div className="flex items-center gap-2">
-      <select id={id} value={value} className={cn(SELECT, 'font-mono')} onChange={event => onChange(event.target.value)}>
+      <select id={id} value={value} className={cn(SELECT, 'font-mono')} onFocus={resources.refresh} onChange={event => onChange(event.target.value)}>
         <option value="">Choose a secret</option>
         {resources.secrets.map(name => (
           <option key={name} value={name}>
@@ -255,7 +255,7 @@ function FlowPicker({ id, value, onChange }: { id: string; value: string; onChan
   const { flowId } = useParams();
   const flows = resources.flows.filter(f => f.id !== flowId);
   return (
-    <select id={id} value={value} className={SELECT} onChange={event => onChange(event.target.value)}>
+    <select id={id} value={value} className={SELECT} onFocus={resources.refresh} onChange={event => onChange(event.target.value)}>
       <option value="">Choose a flow</option>
       {flows.map(flow => (
         <option key={flow.id} value={flow.id}>
