@@ -1,5 +1,6 @@
 import {COMPONENTS} from '../components';
 import {END, START} from '#engine/constants';
+import type {ErrorPolicy} from '#types/error-policy.type';
 
 /*
  * A component's ports and who may connect to what: the one place for it. The editor draws the ports and refuses an
@@ -65,7 +66,20 @@ export const ERROR_PORT = 'error';
  */
 export function errorPort(type: string, config: Record<string, unknown> = {}): PortInfo | undefined {
   if (type === START || type === END || !COMPONENTS[type]) return undefined;
-  return config.onError === 'divert' ? {id: ERROR_PORT} : undefined;
+  return onErrorOf(type, config) === 'divert' ? {id: ERROR_PORT} : undefined;
+}
+
+/** the On error a component of this type and config has no choice about (ComponentLogic.fixedOnError), if any */
+export function fixedOnError(type: string, config: Record<string, unknown> = {}): ErrorPolicy | undefined {
+  return COMPONENTS[type]?.fixedOnError?.(config);
+}
+
+/** A component's On error: the fixed one when its config leaves no choice, else config.onError (Throw by default). */
+export function onErrorOf(type: string, config: Record<string, unknown> = {}): ErrorPolicy {
+  const fixed = fixedOnError(type, config);
+  if (fixed) return fixed;
+  const v = config.onError;
+  return v === 'continue' || v === 'divert' ? v : 'throw';
 }
 
 /**
@@ -83,7 +97,13 @@ export function errorEdgeIssues(
       const node = nodeOf(id);
       return !node || !errorPort(node.type, node.config);
     })
-    .map(nodeId => ({nodeId, message: 'has an edge out of its error port, but its On error is not Divert.'}));
+    .map(nodeId => {
+      const node = nodeOf(nodeId);
+      const fixed = node ? fixedOnError(node.type, node.config) : undefined;
+      return {nodeId, message: fixed
+        ? `has an edge out of its error port, but its On error can only be ${fixed === 'throw' ? 'Throw' : fixed} with this configuration.`
+        : 'has an edge out of its error port, but its On error is not Divert.'};
+    });
 }
 
 /** whether this port of a component of this type takes several edges (all but the single ones, like Lookup's inputs) */

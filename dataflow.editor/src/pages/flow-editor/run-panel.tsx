@@ -35,6 +35,7 @@ import {runActions, type RunAbout} from '@/editor/run/run-marks';
 import {
     dataTabComponents,
     dataTabSelection,
+    queuedRunsOf,
     runErrors,
     subRunsOf,
     timelineSpan,
@@ -112,6 +113,7 @@ const STATUS: Record<string, { icon: typeof CircleCheck; color: string; label: s
     'not-run': {icon: CircleMinus, color: 'text-muted-foreground', label: 'Not run'},
     skipped: {icon: CircleDashed, color: 'text-muted-foreground', label: 'Skipped: it only feeds pinned components'},
     running: {icon: LoaderCircle, color: 'text-muted-foreground animate-spin', label: 'Running'},
+    queued: {icon: Clock, color: 'text-muted-foreground', label: 'Queued'},
 };
 
 function StatusIcon({status, className}: { status: string; className?: string }) {
@@ -1134,6 +1136,28 @@ export function ComponentLastRun({c, about, portName = defaultPortName}: {
                 ))}
             </ul>
             {subRunsOf(c).length > 0 && <CalledRuns c={c}/>}
+            {queuedRunsOf(c).length > 0 && <QueuedRuns c={c}/>}
+        </div>
+    );
+}
+
+/** a Flow Invoker's fire and forget calls of a real run: each one a run of its own, queued (its id; its status is its own) */
+function QueuedRuns({c}: { c: ComponentRun }) {
+    const queued = queuedRunsOf(c);
+    return (
+        <div className="max-h-40 shrink-0 overflow-auto border-t">
+            <p className="px-4 pt-2 pb-1 text-xs font-medium">
+                Queued runs <span className="font-normal text-muted-foreground">(fire and forget: each one a run of its own, its status apart from this one's)</span>
+            </p>
+            <ul aria-label="Queued runs" className="pb-1 font-mono text-xs">
+                {queued.map((sub, index) => (
+                    <li key={sub.id} className="flex items-center gap-2 px-4 py-0.5">
+                        <StatusIcon status="queued" className="size-3.5"/>
+                        <span>Call {index + 1}: <span className="text-foreground">{sub.flow}</span> queued{sub.envelopes !== undefined ? ` · ${sub.envelopes} envelope${sub.envelopes === 1 ? '' : 's'}` : ''}</span>
+                        <span className="text-muted-foreground" title="The run's id">{sub.id}</span>
+                    </li>
+                ))}
+            </ul>
         </div>
     );
 }

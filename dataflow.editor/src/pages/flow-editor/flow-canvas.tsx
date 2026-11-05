@@ -20,7 +20,7 @@ import { useParams } from 'react-router';
 import { ProjectResourcesContext, ScriptGlobalsContext, useLoadProjectResources } from '@/editor/project-resources';
 import { Button } from '@/components/ui/button';
 import '@xyflow/react/dist/style.css';
-import { componentSettings, connectionProblem, flowCalls, type FlowCall, dataTypeFromSamples, END, ERROR_PORT, inputVariables, scriptGlobals, settingsDefaults, START, startParameters, systemVariables, type EnvelopeData, type KnownVariables } from '@dataflow/core';
+import { componentSettings, connectionProblem, flowCalls, type FlowCall, dataTypeFromSamples, END, ERROR_PORT, fixedOnError, inputVariables, scriptGlobals, settingsDefaults, START, startParameters, systemVariables, type EnvelopeData, type KnownVariables } from '@dataflow/core';
 import { arrange } from '@/editor/arrange';
 import { bridges, edgesAfterDelete } from '@/editor/bridge-delete';
 import { fittedConnections } from '@/editor/auto-connect';
@@ -549,8 +549,12 @@ export function FlowCanvas(props: {
   // Save in a window: all its changes at once, one Ctrl+Z step, and the window closes
   const saveComponent = (id: string, draft: ComponentDraft) => {
     record();
+    const node = nodes.find(n => n.id === id);
+    const type = node && isComponent(node) ? node.data.type : undefined;
+    // a config that leaves no choice about On error (Fire and forget: Throw) takes it, and its error port goes with its edges
+    const fixed = type ? fixedOnError(type, draft.config) : undefined;
     const changes: Partial<ComponentData> = {
-      config: draft.config,
+      config: fixed ? { ...draft.config, onError: fixed } : draft.config,
       label: draft.label?.trim() || undefined,
       outputKey: draft.outputKey?.trim() || undefined,
       override: draft.override || undefined,

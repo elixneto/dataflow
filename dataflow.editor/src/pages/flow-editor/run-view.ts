@@ -39,6 +39,9 @@ const labelOf = (c: ComponentRun) => c.label || c.type;
 export const subRunsOf = (c: ComponentRun): (SubRun & { record: RunRecord | RunProgress })[] =>
   (c.subRuns ?? []).filter((s): s is SubRun & { record: RunRecord | RunProgress } => !!s.record);
 
+/** a Flow Invoker's fire and forget calls of a real run: queued as runs of their own (no record here, their own) */
+export const queuedRunsOf = (c: ComponentRun): SubRun[] => (c.subRuns ?? []).filter(s => s.status === 'queued');
+
 /** the End's closing line ("Run … finished (Failed) …"): a summary, not an error of its own */
 const CLOSING_LINE = /^Run \S+ finished \(/;
 

@@ -40,13 +40,24 @@ export type ComponentContext = {
   /**
    * Runs another flow (Flow Invoker) with the values of its Start parameters and, optionally, an input.
    * `envelopes` yields the DATA of each envelope that reaches its End, as it arrives; `result` is its record.
-   * A caller that stops reading before the end calls `cancel`.
+   * A caller that stops reading before the end calls `cancel`. `fireAndForget`: the caller does not wait for it (its
+   * entry in the record says so).
    */
-  invokeFlow: (flowId: string, call: {parameters: Record<string, string>; input?: unknown}) => {
+  invokeFlow: (flowId: string, call: {parameters: Record<string, string>; input?: unknown; fireAndForget?: boolean}) => {
     envelopes: AsyncIterable<EnvelopeData>;
     result: Promise<RunRecord>;
     cancel: () => void;
   };
+  /**
+   * Queues another flow as a run of its own (Flow Invoker, fire and forget, in a real run): checked like invokeFlow
+   * (circular calls, depth, the input against its Start type), then handed to the runner. Answers the new run's id.
+   */
+  queueFlow: (flowId: string, call: {parameters: Record<string, string>; input?: unknown}) => Promise<{id: string}>;
+  /**
+   * What a call to another flow is checked against before it starts (circular, depth, a flow that cannot be called,
+   * the input against its Start type): throws why it would not start. A batch checks each envelope's DATA with it.
+   */
+  checkFlowCall: (flowId: string, input?: unknown) => void;
   /**
    * Query on a database, through the driver the runner registered for that kind. The connection (a profile or the component's
    * inline fields) becomes the connection string here; the run's signal cancels the query.

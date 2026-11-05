@@ -6,7 +6,7 @@ import { fail, success, type UseCaseResult } from '#shared/use-cases/use-case-re
 import { validate } from '#shared/use-cases/validate';
 import type { RunRowStatus } from '../run';
 import { usageOf } from '../run-events';
-import { findRun } from '../run-queue';
+import { calledRunsOf, findRun, type CalledRunView } from '../run-queue';
 
 export const GetRunQuery = z.object({ id: z.uuid('Invalid') });
 
@@ -19,6 +19,12 @@ export type RunView = {
   record: RunRecord | RunProgress | null;
   /** what its worker process used, once it ended: memory at the start and its peak (the whole process), CPU */
   usage: RunUsageView | null;
+  /** a run a Flow Invoker's fire and forget call queued: the run that queued it, the one at the top, the Flow Invoker */
+  parentId: string | null;
+  rootId: string | null;
+  parentNodeId: string | null;
+  /** the runs it queued (its fire and forget calls), each with how it goes now: its own status, apart from this one's */
+  calledRuns: CalledRunView[];
 };
 
 export type RunUsageView = { startRssBytes: number | null; peakRssBytes: number | null; cpuMs: number | null };
@@ -46,6 +52,10 @@ export class GetRunHandler implements UseCaseHandler<RunView> {
       status: run.status,
       record: live ?? (run.record as RunRecord | null) ?? null,
       usage: usageOf(run),
+      parentId: run.parentId,
+      rootId: run.rootId,
+      parentNodeId: run.parentNodeId,
+      calledRuns: run.table === 'runs' ? await calledRunsOf(ctx.db, run.id, ctx.orgId) : [],
     });
   }
 }

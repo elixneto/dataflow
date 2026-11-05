@@ -1,7 +1,8 @@
 import { getTableColumns } from 'drizzle-orm';
-import type { RunProgress, RunRecord } from '@dataflow/core';
+import type { QueueFlowRequest, RunProgress, RunRecord } from '@dataflow/core';
 import type { Database } from '#shared/database/database';
 import { RUN_TABLES, runs, type Run, type RunRowStatus, type RunTable } from './run';
+import type { CalledFlow } from './start-run/called-flows';
 
 /*
  * The runs queue, in Postgres, over the two run tables (test_runs: the editor's Run; runs: Run for real and the
@@ -191,3 +192,85 @@ export function lostRecord(run: Pick<Run, 'id' | 'mode' | 'progress' | 'startedA
 }
 
 export const notifyRunEvent = (db: Database, notice: RunEventNotice) => db.notify(CHANNELS.events, JSON.stringify(notice));
+
+/** a run's call chain as stored (call_chain): the flows called down to it, and the first one's name */
+export type CallChain = { flows: string[]; rootName: string };
+
+/**
+ * A Flow Invoker's fire and forget call, from a real run: the called flow queued as a run of its own, in runs (Run
+ * for real's history), with what its parent was queued with (the called flow's draft, the scripts, the flows it calls
+ * in turn: one snapshot for the whole tree), its parent, its root, the Flow Invoker that called it and the chain.
+ * Wakes the supervisors. Refused from a test run (those run the call beside them, never queue it).
+ */
+export async function queueCalledRun(db: Database, parent: QueuedRun, request: QueueFlowRequest): Promise<{ id: string; flowName: string }> {
+  if (parent.table !== 'runs') {
+    throw new Error('A test run does not queue the flows it calls.');
+  }
+
+  const called = ((parent.calledFlows as CalledFlow[] | null) ?? []).find(c => c.id === request.flowId);
+  if (!called?.flow) {
+    throw new Error(called?.unavailable ? `The flow "${called.name}" cannot be called: ${called.unavailable}` : `The called flow (${request.flowId}) was not found.`);
+  }
+
+  const id = crypto.randomUUID();
+  const chain: CallChain = { flows: request.chain, rootName: request.rootName };
+  await db.orm.insert(runs).values({
+    id,
+    orgId: parent.orgId,
+    flowId: request.flowId,
+    projectId: parent.projectId,
+    parentId: parent.id,
+    rootId: parent.rootId ?? parent.id,
+    parentNodeId: request.nodeId,
+    callChain: chain,
+    mode: 'execution',
+    draftHash: new Bun.CryptoHasher('sha256').update(JSON.stringify(called.flow)).digest('hex'),
+    status: 'queued',
+    trigger: 'flow-invoker',
+    workerTag: parent.workerTag,
+    priority: parent.priority,
+    parameters: request.parameters,
+    ...(request.input !== undefined ? { input: request.input } : {}),
+    definition: called.flow,
+    scripts: parent.scripts,
+    calledFlows: parent.calledFlows,
+  });
+  await db.notify(CHANNELS.queued, parent.workerTag);
+  return { id, flowName: called.name };
+}
+
+/** a run as a list shows it: the runs a run queued (its fire and forget calls), each with how it goes now */
+export type CalledRunView = {
+  id: string;
+  flowId: string;
+  flow: string;
+  status: RunRowStatus;
+  parentNodeId: string | null;
+  queuedAt: string;
+  startedAt: string | null;
+  finishedAt: string | null;
+  durationMs: number | null;
+  error: string | null;
+};
+
+/** The runs a run queued (its Flow Invokers' fire and forget calls), in the order they were queued. */
+export async function calledRunsOf(db: Database, parentId: string, orgId: string): Promise<CalledRunView[]> {
+  const rows = await db.query<{
+    id: string; flowId: string; flow: string | null; status: RunRowStatus; parentNodeId: string | null;
+    queuedAt: Date | string; startedAt: Date | string | null; finishedAt: Date | string | null; durationMs: number | string | null; error: string | null;
+  }>(
+    `SELECT id, flow_id AS "flowId", coalesce(record->'run'->>'flow', definition->>'name') AS flow, status, parent_node_id AS "parentNodeId",
+            queued_at AS "queuedAt", started_at AS "startedAt", finished_at AS "finishedAt", duration_ms AS "durationMs", record->>'error' AS error
+     FROM runs WHERE parent_id = $1 AND org_id = $2 ORDER BY queued_at, id`,
+    [parentId, orgId],
+  );
+  const iso = (value: Date | string | null) => (value === null ? null : new Date(value).toISOString());
+  return rows.map(r => ({
+    ...r,
+    flow: r.flow ?? '',
+    queuedAt: iso(r.queuedAt)!,
+    startedAt: iso(r.startedAt),
+    finishedAt: iso(r.finishedAt),
+    durationMs: r.durationMs === null ? null : Number(r.durationMs),
+  }));
+}

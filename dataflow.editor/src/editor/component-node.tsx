@@ -7,7 +7,7 @@ import { CARD_HEIGHT, CARD_WIDTH, portTop, SIDE_GAP } from './node-geometry';
 import { useHistory } from './history';
 import { pinnedOutput, runActions, useRunMark } from './run/run-marks';
 import { nameIn, useProjectResources } from './project-resources';
-import { componentSummary, START, startConfig, ERROR_PORT, type ComponentRun, type EnvelopeData, errorPort, inputPorts, outputPorts, type ErrorPolicy, type PortInfo } from '@dataflow/core';
+import { ERROR_PORT, componentSummary, START, startConfig, type ComponentRun, type EnvelopeData, errorPort, fixedOnError, inputPorts, onErrorOf as coreOnErrorOf, outputPorts, type ErrorPolicy, type PortInfo } from '@dataflow/core';
 
 export type ComponentData = {
   type: string;
@@ -36,7 +36,8 @@ export type ComponentNode = Node<ComponentData, 'component'>;
 export type OnError = ErrorPolicy;
 
 
-const onErrorOf = (data: ComponentData): OnError => (data.config.onError === 'continue' || data.config.onError === 'divert' ? data.config.onError : 'throw');
+/** the component's On error: the one its config leaves no choice about (a fire and forget Flow Invoker: Throw), else its choice */
+const onErrorOf = (data: ComponentData): OnError => coreOnErrorOf(data.type, data.config);
 
 /** the strip a side grows when its ports go below the card */
 const EXTENSION_WIDTH = 28;
@@ -398,8 +399,10 @@ function NodeActions(props: {
   const { updateNodeData, setEdges } = useReactFlow<ComponentNode>();
   const { record } = useHistory();
   const onError = onErrorOf(data);
+  // a config that leaves no choice (a fire and forget Flow Invoker): only that one, the others off with why
+  const fixed = fixedOnError(data.type, data.config);
   const setOnError = (next: OnError) => {
-    if (next === onError) {
+    if (next === onError || (fixed && next !== fixed)) {
       return;
     }
 
@@ -454,24 +457,28 @@ function NodeActions(props: {
               <>
                 <span className="mx-0.5 h-4 w-px bg-border" aria-hidden />
                 <div role="radiogroup" aria-label="On error" className="flex items-center gap-0.5">
-                  {ON_ERROR.map(option => (
-                    <button
-                      key={option.value}
-                      type="button"
-                      role="radio"
-                      aria-checked={option.value === onError}
-                      aria-label={`On error: ${option.label}`}
-                      title={`On error: ${option.label}. ${option.hint}`}
-                      onClick={() => setOnError(option.value)}
-                      className={cn(
-                        'flex size-5 items-center justify-center rounded transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring [&_svg]:size-3',
-                        option.value !== onError && 'text-muted-foreground hover:bg-accent hover:text-foreground',
-                        option.value === onError && option.active,
-                      )}
-                    >
-                      <option.icon aria-hidden />
-                    </button>
-                  ))}
+                  {ON_ERROR.map(option => {
+                    const locked = fixed !== undefined && option.value !== fixed;
+                    return (
+                      <button
+                        key={option.value}
+                        type="button"
+                        role="radio"
+                        aria-checked={option.value === onError}
+                        aria-label={`On error: ${option.label}`}
+                        disabled={locked}
+                        title={locked ? `On error: ${option.label}. Not with Fire and forget: the calls answer nothing to continue or divert with, the run stops on an error (Throw).` : `On error: ${option.label}. ${option.hint}`}
+                        onClick={() => setOnError(option.value)}
+                        className={cn(
+                          'flex size-5 items-center justify-center rounded transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-30 [&_svg]:size-3',
+                          option.value !== onError && 'text-muted-foreground hover:bg-accent hover:text-foreground',
+                          option.value === onError && option.active,
+                        )}
+                      >
+                        <option.icon aria-hidden />
+                      </button>
+                    );
+                  })}
                 </div>
               </>
             )}

@@ -1,6 +1,6 @@
 import {describe, expect, test} from 'bun:test';
-import {flowRunner} from '../../src/index';
-import type {ExecutableFlow} from '../../src/index';
+import {COMPONENTS, errorPort, fixedOnError, flowRunner, onErrorOf} from '../../src/index';
+import type {ExecutableFlow, QueueFlow, QueueFlowRequest} from '../../src/index';
 import {evaluate} from '../helpers';
 
 describe('Flow Invoker', () => {
@@ -126,5 +126,117 @@ describe('Flow Invoker', () => {
     const r = await flowRunner(parent('B'), {mode: 'execution', id: 'p6', evaluate, flows: {B: {...multiply, unavailable: 'it has no End.'}}});
     expect(r.status).toBe('failed');
     expect(r.error).toContain('The flow "Multiply" cannot be called: it has no End.');
+  });
+
+  describe('fire and forget', () => {
+    const fire = (flowId: string, onError = 'throw', extra: Record<string, unknown> = {}): ExecutableFlow => {
+      const p = parent(flowId, onError);
+      return {...p, nodes: p.nodes.map(n => (n.id === 'w' ? {...n, config: {...n.config, call: 'fire-and-forget', ...extra}} : n))};
+    };
+    /** Numbers with 5 rows: n = 1..5 */
+    const five = (f: ExecutableFlow): ExecutableFlow => ({...f, nodes: f.nodes.map(n => (n.id === 'g' ? {...n, config: {...n.config, rows: [['1'], ['2'], ['3'], ['4'], ['5']]}} : n))});
+    const queueing = () => {
+      const asked: QueueFlowRequest[] = [];
+      const queueFlow: QueueFlow = async request => {
+        asked.push(request);
+        return {id: `child-${asked.length}`};
+      };
+      return {asked, queueFlow};
+    };
+    const fixed = {parameters: [{name: 'times', value: '2', expression: false}]};
+
+    test('a real run queues one run per batch (the batch its input, with the parameters, the chain, who called) and lets each envelope go on as it came', async () => {
+      const {asked, queueFlow} = queueing();
+      const r = await flowRunner(five(fire('B', 'throw', {...fixed, batchSize: 2})), {mode: 'execution', id: 'p10', evaluate, flows, queueFlow});
+      expect(r.status).toBe('completed');
+      const call = {flowId: 'B', parameters: {times: '2'}, chain: ['A', 'B'], rootName: 'Parent', nodeId: 'w', nodeLabel: 'Calls'};
+      expect(asked).toEqual([{...call, input: [{n: 1}, {n: 2}]}, {...call, input: [{n: 3}, {n: 4}]}, {...call, input: [{n: 5}]}]);
+      const w = r.components.find(c => c.nodeId === 'w')!;
+      // not merged with what the other flow returns: it did not run here
+      expect(w.outputSample['out-0']).toEqual([{n: 1}, {n: 2}, {n: 3}, {n: 4}, {n: 5}]);
+      expect(w.subRuns?.map(s => [s.id, s.status, s.envelopes, s.fireAndForget])).toEqual([['child-1', 'queued', 2, true], ['child-2', 'queued', 2, true], ['child-3', 'queued', 1, true]]);
+    });
+
+    test('by default batches of 100; envelopes with other parameter values go in batches of their own', async () => {
+      const {asked, queueFlow} = queueing();
+      // times = $n % 2 + 1: odd rows 2, even rows 1
+      const r = await flowRunner(five(fire('B', 'throw', {parameters: [{name: 'times', value: '$n % 2 + 1', expression: true}]})), {mode: 'execution', id: 'p10b', evaluate, flows, queueFlow});
+      expect(r.status).toBe('completed');
+      expect(asked.map(a => [a.parameters.times, a.input])).toEqual([['2', [{n: 1}, {n: 3}, {n: 5}]], ['1', [{n: 2}, {n: 4}]]]);
+    });
+
+    test("a flow that would fail is not this run's error: it is queued all the same", async () => {
+      const {asked, queueFlow} = queueing();
+      const r = await flowRunner(fire('C', 'throw', fixed), {mode: 'execution', id: 'p11', evaluate, flows, queueFlow});
+      expect(r.status).toBe('completed');
+      expect(asked).toHaveLength(1);
+    });
+
+    test("On error is always Throw: an envelope that would not start stops the run (circular, input type), whatever the config says", async () => {
+      const {asked, queueFlow} = queueing();
+      const circular = await flowRunner(fire('A'), {mode: 'execution', id: 'p12', evaluate, flows: {...flows, A: fire('A')}, queueFlow});
+      expect(circular.status).toBe('failed');
+      expect(circular.error).toContain('Circular flow call: Parent → Parent');
+      expect(asked).toEqual([]);
+      // a queued run goes on with its chain: B called from A, now calling A again, is circular
+      const deep = await flowRunner(fire('A'), {mode: 'execution', id: 'p13', evaluate, flows: {A: fire('A')}, queueFlow, chain: ['A', 'B']});
+      expect(deep.error).toContain('Circular flow call');
+      // n must be a string: none fits; Divert in the config changes nothing (and there is no error port)
+      const typed: ExecutableFlow = {...multiply, inputType: {name: 'Item', shape: {kind: 'object', fields: [{name: 'n', optional: false, shape: {kind: 'string'}}]}}};
+      const divert = fire('B', 'divert');
+      const wrong = await flowRunner({...divert, edges: divert.edges.filter(e => e.sourcePort !== 'error')}, {mode: 'execution', id: 'p13b', evaluate, flows: {B: typed}, queueFlow});
+      expect(wrong.status).toBe('failed');
+      expect(wrong.error).toContain('The input does not fit Item');
+      expect(asked).toEqual([]);
+      // an edge out of the error port it no longer has: the flow does not run
+      const edged = await flowRunner(divert, {mode: 'execution', id: 'p13c', evaluate, flows, queueFlow});
+      expect(edged.error).toContain('"Calls" has an edge out of its error port, but its On error can only be Throw with this configuration.');
+      expect(fixedOnError('flow', {call: 'fire-and-forget', onError: 'divert'})).toBe('throw');
+      expect(onErrorOf('flow', {call: 'fire-and-forget', onError: 'continue'})).toBe('throw');
+      expect(errorPort('flow', {call: 'fire-and-forget', onError: 'divert'})).toBeUndefined();
+      expect(onErrorOf('flow', {onError: 'divert'})).toBe('divert');
+      expect(COMPONENTS.flow.validate({flowId: 'B', call: 'fire-and-forget', onError: 'divert'})).toEqual(['fires and forgets: its On error is always Throw (the calls answer nothing to continue or divert with).']);
+      expect(COMPONENTS.flow.validate({flowId: 'B', call: 'fire-and-forget'})).toEqual([]);
+    });
+
+    test('a batch that cannot be queued is an error line of the component; the envelopes went on and the run completes', async () => {
+      let tries = 0;
+      const flaky: QueueFlow = async () => {
+        tries += 1;
+        if (tries === 1) throw new Error('the database is gone');
+        return {id: `child-${tries}`};
+      };
+      const r = await flowRunner(five(fire('B', 'throw', {...fixed, batchSize: 2})), {mode: 'execution', id: 'p14', evaluate, flows, queueFlow: flaky});
+      expect(r.status).toBe('completed');
+      const w = r.components.find(c => c.nodeId === 'w')!;
+      expect(w.outputs['out-0']).toBe(5);
+      expect(w.subRuns?.map(s => s.id)).toEqual(['child-2', 'child-3']);
+      expect(w.logs.filter(l => l.level === 'error').map(l => l.message)).toEqual(['A batch of 2 envelope(s) was not queued: the database is gone']);
+      expect(w.logs.some(l => l.message.includes('3 envelope(s) in 2 run(s) queued') && l.message.includes('2 not queued'))).toBe(true);
+    });
+
+    test("without Send the envelope's DATA: one run per batch, with no input", async () => {
+      const {asked, queueFlow} = queueing();
+      const r = await flowRunner(five(fire('B', 'throw', {...fixed, sendEnvelope: false, batchSize: 2})), {mode: 'execution', id: 'p14b', evaluate, flows, queueFlow});
+      expect(r.status).toBe('completed');
+      expect(asked.map(a => a.input)).toEqual([undefined, undefined, undefined]);
+      expect(r.components.find(c => c.nodeId === 'w')!.outputs['out-0']).toBe(5);
+    });
+
+    test('a test run queues nothing: each batch runs beside it, the envelopes going on at once, and shows as a fire and forget called run', async () => {
+      const {asked, queueFlow} = queueing();
+      const r = await flowRunner(five(fire('B', 'throw', {...fixed, batchSize: 3})), {mode: 'validation', id: 'p15', evaluate, flows, queueFlow});
+      expect(r.status).toBe('completed');
+      expect(asked).toEqual([]);
+      const w = r.components.find(c => c.nodeId === 'w')!;
+      expect(w.outputSample['out-0']).toHaveLength(5);
+      expect(w.subRuns?.map(s => [s.flow, s.status, s.envelopes, s.fireAndForget])).toEqual([['Multiply', 'completed', 3, true], ['Multiply', 'completed', 2, true]]);
+      // the batch's items are the called run's envelopes
+      expect(w.subRuns![0]!.record!.components.find(c => c.nodeId === 'm')!.outputs['out-0']).toBe(3);
+      // a called run that fails is its own: this run completes
+      const failing = await flowRunner(fire('C', 'throw', fixed), {mode: 'validation', id: 'p16', evaluate, flows});
+      expect(failing.status).toBe('completed');
+      expect(failing.components.find(c => c.nodeId === 'w')!.subRuns?.map(s => s.status)).toEqual(['failed']);
+    });
   });
 });

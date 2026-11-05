@@ -1,7 +1,7 @@
 import { hostname } from 'node:os';
-import type { RunProgress, RunRecord, SubRun } from '@dataflow/core';
+import type { QueueFlowRequest, RunProgress, RunRecord, SubRun } from '@dataflow/core';
 import { failedRecord, prepareJob } from '#features/runs/run-job';
-import { CHANNELS, claimRun, deleteOldTestRuns, failRunsOf, finishRun, heartbeat, reapStaleRuns, saveProgress, STALE_AFTER_MS, type QueuedRun, type RunUsage } from '#features/runs/run-queue';
+import { CHANNELS, claimRun, deleteOldTestRuns, failRunsOf, finishRun, heartbeat, queueCalledRun, reapStaleRuns, saveProgress, STALE_AFTER_MS, type QueuedRun, type RunUsage } from '#features/runs/run-queue';
 import type { RunRowStatus } from '#features/runs/run';
 import type { Keyring } from '#shared/crypto/keyring';
 import type { Database } from '#shared/database/database';
@@ -177,7 +177,9 @@ export class Supervisor {
       let ended;
       try {
         const job = await prepareJob(db, keyring, run);
-        active.execution = executor.run(job, progress);
+        // a real run's fire and forget calls are queued here, as its children; a test run runs them beside it
+        const queueFlow = run.table === 'runs' ? (request: QueueFlowRequest) => this.queueChild(run, request, log) : undefined;
+        active.execution = executor.run(job, progress, { queueFlow });
         if (active.cancelled) {
           active.execution.cancel();
         }
@@ -216,6 +218,31 @@ export class Supervisor {
 
     active.cancelled = true;
     active.execution?.cancel();
+  }
+
+  /**
+   * A Flow Invoker's fire and forget call from one of its runs: queued as a run of its own, that run its parent (any
+   * supervisor may take it, this one too once a worker is free).
+   */
+  private async queueChild(parent: QueuedRun, request: QueueFlowRequest, log: Logger): Promise<{ id: string }> {
+    const envelopes = Array.isArray(request.input) ? request.input.length : undefined;
+    let queued;
+    try {
+      queued = await queueCalledRun(this.options.db, parent, request);
+    } catch (e) {
+      // its envelopes already went on in the parent: what was not queued is only known here and in the run's log
+      log.error(`A fire and forget run of flow ${request.flowId} was not queued by run ${parent.id}.`, {
+        flowId: request.flowId, calledBy: request.nodeLabel || undefined, calledByNodeId: request.nodeId, trigger: 'flow-invoker', envelopes, error: e,
+      });
+      throw e;
+    }
+
+    log.info(`Run ${queued.id} "${queued.flowName}" queued by run ${parent.id} (fire and forget)`, {
+      runId: queued.id, parentRunId: parent.id, rootRunId: parent.rootId ?? parent.id, flowId: request.flowId, flow: queued.flowName,
+      calledBy: request.nodeLabel || undefined, calledByNodeId: request.nodeId, trigger: 'flow-invoker', status: 'queued', envelopes,
+    });
+    this.fill();
+    return { id: queued.id };
   }
 
   private async beat() {
@@ -259,8 +286,9 @@ function runFields(run: QueuedRun): LogFields {
     trigger: run.trigger,
     testRun: run.table === 'test_runs',
     parentRunId: run.parentId ?? undefined,
-    // the run a history groups it under: itself, unless another run queued it
-    rootRunId: run.parentId ? undefined : run.id,
+    // the run a history groups it under: the one at the top of the calls that queued it, or itself
+    rootRunId: run.rootId ?? run.id,
+    calledByNodeId: run.parentNodeId ?? undefined,
   };
 }
 
@@ -309,17 +337,22 @@ function calledRuns(record: RunRecord | RunProgress): { sub: SubRun; parentRunId
 
 /**
  * The run's end: one event for it (status, times, envelopes, what failed, what it used), then one per run its Flow
- * Invokers called (the first MAX_SUB_RUNS of each, those the record keeps), each with its own run_id and its
- * parent_run_id and root_run_id: a run's history finds them all by the root.
+ * Invokers ran inside it (the first MAX_SUB_RUNS of each, those the record keeps), each with its own run_id and its
+ * parent_run_id and root_run_id: a run's history finds them all by the root. The fire and forget calls it queued
+ * are runs of their own: queued when they were (an event then), each one's end its own event.
  */
 function logRunEnd(log: Logger, base: Logger, run: QueuedRun, status: RunRowStatus, record: RunRecord, usage: RunUsage, started: Date) {
-  const called = calledRuns(record);
+  const all = calledRuns(record);
+  const inside = all.filter(c => c.sub.status !== 'queued');
+  const queued = all.length - inside.length;
+  const rootRunId = run.rootId ?? run.id;
   const fields: LogFields = {
     ...recordFields(record),
     status,
     durationMs: Math.round(record.durationMs),
     queuedMs: msBetween(run.queuedAt, started),
-    calledRuns: called.length > 0 ? called.length : undefined,
+    calledRuns: inside.length > 0 ? inside.length : undefined,
+    queuedRuns: queued > 0 ? queued : undefined,
     from: record.from?.label,
     cpuMs: usage.cpuMs === undefined ? undefined : Math.round(usage.cpuMs),
     peakRssMb: usage.peakRssBytes === undefined ? undefined : Math.round(usage.peakRssBytes / 1024 / 1024),
@@ -327,15 +360,16 @@ function logRunEnd(log: Logger, base: Logger, run: QueuedRun, status: RunRowStat
   };
   logAtStatus(log, status, `${runName(run.id, record.run.flow)} ${status} in ${fields.durationMs} ms${record.error ? `: ${record.error}` : ''}`, fields);
 
-  for (const { sub, parentRunId, calledBy, calledByNodeId } of called) {
+  for (const { sub, parentRunId, calledBy, calledByNodeId } of inside) {
     const subFields: LogFields = {
       runId: sub.id,
       parentRunId,
-      rootRunId: run.parentId ? undefined : run.id,
+      rootRunId,
       orgId: run.orgId,
       mode: run.mode,
       testRun: run.table === 'test_runs',
       trigger: 'flow-invoker',
+      fireAndForget: sub.fireAndForget,
       calledBy,
       calledByNodeId,
       ...(sub.record ? recordFields(sub.record) : {}),

@@ -1,5 +1,5 @@
 import {timed, timedRequests} from '#engine/stopwatch';
-import {invokeFlow} from '#engine/invoke-flow';
+import {checkedCall, invokeFlow, queueFlow} from '#engine/invoke-flow';
 import {envelopeVariables} from '#envelope/expression-variables';
 import {toError} from '#errors/normalize-error';
 import {API_CONNECTION_TYPES, connectionHeaders, connectionString, resolveConnection, type ConnectionUse} from '../connections/connection-access';
@@ -100,6 +100,18 @@ export function componentContext(execution: FlowExecution, node: ExecutableNode,
       const called = invokeFlow(execution, node, flowId, call);
       return {...called, envelopes: timedRequests(called.envelopes, waiting)};
     },
+    // handing it to the runner is waiting for an outside system, not this component's work
+    queueFlow: async (flowId, call) => {
+      stopwatch.stop();
+      waiting.resume();
+      try {
+        return await queueFlow(execution, node, flowId, call);
+      } finally {
+        waiting.stop();
+        stopwatch.resume();
+      }
+    },
+    checkFlowCall: (flowId, input) => void checkedCall(execution, flowId, input),
     queryDatabase: (kind, {connection: use, ...query}) => {
       const driver = options.databases?.[kind];
       if (!driver) throw new Error(`This runner does not query ${kind}.`);

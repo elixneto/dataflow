@@ -2,7 +2,7 @@ import { fileURLToPath } from 'node:url';
 import { oauthTokenFromMemory, type RunProgress, type SendHttp } from '@dataflow/core';
 import { failedRecord, stoppedRecord, type RunJob } from '#features/runs/run-job';
 import { sendHttp } from '#shared/runner/send-http';
-import type { Executor, Execution } from './executor';
+import type { Executor, Execution, RunHooks } from './executor';
 import type { FromWorker, ToWorker } from './protocol';
 
 const WORKER_FILE = fileURLToPath(new URL('./worker.ts', import.meta.url));
@@ -27,7 +27,7 @@ type Slot = {
   ready: Promise<void>;
   runs: number;
   /** the run it has now */
-  current: { job: RunJob; last: RunProgress | null; resolve: (value: Awaited<Execution['done']>) => void; onProgress: (p: RunProgress) => void; timers: Timer[] } | null;
+  current: { job: RunJob; last: RunProgress | null; resolve: (value: Awaited<Execution['done']>) => void; onProgress: (p: RunProgress) => void; hooks: RunHooks; timers: Timer[] } | null;
 };
 
 /**
@@ -70,6 +70,18 @@ export function processPool(options: PoolOptions): Executor {
             token => answer({ type: 'token', ask: message.ask, token }),
             (error: unknown) => answer({ type: 'token', ask: message.ask, error: error instanceof Error ? error.message : String(error) }),
           );
+        } else if (message.type === 'queue') {
+          // only for the run it has now: the supervisor queues it as that run's child
+          const answer = (reply: ToWorker) => slot.process === child && child.send(reply);
+          const queueFlow = slot.current?.job.id === message.runId ? slot.current.hooks.queueFlow : undefined;
+          if (!queueFlow) {
+            answer({ type: 'queued', ask: message.ask, error: 'This supervisor does not queue runs for it.' });
+          } else {
+            queueFlow(message.request).then(
+              queued => answer({ type: 'queued', ask: message.ask, id: queued.id }),
+              (error: unknown) => answer({ type: 'queued', ask: message.ask, error: error instanceof Error ? error.message : String(error) }),
+            );
+          }
         } else if (message.type === 'progress' && slot.current?.job.id === message.id) {
           slot.current.last = message.progress;
           slot.current.onProgress(message.progress);
@@ -119,7 +131,7 @@ export function processPool(options: PoolOptions): Executor {
 
   return {
     size,
-    run(job, onProgress) {
+    run(job, onProgress, hooks = {}) {
       const slot = slots.find(s => !s.current);
       if (!slot) {
         return { done: Promise.resolve({ record: failedRecord({ ...job }, 'No worker is free.'), usage: {} }), cancel: () => {} };
@@ -127,7 +139,7 @@ export function processPool(options: PoolOptions): Executor {
 
       let resolve: (value: Awaited<Execution['done']>) => void = () => {};
       const done = new Promise<Awaited<Execution['done']>>(r => (resolve = r));
-      slot.current = { job, last: null, resolve, onProgress, timers: [] };
+      slot.current = { job, last: null, resolve, onProgress, hooks, timers: [] };
       slot.runs++;
       const current = slot.current;
       const kill = (reason: string) => {

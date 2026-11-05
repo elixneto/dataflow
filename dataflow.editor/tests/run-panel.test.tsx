@@ -371,4 +371,13 @@ describe('the runs a Flow Invoker called, in the panel', () => {
     expect(html).toMatch(/Called flows <span[^>]*>\(the first 2 of 4 calls\)/);
     expect(html).toMatch(/aria-label="Called flows".*Call 1.*Called <span[^>]*>Child<\/span>: completed in 12 ms.*Call 2.*failed in 12 ms.*1 error line</);
   });
+
+  test("a real run's fire and forget calls: listed as queued runs of their own, with their ids", async () => {
+    const { ComponentLastRun } = await import('../src/pages/flow-editor/run-panel');
+    const invoker = withCalls(false).components.find(c => c.nodeId === 'f')!;
+    const queued = { ...invoker, subRuns: [{ id: 'run-7', flow: 'Background', status: 'queued' as const, durationMs: 0, fireAndForget: true as const, envelopes: 100 }] };
+    const html = renderToStaticMarkup(<ComponentLastRun c={queued} />);
+    expect(html).toMatch(/aria-label="Queued runs".*Call 1: <span[^>]*>Background<\/span> queued · 100 envelopes.*run-7/);
+    expect(html).not.toContain('aria-label="Called flows"');
+  });
 });

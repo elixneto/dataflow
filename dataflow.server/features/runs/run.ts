@@ -14,7 +14,7 @@ const runColumns = () => ({
   flowVersionId: uuid('flow_version_id'),
   draftHash: text('draft_hash'),
   status: text('status').$type<RunRowStatus>().notNull(),
-  trigger: text('trigger').$type<'manual' | 'webhook' | 'schedule' | 'api'>().notNull(),
+  trigger: text('trigger').$type<'manual' | 'webhook' | 'schedule' | 'api' | 'flow-invoker'>().notNull(),
   workerTag: text('worker_tag').notNull().default('default'),
   priority: integer('priority').notNull().default(0),
   parameters: jsonb('parameters'),
@@ -40,12 +40,16 @@ const runColumns = () => ({
   scripts: jsonb('scripts'),
   /** the flows its Flow Invokers call, as they were when queued: start-run/called-flows.ts's CalledFlow[] (6_called_flows.sql) */
   calledFlows: jsonb('called_flows'),
+  /** a fire and forget call: the run at the top of the calls, the Flow Invoker that queued it, the flows called down to it (7_fire_and_forget.sql) */
+  rootId: uuid('root_id'),
+  parentNodeId: text('parent_node_id'),
+  callChain: jsonb('call_chain'),
 });
 
 /**
- * Follows migrations/1_initial.sql to 6_called_flows.sql: a real run (Run for real, a deployed version), queued,
- * running or done, kept with its history. The editor's Run for real runs the flow's draft (draft_hash); a published
- * run, a deployed version (flow_version_id). `record` is the core's RunRecord.
+ * Follows migrations/1_initial.sql to 7_fire_and_forget.sql: a real run (Run for real, a deployed version, a Flow
+ * Invoker's fire and forget call), queued, running or done, kept with its history. The editor's Run for real runs the
+ * flow's draft (draft_hash); a published run, a deployed version (flow_version_id). `record` is the core's RunRecord.
  */
 export const runs = pgTable('runs', runColumns());
 

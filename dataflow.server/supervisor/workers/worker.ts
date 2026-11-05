@@ -1,4 +1,4 @@
-import { tokenStillGood, type OAuthToken, type OAuthTokenRequest, type OAuthTokenSource, type SourcedOAuthToken } from '@dataflow/core';
+import { tokenStillGood, type OAuthToken, type OAuthTokenRequest, type OAuthTokenSource, type QueueFlow, type SourcedOAuthToken } from '@dataflow/core';
 import { runJob } from '#features/runs/run-job';
 import type { FromWorker, ToWorker } from './protocol';
 import { closeSqlServerPools } from '#shared/runner/sqlserver-driver';
@@ -21,6 +21,15 @@ const askSupervisor = (request: OAuthTokenRequest) =>
     const ask = ++lastAsk;
     asks.set(ask, { resolve, reject });
     send({ type: 'token', ask, request });
+  });
+
+/** the asks to queue a run (a fire and forget call) on their way to the supervisor, by number */
+const queueAsks = new Map<number, { resolve: (queued: { id: string }) => void; reject: (error: Error) => void }>();
+const queueBySupervisor = (runId: string): QueueFlow => request =>
+  new Promise((resolve, reject) => {
+    const ask = ++lastAsk;
+    queueAsks.set(ask, { resolve, reject });
+    send({ type: 'queue', ask, runId, request });
   });
 
 /**
@@ -63,6 +72,7 @@ async function run(job: Extract<ToWorker, { type: 'run' }>['job']) {
   const record = await runJob(job, {
     signal: abort.signal,
     oauthTokens: supervisorTokens(),
+    queueFlow: queueBySupervisor(job.id),
     onProgress: progress => send({ type: 'progress', id: job.id, progress }),
   });
   const used = process.cpuUsage(cpu);
@@ -82,6 +92,14 @@ process.on('message', (message: ToWorker) => {
       waiting?.resolve(message.token);
     } else {
       waiting?.reject(new Error(message.error ?? 'The supervisor gave no OAuth 2.0 token.'));
+    }
+  } else if (message.type === 'queued') {
+    const waiting = queueAsks.get(message.ask);
+    queueAsks.delete(message.ask);
+    if (message.id) {
+      waiting?.resolve({ id: message.id });
+    } else {
+      waiting?.reject(new Error(message.error ?? 'The supervisor did not queue the run.'));
     }
   }
 });

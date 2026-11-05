@@ -1,6 +1,7 @@
 import type {Envelope} from '#types/envelope.type';
 import type {ErrorPolicy} from '#types/error-policy.type';
 import type {ExecutableNode} from '#types/executable-node.type';
+import {onErrorOf} from '#validation/ports';
 
 /**
  * Envelope that goes out through the error port: gets DATA.errors.
@@ -11,8 +12,10 @@ export function withError(doc: Envelope, error: Error, component: string): Envel
   return {...doc, DATA: {...doc.DATA, errors: [...previous, {error: error.name || 'Error', message: error.message, component}]}};
 }
 
-/** The node's "On error" policy (Throw by default: stops the run). Divert goes out through ERROR_PORT (validation/ports.ts). */
+/**
+ * The node's "On error" policy (Throw by default: stops the run); a fixed one when its config leaves no choice (a fire
+ * and forget Flow Invoker). Divert goes out through ERROR_PORT (validation/ports.ts).
+ */
 export function errorPolicy(node: ExecutableNode): ErrorPolicy {
-  const v = node.config.onError;
-  return v === 'continue' || v === 'divert' ? v : 'throw';
+  return onErrorOf(node.type, node.config);
 }

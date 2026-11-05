@@ -39,6 +39,7 @@ export type * from './run-record.type';
 export type * from './run-status.type';
 export type * from './script-function.type';
 export type * from './send-http.type';
+export type * from './queue-flow.type';
 export type * from './setting-field.type';
 export type * from './upsert-answer.type';
 export type * from './upsert-documents.type';

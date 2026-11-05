@@ -12,14 +12,11 @@ import type {RunProgress, RunRecord} from '#types/run-record.type';
 type Invoke = ComponentContext['invokeFlow'];
 
 /**
- * Runs another flow for the Flow Invoker (`ctx.invokeFlow`). Blocks circular calls and chains longer than
- * MAX_FLOW_DEPTH; the child stops with this run. The input is checked against the child's Start type first: when it does
- * not fit, the child does not run and the call is an error (the caller envelope's, on the On error policy). The DATA of each envelope that reaches the child's End comes out in `envelopes`.
- * The child's record (as it goes, then as it ended) is kept in the caller's `subRuns`, for the first MAX_SUB_RUNS calls,
- * with its samples cut to SUB_RUN_SAMPLE_SIZE: the parent's panel shows the child's logs, errors and metrics from it.
+ * What both kinds of call check first: a circular call, a chain longer than MAX_FLOW_DEPTH, a flow that is not there or
+ * cannot be called, an input that does not fit its Start type (then the flow does not run: an error of the envelope).
  */
-export function invokeFlow(execution: FlowExecution, node: ExecutableNode, flowId: string, {parameters: values, input}: Parameters<Invoke>[1]): ReturnType<Invoke> {
-  const {wf, options, run, control} = execution;
+export function checkedCall(execution: FlowExecution, flowId: string, input: unknown) {
+  const {wf, options} = execution;
   // a circular call first: the root flow is not among the callable ones (the run's own), so it would read as not found
   const chain = [...(options.chain ?? [wf.id ?? wf.flow]), flowId];
   if (chain.slice(0, -1).includes(flowId)) {
@@ -38,6 +35,36 @@ export function invokeFlow(execution: FlowExecution, node: ExecutableNode, flowI
       throw Object.assign(new Error(`The input does not fit ${child.inputType.name} (the Start of "${child.flow}"): ${issues.join(' ')}`), {name: 'InputTypeError'});
     }
   }
+  return {chain, child};
+}
+
+/**
+ * Queues another flow as a run of its own (the Flow Invoker's fire and forget, in a real run), after the same checks
+ * as a call it waits for; the runner (RunOptions.queueFlow) stores it for a supervisor. Its entry in the caller's
+ * `subRuns` says it was queued, with its id (its record is its own run's).
+ */
+export async function queueFlow(execution: FlowExecution, node: ExecutableNode, flowId: string, {parameters, input}: {parameters: Record<string, string>; input?: unknown}): Promise<{id: string}> {
+  const {wf, options} = execution;
+  const {chain, child} = checkedCall(execution, flowId, input);
+  if (!options.queueFlow) throw new Error('This runner does not queue runs: fire and forget needs a server.');
+  const queued = await options.queueFlow({
+    flowId, parameters, ...(input !== undefined ? {input} : {}), chain, rootName: options.rootName ?? wf.flow, nodeId: node.id, nodeLabel: node.label,
+  });
+  const list = (execution.recordOf(node.id).subRuns ??= []);
+  if (list.length < MAX_SUB_RUNS) list.push({id: queued.id, flow: child.flow, status: 'queued', durationMs: 0, fireAndForget: true, ...(Array.isArray(input) ? {envelopes: input.length} : {})});
+  return queued;
+}
+
+/**
+ * Runs another flow for the Flow Invoker (`ctx.invokeFlow`). Blocks circular calls and chains longer than
+ * MAX_FLOW_DEPTH; the child stops with this run. The input is checked against the child's Start type first: when it does
+ * not fit, the child does not run and the call is an error (the caller envelope's, on the On error policy). The DATA of each envelope that reaches the child's End comes out in `envelopes`.
+ * The child's record (as it goes, then as it ended) is kept in the caller's `subRuns`, for the first MAX_SUB_RUNS calls,
+ * with its samples cut to SUB_RUN_SAMPLE_SIZE: the parent's panel shows the child's logs, errors and metrics from it.
+ */
+export function invokeFlow(execution: FlowExecution, node: ExecutableNode, flowId: string, {parameters: values, input, fireAndForget}: Parameters<Invoke>[1]): ReturnType<Invoke> {
+  const {wf, options, run, control} = execution;
+  const {chain, child} = checkedCall(execution, flowId, input);
   // the child stops when this run stops, or when the caller gives up reading
   const childControl = new AbortController();
   const cancel = () => childControl.abort();
@@ -46,7 +73,9 @@ export function invokeFlow(execution: FlowExecution, node: ExecutableNode, flowI
   const id = crypto.randomUUID();
   const list = (execution.recordOf(node.id).subRuns ??= []);
   // the call's entry in the caller's record, live while the child runs; past the cap, only the child runs
-  const entry: SubRun | undefined = list.length < MAX_SUB_RUNS ? {id, flow: child.flow, status: 'running', durationMs: 0} : undefined;
+  const entry: SubRun | undefined = list.length < MAX_SUB_RUNS
+    ? {id, flow: child.flow, status: 'running', durationMs: 0, ...(fireAndForget ? {fireAndForget: true as const, ...(Array.isArray(input) ? {envelopes: input.length} : {})} : {})}
+    : undefined;
   if (entry) list.push(entry);
   const result = flowRunner(child, {
     ...options,

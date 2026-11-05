@@ -14,6 +14,7 @@ import type {UpsertDocuments} from '#types/upsert-documents.type';
 import type {AggregateDocuments} from '#types/aggregate-documents.type';
 import type {DeleteDocuments} from '#types/delete-documents.type';
 import type {SendHttp} from '#types/send-http.type';
+import type {QueueFlow} from '#types/queue-flow.type';
 
 export type RunOptions = {
   mode: RunMode;
@@ -40,6 +41,11 @@ export type RunOptions = {
   http?: SendHttp;
   /** flows the Flow Invoker can call, by id */
   flows?: Record<string, ExecutableFlow>;
+  /**
+   * a Flow Invoker's fire and forget call in a real run: queues the called flow as a run of its own (its id back);
+   * without it, such a call is an error of the envelope. A test run never queues: the call runs beside the run.
+   */
+  queueFlow?: QueueFlow;
   /** run that called this one (filled in by the Flow Invoker) */
   parentId?: string;
   /** ids of the flows in the call chain so far, to catch circular calls; `rootName`: the first one's name, for the message */

@@ -367,6 +367,88 @@ describe('runs api', () => {
     });
     expect(String(events.find(e => e.run_id === childRunId)!.msg)).toStartWith(`Run ${childRunId} "Tagged" completed in `);
   });
+
+  test('fire and forget in a run for real: one run of its own per batch (its parent and root), the envelopes going on; a failing one fails alone', async () => {
+    const node = (id: string, type: string, config: Record<string, unknown>, x = 0) => ({ id, type, position: { x, y: 0 }, config });
+    const edge = (source: string, target: string) => ({ source, sourcePort: 'out-0', target, targetPort: 'in-0' });
+    const save = async (name: string, nodes: unknown[], edges: unknown[]) => {
+      const id = (await call('POST', `/projects/${projectId}/flows`, { name })).body.id as string;
+      expect((await call('PUT', `/flows/${id}/draft`, { revision: 0, flow: { version: 1, name, nodes, edges } })).status).toBe(200);
+      return id;
+    };
+    // Leaf fails; Background fires what it got to Leaf (one batch) and completes; Caller fires its 5 rows to Background in batches of 2
+    const leafId = await save('Leaf', [node('start', 'start', { acceptsInput: true }), node('m', 'mapper', { fields: [{ target: 'x', value: '$nope.y', expression: true }] }, 200), node('end', 'end', {}, 400)], [edge('start', 'm'), edge('m', 'end')]);
+    const backgroundId = await save(
+      'Background',
+      [node('start', 'start', { acceptsInput: true }), node('w', 'flow', { flowId: leafId, call: 'fire-and-forget', sendEnvelope: true }, 200), node('end', 'end', {}, 400)],
+      [edge('start', 'w'), edge('w', 'end')],
+    );
+    const callerId = await save(
+      'Fires',
+      [
+        node('start', 'start', {}),
+        node('g', 'datagrid', { columns: [{ name: 'n', type: 'number' }], rows: [['1'], ['2'], ['3'], ['4'], ['5']] }, 200),
+        node('w', 'flow', { flowId: backgroundId, call: 'fire-and-forget', sendEnvelope: true, batchSize: 2 }, 300),
+        node('end', 'end', {}, 500),
+      ],
+      [edge('start', 'g'), edge('g', 'w'), edge('w', 'end')],
+    );
+
+    const started = await call('POST', `/flows/${callerId}/runs`, { mode: 'execution' });
+    const parentId = started.body.id as string;
+    const parent = await ended(parentId);
+    const record = parent.body.record as RunRecord;
+    expect(record.status).toBe('completed');
+    const w = record.components.find(c => c.nodeId === 'w')!;
+    expect(w.outputs['out-0']).toBe(5);
+    expect(w.subRuns?.map(s => [s.flow, s.status, s.envelopes])).toEqual([['Background', 'queued', 2], ['Background', 'queued', 2], ['Background', 'queued', 1]]);
+
+    // each Background run: its own, queued by the Caller's, its batch as its envelopes; it completes
+    const childIds = w.subRuns!.map(s => s.id);
+    const batches = [[{ n: 1 }, { n: 2 }], [{ n: 3 }, { n: 4 }], [{ n: 5 }]];
+    for (const [i, id] of childIds.entries()) {
+      const child = await ended(id);
+      expect(child.body).toMatchObject({ status: 'completed', mode: 'execution', flowId: backgroundId, parentId, rootId: parentId, parentNodeId: 'w' });
+      expect((child.body.record as RunRecord).components.find(c => c.type === 'start')!.outputSample['out-0']).toEqual(batches[i]!);
+    }
+
+    // each Background queued one Leaf with its batch: a grandchild, the Caller's run still its root; Leaf failed, alone
+    const leaves = (await call('GET', `/runs/${childIds[0]}`)).body.calledRuns as { id: string; flow: string }[];
+    expect(leaves.map(l => l.flow)).toEqual(['Leaf']);
+    const leaf = await ended(leaves[0]!.id);
+    expect(leaf.body).toMatchObject({ status: 'failed', flowId: leafId, parentId: childIds[0], rootId: parentId });
+
+    // the parent shows the runs it queued with how each one went, apart from its own status
+    const view = await call('GET', `/runs/${parentId}`);
+    expect(view.body.status).toBe('completed');
+    expect((view.body.calledRuns as { id: string; flow: string; status: string; parentNodeId: string }[]).map(r => [r.id, r.flow, r.status, r.parentNodeId]))
+      .toEqual(childIds.map(id => [id, 'Background', 'completed', 'w']));
+
+    // the log: queued (with its batch's size), then each one's end, all under the root
+    expect(events.find(e => e.run_id === childIds[0] && e.status === 'queued')).toMatchObject({ parent_run_id: parentId, root_run_id: parentId, called_by_node_id: 'w', trigger: 'flow-invoker', envelopes: 2 });
+    expect(events.find(e => e.run_id === childIds[0] && e.status === 'completed')).toMatchObject({ parent_run_id: parentId, root_run_id: parentId, flow: 'Background', envelopes_in: 2 });
+    expect(events.find(e => e.run_id === leaves[0]!.id && e.status === 'failed')).toMatchObject({ level: 'error', parent_run_id: childIds[0], root_run_id: parentId, flow: 'Leaf' });
+    expect(events.find(e => e.run_id === parentId && e.status === 'completed')).toMatchObject({ queued_runs: 3 });
+  });
+
+  test('fire and forget in a test run: nothing queued, the calls run beside it and show in its record', async () => {
+    const node = (id: string, type: string, config: Record<string, unknown>, x = 0) => ({ id, type, position: { x, y: 0 }, config });
+    const edge = (source: string, target: string) => ({ source, sourcePort: 'out-0', target, targetPort: 'in-0' });
+    const save = async (name: string, nodes: unknown[], edges: unknown[]) => {
+      const id = (await call('POST', `/projects/${projectId}/flows`, { name })).body.id as string;
+      expect((await call('PUT', `/flows/${id}/draft`, { revision: 0, flow: { version: 1, name, nodes, edges } })).status).toBe(200);
+      return id;
+    };
+    const quietId = await save('Quiet', [node('start', 'start', { acceptsInput: true }), node('m', 'mapper', { fields: [{ target: 'ok', value: 'true', expression: true }] }, 200), node('end', 'end', {}, 400)], [edge('start', 'm'), edge('m', 'end')]);
+    const callerId = await save('Fires in a test', [node('start', 'start', {}), node('w', 'flow', { flowId: quietId, call: 'fire-and-forget', sendEnvelope: true }, 200), node('end', 'end', {}, 400)], [edge('start', 'w'), edge('w', 'end')]);
+    const started = await call('POST', `/flows/${callerId}/runs`, { mode: 'validation' });
+    const run = await ended(started.body.id);
+    const w = (run.body.record as RunRecord).components.find(c => c.nodeId === 'w')!;
+    expect(w.subRuns?.map(s => [s.flow, s.status, s.fireAndForget])).toEqual([['Quiet', 'completed', true]]);
+    expect(run.body.calledRuns).toEqual([]);
+    const queued = await db.query<{ n: number }>('SELECT count(*)::int AS n FROM runs WHERE flow_id = $1', [quietId]);
+    expect(queued[0]!.n).toBe(0);
+  });
 });
 
 /** Pins and Run from here, through the api and a supervisor: what does not need to run does not call anything. */

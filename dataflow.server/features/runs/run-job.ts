@@ -10,6 +10,7 @@ import {
   type ExecutableFlow,
   type FlowFile,
   type OAuthTokenSource,
+  type QueueFlow,
   type RunMode,
   type RunProgress,
   type RunRecord,
@@ -28,6 +29,7 @@ import { querySqlServer } from '#shared/runner/sqlserver-driver';
 import { aggregateMongoDb, deleteMongoDb, upsertMongoDb } from '#shared/runner/mongodb-driver';
 import { sendHttp } from '#shared/runner/send-http';
 import type { Run } from './run';
+import type { CallChain } from './run-queue';
 import type { CalledFlow } from './start-run/called-flows';
 
 /** the code of scripts by hash, kept in the supervisor (a hash is one code forever): the latest few MB */
@@ -82,6 +84,9 @@ export type RunJob = {
   runFrom?: RunFromPlan;
   /** the flows its Flow Invokers may call, by id (each one's Start input type with it) */
   flows?: Record<string, ExecutableFlow>;
+  /** a run a fire and forget call queued: the flows called down to it, and the first one's name (circular calls, depth) */
+  chain?: string[];
+  rootName?: string;
   /** the scripts its TypeScript components import, as they were when queued: {path: code} and {path: hash} */
   scripts?: Record<string, string>;
   scriptHashes?: Record<string, string>;
@@ -158,12 +163,14 @@ export async function prepareJob(db: Database, keyring: Keyring | undefined, run
       },
     ]),
   );
+  const chain = run.callChain as CallChain | null;
   return {
     id: run.id,
     mode: run.mode,
     flow: from ? applyRunFrom(whole, from) : whole,
     ...(from ? { runFrom: from } : {}),
     ...(Object.keys(flows).length ? { flows } : {}),
+    ...(chain ? { chain: chain.flows, rootName: chain.rootName } : {}),
     ...(await scriptsOfRun(db, run.orgId, (run.scripts as Record<string, string> | null) ?? {})),
     parameters: (run.parameters as Record<string, string> | null) ?? {},
     input,
@@ -178,11 +185,11 @@ export async function prepareJob(db: Database, keyring: Keyring | undefined, run
 /**
  * Runs a prepared job with the engine (in a worker). The engine hides the secrets' values in the logs, the errors
  * and the record. `onProgress`: the run so far, a few times a second; `signal`: Stop; `oauthTokens`: where the OAuth 2.0
- * tokens come from (a worker: its supervisor).
+ * tokens come from (a worker: its supervisor); `queueFlow`: where a fire and forget call is queued (its supervisor).
  */
 export async function runJob(
   job: RunJob,
-  options: { http?: SendHttp; onProgress?: (progress: RunProgress) => void; signal?: AbortSignal; oauthTokens?: OAuthTokenSource } = {},
+  options: { http?: SendHttp; onProgress?: (progress: RunProgress) => void; signal?: AbortSignal; oauthTokens?: OAuthTokenSource; queueFlow?: QueueFlow } = {},
 ): Promise<RunRecord> {
   try {
     return await flowRunner(job.flow, {
@@ -206,6 +213,8 @@ export async function runJob(
       onProgress: options.onProgress,
       runFrom: job.runFrom,
       flows: job.flows,
+      ...(job.chain ? { chain: job.chain, rootName: job.rootName } : {}),
+      ...(options.queueFlow ? { queueFlow: options.queueFlow } : {}),
       prepareScript: (code, globals) => prepareScript(code, globals, job.scripts ?? {}, job.scriptHashes ?? {}),
       signal: options.signal,
       // a worker's OAuth 2.0 tokens come from its supervisor; elsewhere (tests) from this process's memory

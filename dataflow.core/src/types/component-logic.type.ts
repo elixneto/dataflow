@@ -1,6 +1,7 @@
 import type {ComponentContext} from '#types/component-context.type';
 import type {ComponentOutput} from '#types/component-output.type';
 import type {Envelope} from '#types/envelope.type';
+import type {ErrorPolicy} from '#types/error-policy.type';
 import type {Issue} from '#types/issue.type';
 import type {SettingField} from '#types/setting-field.type';
 
@@ -48,6 +49,11 @@ export type ComponentLogic = {
   sideEffects?: boolean | ((config: Record<string, unknown>) => boolean);
   /** its settings, in the order the form shows them (the editor builds the form from them) */
   settings?: SettingField[];
+  /**
+   * An On error the config leaves no choice for (e.g. a Flow Invoker that fires and forgets: always Throw, there is no
+   * answer to continue or divert with). The engine, the ports and the editor take it over config.onError.
+   */
+  fixedOnError?: (config: Record<string, unknown>) => ErrorPolicy | undefined;
   /** configuration issues (no data): short messages, without the component's name */
   validate: (config: Record<string, unknown>) => Issue[];
   /** envelope by envelope */

@@ -1,9 +1,12 @@
-import type { RunProgress, RunRecord, SendHttp } from '@dataflow/core';
+import type { QueueFlow, RunProgress, RunRecord, SendHttp } from '@dataflow/core';
 import { runJob, type RunJob } from '#features/runs/run-job';
 import type { RunUsage } from '#features/runs/run-queue';
 
 /** a run handed to a worker: its end (always resolves, a lost worker included) and how to stop it */
 export type Execution = { done: Promise<{ record: RunRecord; usage: RunUsage }>; cancel(): void };
+
+/** what the supervisor does for a run while it goes: queue its fire and forget calls (in the database, its parent the run) */
+export type RunHooks = { queueFlow?: QueueFlow };
 
 /**
  * Where the supervisor's runs go: worker processes (process-pool.ts), or this process (the tests). `size`: how many run
@@ -11,7 +14,7 @@ export type Execution = { done: Promise<{ record: RunRecord; usage: RunUsage }>;
  */
 export interface Executor {
   readonly size: number;
-  run(job: RunJob, onProgress: (progress: RunProgress) => void): Execution;
+  run(job: RunJob, onProgress: (progress: RunProgress) => void, hooks?: RunHooks): Execution;
   close(): Promise<void>;
 }
 
@@ -19,11 +22,11 @@ export interface Executor {
 export function inProcessExecutor(options: { size?: number; http?: SendHttp } = {}): Executor {
   return {
     size: options.size ?? 4,
-    run(job, onProgress) {
+    run(job, onProgress, hooks = {}) {
       const abort = new AbortController();
       const startRssBytes = process.memoryUsage().rss;
       const cpu = process.cpuUsage();
-      const done = runJob(job, { http: options.http, onProgress, signal: abort.signal }).then(record => {
+      const done = runJob(job, { http: options.http, onProgress, signal: abort.signal, queueFlow: hooks.queueFlow }).then(record => {
         const used = process.cpuUsage(cpu);
         return { record, usage: { startRssBytes, peakRssBytes: Math.max(startRssBytes, process.memoryUsage().rss), cpuMs: (used.user + used.system) / 1000 } };
       });

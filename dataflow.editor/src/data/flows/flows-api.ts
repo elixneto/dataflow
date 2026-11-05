@@ -118,6 +118,26 @@ export type RunView = {
   record: RunRecord | RunProgress | null;
   /** what its worker process used, once it ended (none for older runs) */
   usage: RunUsage | null;
+  /** a run a Flow Invoker's fire and forget call queued: the run that queued it, the one at the top, the Flow Invoker */
+  parentId?: string | null;
+  rootId?: string | null;
+  parentNodeId?: string | null;
+  /** the runs it queued (its fire and forget calls), each with how it goes now */
+  calledRuns?: CalledRunView[];
+};
+
+/** a run another one queued (a fire and forget call): its own status, apart from its parent's */
+export type CalledRunView = {
+  id: string;
+  flowId: string;
+  flow: string;
+  status: RunView['status'];
+  parentNodeId: string | null;
+  queuedAt: string;
+  startedAt: string | null;
+  finishedAt: string | null;
+  durationMs: number | null;
+  error: string | null;
 };
 
 /** a run's worker process: its memory at the start and its peak (the whole process, Bun included), its CPU time */
