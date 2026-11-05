@@ -13,8 +13,8 @@ describe('the Metrics timeline', () => {
       ['active', 'bg-primary/55'],
       ['waiting', 'bg-primary'],
     ]);
-    // the open track is the lightest
-    expect(html).toContain('bg-primary/25');
+    // the open track is the lightest, and comes first: the active and waiting parts sit at its end
+    expect(html).toMatch(/justify-end[^"]*bg-primary\/25|bg-primary\/25[^"]*justify-end/);
     expect(html).toMatch(/title="Open 12 ms \(from [^)]+\) · active 1.68 ms · waiting 7.79 ms"/);
   });
 });

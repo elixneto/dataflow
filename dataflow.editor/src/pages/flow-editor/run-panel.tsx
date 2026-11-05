@@ -459,8 +459,8 @@ const METRICS: { label: string; hint: string; right?: boolean }[] = [
 
 /**
  * When the component was open, on the run's time axis (as in the PoC): light from its first envelope until it finished;
- * inside, in the order and shades of the columns (Open, Active, Waiting: lighter to darker), how much of that it spent
- * working and then waiting for an outside system (their share of the open time).
+ * left to right in the order and shades of the columns (Open, Active, Waiting: lighter to darker), the rest of the open
+ * time, then how much of it it spent working, then waiting for an outside system (their share of the open time).
  */
 export function Timeline({ c, runStart, runMs }: { c: ComponentRun; runStart: number; runMs: number }) {
   if (!c.start || runMs <= 0) {
@@ -479,7 +479,8 @@ export function Timeline({ c, runStart, runMs }: { c: ComponentRun; runStart: nu
   return (
     <span className="relative block h-3 w-full min-w-40 overflow-hidden rounded-sm bg-muted/60" title={title} aria-label={title}>
       <span
-        className="absolute inset-y-0 flex min-w-0.5 overflow-hidden rounded-sm bg-primary/25"
+        // the active and waiting parts at the end of the open track: left to right Open, Active, Waiting (as the columns)
+        className="absolute inset-y-0 flex min-w-0.5 justify-end overflow-hidden rounded-sm bg-primary/25"
         // one that opened at the very end still shows a sliver inside the axis
         style={{ left: `min(${left}%, calc(100% - 2px))`, width: `${width}%` }}
       >
