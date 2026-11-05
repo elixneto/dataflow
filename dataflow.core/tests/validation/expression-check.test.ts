@@ -24,3 +24,14 @@ test('variables from samples: merged keys, nested paths, type and example', () =
   expect(variables.find(v => v.path === '$customer')?.type).toBe('object');
   expect(variables.find(v => v.path === '$tags')).toEqual({path: '$tags', type: 'array', example: '["a"]'});
 });
+
+test('a field missing from the envelope is undefined in an expression (it can be tested), and named when reading into it fails', async () => {
+  const {expressionScope, missingFields} = await import('../../src/index');
+  const vars = {$n: 1, $PARAMETERS: {}};
+  expect(missingFields('!$shipments ? 9999 : $shipments.length + $n', vars)).toEqual(['$shipments']);
+  expect(expressionScope('!$shipments ? 9999 : $shipments.length', vars)).toEqual({...vars, $shipments: undefined});
+  const {evaluate} = await import('../helpers');
+  expect(evaluate('!$shipments ? 9999 : $shipments.length', vars)).toBe(9999);
+  expect(evaluate('!$shipments ? 9999 : $shipments.length', {...vars, $shipments: [1, 2]})).toBe(2);
+  expect(evaluate('$shipments ?? []', vars)).toEqual([]);
+});

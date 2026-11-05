@@ -98,7 +98,8 @@ describe("a component's settings form, from the core's settings", () => {
       </ProjectResourcesContext.Provider>,
     );
     expect(html).toContain('<option value="f2" selected="">Load orders</option>');
-    expect(html).toContain('Add parameter');
+    // its parameters: the called flow's Start ones, once its draft is read
+    expect(html).toContain('Reading the flow…');
     // its code editor (Monaco) loads on demand: its empty frame meanwhile, never a plain text box to type in
     const ts = render('typescript', {});
     expect(ts).toContain('aria-label="Code (loading)"');

@@ -1,6 +1,14 @@
 import type {LogLine} from '#types/log-line.type';
 import type {RunStatus} from '#types/run-status.type';
 import type {EnvelopeData} from '#types/envelope-data.type';
+import type {RunProgress, RunRecord} from '#types/run-record.type';
+
+/**
+ * One run of a flow the component called (Flow Invoker): how it went and its record (what its components did: counts,
+ * times, logs, and up to SUB_RUN_SAMPLE_SIZE envelopes per port), as it goes while it runs. A record only for the
+ * first MAX_SUB_RUNS calls.
+ */
+export type SubRun = {id: string; flow: string; status: RunStatus | 'running'; durationMs: number; error?: string; record?: RunRecord | RunProgress};
 
 export type ComponentRun = {
   nodeId: string;
@@ -25,8 +33,8 @@ export type ComponentRun = {
    * flow. Not counted: waiting for envelopes, or for the next component to take them (backpressure).
    */
   waitingMs?: number;
-  /** flows the component called (Flow Invoker): a summary of each run, up to 50 */
-  subRuns?: {id: string; flow: string; status: RunStatus; durationMs: number; error?: string}[];
+  /** flows the component called (Flow Invoker): each run with its record, up to MAX_SUB_RUNS */
+  subRuns?: SubRun[];
   /** What the component held at once (only accumulators: Lookup, Aggregate, Sort...). Bytes estimated from the DATA JSON. */
   memory?: {peakEnvelopes: number; peakBytes: number};
   /** envelopes per port */

@@ -331,7 +331,7 @@ export class FlowExecution {
           for await (const doc of source) if (this.options.onReachEnd) await this.options.onReachEnd(doc);
         }
       } else if (node.disabled) {
-        log('warning', 'Disabled (bypass): did not execute, the envelopes passed straight through.');
+        log('warning', 'Bypass: did not execute, the envelopes passed straight through.');
         for await (const doc of inputs['in-0'] ?? empty<Envelope>()) await this.send(node, 'out-0', doc);
       } else {
         const logic = COMPONENTS[node.type];
@@ -368,7 +368,8 @@ export class FlowExecution {
     } catch (e) {
       rec.status = 'failed';
       const message = e instanceof Error ? e.message : String(e);
-      log('error', message);
+      // Stop policy: the error is already in this component's log (above), once
+      if (!(e instanceof RunInterrupted)) log('error', message);
       this.failure ??= e instanceof RunInterrupted ? message : `"${node.label}": ${message}`;
       this.abortAll();
     } finally {

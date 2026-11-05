@@ -199,3 +199,18 @@ test('a required list or record is not one to fill in: [] and {} fit it, its emp
   expect(shapeIssues({sku: 'A', tags: [], allocation: {}}, shape)).toEqual([]);
   expect(shapeIssues({sku: 'A'}, shape)).toEqual(['input.tags: missing (required).', 'input.allocation: missing (required).']);
 });
+
+test('a shape as TypeScript text (what a Flow Invoker shows the called flow takes)', async () => {
+  const {shapeText} = await import('../../src/index');
+  expect(shapeText({kind: 'object', fields: [
+    {name: 'id', optional: false, shape: {kind: 'number'}},
+    {name: 'first name', optional: true, shape: {kind: 'string'}, nullable: true},
+    {name: 'status', optional: false, shape: {kind: 'enum', options: ['new', 'paid']}},
+    {name: 'tags', optional: false, shape: {kind: 'array', of: {kind: 'string'}}},
+    {name: 'size', optional: false, shape: {kind: 'tuple', items: [{kind: 'number'}, {kind: 'json'}]}},
+    {name: 'notes', optional: false, shape: {kind: 'record', of: {kind: 'boolean'}}},
+  ]})).toBe('{ id: number; "first name"?: string | null; status: "new" | "paid"; tags: string[]; size: [number, unknown]; notes: Record<string, boolean> }');
+  expect(shapeText({kind: 'array', of: {kind: 'enum', options: [1, 2]}})).toBe('(1 | 2)[]');
+  expect(shapeText({kind: 'union', tag: 'type', variants: [{value: 'a', fields: [{name: 'x', optional: false, shape: {kind: 'number'}}]}, {value: 'b', fields: []}]}))
+    .toBe('{ type: "a"; x: number } | { type: "b" }');
+});

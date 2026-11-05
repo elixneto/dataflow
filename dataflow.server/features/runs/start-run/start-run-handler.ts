@@ -9,6 +9,7 @@ import { fail, success, type UseCaseResult } from '#shared/use-cases/use-case-re
 import { validate } from '#shared/use-cases/validate';
 import { scriptsForRun, typeSources } from '#features/scripts/script-store';
 import { CHANNELS, notifyRunEvent } from '../run-queue';
+import { calledFlows } from './called-flows';
 import { runs, testRuns } from '../run';
 
 export const StartRunCommand = z.object({
@@ -128,10 +129,16 @@ export class StartRunHandler implements UseCaseHandler<{ id: string }> {
       runFrom = { ...planned.plan, label: fromLabel ?? planned.plan.label };
     }
 
-    // the scripts its TypeScript components import (and those import), by the hash of their code as it is now
-    const users = checked.value.nodes
-      .filter(n => n.type === 'typescript')
-      .map(n => ({ label: n.label || 'TypeScript', code: typeof n.config.code === 'string' ? n.config.code : '' }));
+    // the flows its Flow Invokers call (and those call), as they are now: their drafts (the run carries them too)
+    const called = await calledFlows(ctx, row.projectId, tree, checked.value);
+
+    // the scripts its TypeScript components import (and those import), by the hash of their code as it is now; the
+    // called flows' ones too
+    const users = [checked.value, ...called.flatMap(c => (c.flow ? [c.flow] : []))].flatMap(file =>
+      file.nodes
+        .filter(n => n.type === 'typescript')
+        .map(n => ({ label: file === checked.value ? n.label || 'TypeScript' : `${file.name} › ${n.label || 'TypeScript'}`, code: typeof n.config.code === 'string' ? n.config.code : '' })),
+    );
     const imported = await scriptsForRun(ctx.db, ctx.orgId, row.projectId, users);
     if (imported.error) {
       return fail('validation', `The flow cannot run: ${imported.error}`);
@@ -152,6 +159,7 @@ export class StartRunHandler implements UseCaseHandler<{ id: string }> {
       definition: checked.value,
       runFrom,
       scripts: imported.scripts,
+      calledFlows: called.length ? called : null,
       ...(given !== undefined ? { input: given } : {}),
     };
     if (mode === 'execution') {

@@ -25,7 +25,7 @@ test('Filter sends each envelope to true or false by the condition', async () =>
   expect(f.outputSample['out-1']).toEqual([{price: 5}, {price: 0}]);
 
   // a failing condition is an error of the envelope (default policy: throw)
-  withFilter.nodes[1].config = {condition: '$doesNotExist > 1'};
+  withFilter.nodes[1].config = {condition: '$doesNotExist.price > 1'};
   const withError = await flowRunner(withFilter, {mode: 'execution', id: 'tf2', evaluate, input});
   expect(withError.status).toBe('failed');
 });

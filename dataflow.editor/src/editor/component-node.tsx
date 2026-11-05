@@ -84,7 +84,7 @@ function ComponentNodeView({ id, data, selected }: NodeProps<ComponentNode>) {
   // the bar is a NodeToolbar: outside the card (a disabled node fades, its buttons do not) and outside the zoom
   return (
     <>
-      {/* Start and End are not run on their own: no Disable, Run from here or Pin (the Start has only the eye) */}
+      {/* Start and End are not run on their own: no Bypass, Run from here or Pin (the Start has only the eye) */}
       {(!isFixedType(data.type) || start) && (
         <NodeActions
           id={id}
@@ -340,7 +340,7 @@ function RunBadge({ running, run }: { running: boolean; run?: ComponentRun }) {
           : run.status === 'skipped'
             ? [CircleDashed, 'text-muted-foreground', 'Skipped: it only feeds pinned components']
           : run.status === 'disabled'
-            ? [Power, 'text-muted-foreground', 'Disabled']
+            ? [Power, 'text-muted-foreground', 'Bypassed']
             : run.status === 'with-warnings'
               ? [CircleAlert, 'text-amber-600 dark:text-amber-400', 'With warnings']
               : [CircleX, 'text-destructive', run.status === 'failed' ? 'Failed' : 'With errors'];
@@ -372,7 +372,7 @@ function useHover() {
   return { on, props };
 }
 /**
- * The node's buttons, in a small bar right above it (in the PoC they sat next to the name): Disable, Run from here,
+ * The node's buttons, in a small bar right above it (in the PoC they sat next to the name): Bypass (Enable), Run from here,
  * Pin output, and On error (Throw / Continue / Divert). MOCK: they only change the node; Run from here only shows it
  * running for a moment. Leaving Divert removes the edges of the error port.
  */
@@ -427,7 +427,7 @@ function NodeActions(props: {
         {!props.onlyInfo && (
           <>
             <ActionButton
-              label={data.disabled ? 'Enable' : 'Disable'}
+              label={data.disabled ? 'Enable' : 'Bypass'}
               pressed={data.disabled ?? false}
               className={data.disabled ? 'text-destructive' : undefined}
               onClick={() => change({ disabled: !data.disabled })}

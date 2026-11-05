@@ -8,7 +8,10 @@ test('an expression with an error stops the run (default policy)', async () => {
   withError.nodes[1].config = {fields: [{target: 'x', value: '$doesNotExist.y', expression: true}]};
   const r = await flowRunner(withError, {mode: 'execution', id: 't2', evaluate});
   expect(r.status).toBe('failed');
-  expect(r.components.find(c => c.nodeId === 'm')!.status).toBe('failed');
+  const m = r.components.find(c => c.nodeId === 'm')!;
+  expect(m.status).toBe('failed');
+  // the error once in its log (not again when the run stops)
+  expect(m.logs.filter(l => l.level === 'error')).toHaveLength(1);
 });
 
 test('Continue: on error, the incoming envelope moves on unchanged', async () => {
@@ -78,7 +81,7 @@ test('an input with two edges joins the normal output and the error handling one
   expect(r.components.find(c => c.nodeId === 'end')!.inputs['in-0']).toBe(2);
   // what goes out through the error port carries DATA.errors
   expect(r.components.find(c => c.nodeId === 'handle')!.inputSample[0].errors).toEqual([
-    {error: 'ReferenceError', message: expect.stringContaining('$failure is not defined'), component: 'Mapper'},
+    {error: 'TypeError', message: expect.stringContaining('$failure'), component: 'Mapper'},
   ]);
   // the error was diverted and handled: the run is a success
   expect(r.components.find(c => c.nodeId === 'ok')!.status).toBe('completed');

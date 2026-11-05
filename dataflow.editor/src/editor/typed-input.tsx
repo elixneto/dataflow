@@ -42,7 +42,7 @@ export function ScriptTypePicker({ id, value, onChange }: { id: string; value: s
 }
 
 /** the scripts a type may need (its own and what it imports, in turn) loaded, then its shape */
-function useTypeShape(typeRef: string): { shape: TypeShape | null; loading: boolean } {
+export function useTypeShape(typeRef: string): { shape: TypeShape | null; loading: boolean } {
   const { projectId } = useContext(ProjectResourcesContext);
   const project = useProjectScripts(projectId);
   const sources = useMemo(() => Object.fromEntries(Object.entries(project.contents).map(([path, content]) => [path, content.code])), [project.contents]);

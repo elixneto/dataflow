@@ -113,15 +113,16 @@ describe("what the run's worker used, in the panel header", () => {
       <RunPanel record={mockRunRecord(flow, 'validation', new Date('2026-11-04T12:00:00Z'))} usage={usage} running={null} onFocus={() => {}} pinned={new Set()} onPin={() => {}} onClose={() => {}} />,
     );
 
-  test('its memory peak, how much it grew, its CPU; a tooltip says what they measure', () => {
+  test("its memory peak, how much it grew, the process CPU and the components' active time; a tooltip says what they measure", () => {
     const html = panel({ startRssBytes: 50 * 1024 ** 2, peakRssBytes: 98 * 1024 ** 2, cpuMs: 94.4 });
-    expect(html).toContain('Memory 98.0 MB peak (+48.0 MB) · CPU 94 ms');
-    expect(html).toMatch(/title="What the run&#x27;s worker process used\. Memory: its peak, Bun included/);
+    // the process CPU is the whole worker's; Components is the sum of the Active column
+    expect(html).toMatch(/Memory 98\.0 MB peak \(\+48\.0 MB\) · Process CPU 94 ms · Components [\d.]+ ms/);
+    expect(html).toMatch(/title="What the run&#x27;s worker process used\. Memory: its peak, Bun included.*Process CPU: the processing time of the whole worker process/);
   });
 
   test('dashes for a run without them (older runs)', () => {
-    expect(panel(null)).toContain('Memory — · CPU —');
-    expect(panel({ startRssBytes: null, peakRssBytes: 1024 ** 2, cpuMs: null })).toContain('Memory 1.0 MB peak · CPU —');
+    expect(panel(null)).toContain('Memory — · Process CPU —');
+    expect(panel({ startRssBytes: null, peakRssBytes: 1024 ** 2, cpuMs: null })).toContain('Memory 1.0 MB peak · Process CPU —');
   });
 });
 
@@ -212,6 +213,17 @@ describe("a component window's Last run tab", () => {
     expect(html).toContain('3 to true and 1 to false.');
   });
 
+  test('the Start shows only its output, the End only its input', async () => {
+    const { ComponentLastRun } = await import('../src/pages/flow-editor/run-panel');
+    const record = mockRunRecord(flow, 'validation', new Date('2026-11-04T12:00:00Z'));
+    const start = renderToStaticMarkup(<ComponentLastRun c={record.components.find(c => c.type === 'start')} />);
+    expect(start).toContain('Output (4)');
+    expect(start).not.toContain('Input (');
+    const end = renderToStaticMarkup(<ComponentLastRun c={record.components.find(c => c.type === 'end')} />);
+    expect(end).toContain('Input (');
+    expect(end).not.toContain('Output (');
+  });
+
   test('not run yet: it says so', async () => {
     const { ComponentLastRun } = await import('../src/pages/flow-editor/run-panel');
     expect(renderToStaticMarkup(<ComponentLastRun c={undefined} />)).toContain('Not run yet');
@@ -235,5 +247,115 @@ describe('which run a Last run tab shows', () => {
     const html = renderToStaticMarkup(<ComponentLastRun c={filter} about={{ mode: 'validation', from: 'Big', startedAt: '2026-10-30T12:00:00.000Z' }} />);
     expect(html).toMatch(/>Test run<\/span> · from Big · Oct 30 \d{2}:\d{2}:\d{2}\.000</);
     expect(renderToStaticMarkup(<ComponentLastRun c={filter} about={{ mode: 'execution', startedAt: new Date().toISOString() }} />)).toMatch(/>Run for real<\/span> · today /);
+  });
+});
+
+describe("a run's errors, stacked", () => {
+  const at = (s: number) => `2026-11-04T12:00:0${s}.000Z`;
+  const failed = () => {
+    const record = mockRunRecord(flow, 'validation', new Date('2026-11-04T12:00:00Z'));
+    return {
+      ...record,
+      status: 'failed' as const,
+      error: '"Big": $x is not defined',
+      components: record.components.map(c =>
+        c.nodeId === 'f'
+          ? { ...c, status: 'failed' as const, logs: [
+              { at: at(2), level: 'error' as const, message: '$x is not defined' },
+              { at: at(1), level: 'warning' as const, message: 'Diverted to the error port: bad' },
+              { at: at(3), level: 'error' as const, message: '$x is not defined' },
+            ] }
+          : c.type === 'end'
+            ? { ...c, logs: [...c.logs, { at: at(4), level: 'error' as const, message: 'Run r1 finished (Failed) in 3 ms.' }] }
+            : c,
+      ),
+    };
+  };
+
+  test('one per component and message, with how many times, the first time first; not the End closing line nor warnings', async () => {
+    const { runErrors } = await import('../src/pages/flow-editor/run-view');
+    expect(runErrors(failed())).toEqual([{ nodeId: 'f', message: '$x is not defined', count: 2, at: at(2) }]);
+  });
+
+  test('a run that ended with errors opens on the Errors tab, with the count, and says why it failed above the tabs', () => {
+    const html = renderToStaticMarkup(<RunPanel record={failed()} running={null} onFocus={() => {}} pinned={new Set()} onPin={() => {}} onClose={() => {}} />);
+    expect(html).toMatch(/role="alert"[^>]*>.*&quot;Big&quot;: \$x is not defined/);
+    expect(html).toMatch(/aria-selected="true"[^>]*>errors<span[^>]*>2<\/span>/);
+    expect(html).toContain('×2');
+  });
+});
+
+describe('the runs a Flow Invoker called, in the panel', () => {
+  const at = (s: number) => `2026-11-04T12:00:0${s}.000Z`;
+  /** the parent run: Big (standing in for a Flow Invoker) called "Child" twice; the second call's Mapper failed */
+  const withCalls = (childErrors: boolean) => {
+    const record = mockRunRecord(flow, 'validation', new Date('2026-11-04T12:00:00Z'));
+    const child = (n: number, failed: boolean) => {
+      const run = mockRunRecord(flow, 'validation', new Date(at(n)));
+      return {
+        ...run,
+        run: { ...run.run, id: `child-${n}`, flow: 'Child', parentId: record.run.id },
+        status: failed ? ('failed' as const) : ('completed' as const),
+        durationMs: 12,
+        components: run.components.map(c =>
+          c.nodeId === 'f'
+            ? { ...c, label: 'Mapper', logs: [{ at: at(n), level: 'info' as const, message: `mapped call ${n}` }, ...(failed ? [{ at: at(n), level: 'error' as const, message: '$x is not defined' }] : [])] }
+            : c,
+        ),
+      };
+    };
+    return {
+      ...record,
+      components: record.components.map(c =>
+        c.nodeId === 'f'
+          ? {
+              ...c,
+              subRuns: [
+                { id: 'child-1', flow: 'Child', status: 'completed' as const, durationMs: 12, record: child(1, false) },
+                { id: 'child-2', flow: 'Child', status: childErrors ? ('failed' as const) : ('completed' as const), durationMs: 12, record: child(2, childErrors) },
+              ],
+            }
+          : c,
+      ),
+    };
+  };
+  const panel = (record: ReturnType<typeof withCalls>) => renderToStaticMarkup(<RunPanel record={record} running={null} onFocus={() => {}} pinned={new Set()} onPin={() => {}} onClose={() => {}} />);
+
+  test("a called flow's errors are the run's too, under the Flow Invoker, saying where in the called flow", async () => {
+    const { runErrors } = await import('../src/pages/flow-editor/run-view');
+    expect(runErrors(withCalls(true))).toEqual([{ nodeId: 'f', message: '$x is not defined', count: 1, at: at(2), via: 'Child › Mapper' }]);
+    const html = panel(withCalls(true));
+    expect(html).toMatch(/aria-selected="true"[^>]*>errors<span[^>]*>1<\/span>/);
+    expect(html).toMatch(/>Big<\/span>.*Child › Mapper:.*\$x is not defined/);
+  });
+
+  test('the Logs tab lists each called run collapsed where it started, with how it went; open, its lines say the flow and the component', () => {
+    const html = panel(withCalls(false));
+    expect(html).toMatch(/<details[^>]*><summary[^>]*aria-label="Run of Child".*Called <span[^>]*>Child<\/span>: completed in 12 ms/);
+    expect(html).toContain('Child › Mapper');
+    expect(html).toContain('mapped call 1');
+    expect(html).toContain('mapped call 2');
+    expect(html).not.toContain('error line');
+  });
+
+  test('the Metrics tab has a row per called run under the Flow Invoker, closed on its components', () => {
+    const storage = { getItem: () => 'metrics', setItem: () => {} };
+    Object.assign(globalThis, { sessionStorage: storage });
+    try {
+      const html = panel(withCalls(false));
+      expect(html).toMatch(/aria-expanded="false"[^>]*>.*Call 1: <span[^>]*>Child<\/span> completed in 12 ms/);
+      expect(html).toContain('Call 2: ');
+      expect(html).not.toContain('Mapper');
+    } finally {
+      Object.assign(globalThis, { sessionStorage: undefined });
+    }
+  });
+
+  test("a component window's Last run tab lists the called flows, collapsed", async () => {
+    const { ComponentLastRun } = await import('../src/pages/flow-editor/run-panel');
+    const invoker = withCalls(true).components.find(c => c.nodeId === 'f')!;
+    const html = renderToStaticMarkup(<ComponentLastRun c={invoker} />);
+    expect(html).toMatch(/Called flows <span[^>]*>\(the first 2 of 4 calls\)/);
+    expect(html).toMatch(/aria-label="Called flows".*Call 1.*Called <span[^>]*>Child<\/span>: completed in 12 ms.*Call 2.*failed in 12 ms.*1 error line</);
   });
 });

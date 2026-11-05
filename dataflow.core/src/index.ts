@@ -43,7 +43,7 @@ export {mongoUpsertConfig, mongodbUpsert, DEFAULT_MONGODB_BATCH_SIZE, MAX_MONGOD
 export {log, logConfig, LOG_LEVELS, MAX_LOG_LINES, type LogComponentLevel} from './components/log';
 export {discard} from './components/discard';
 export {flowInvokerConfig, flowInvoker, type InvokerParameter} from './components/flow';
-export {MAX_FLOW_DEPTH, SAMPLE_SIZE, START, END} from '#engine/constants';
+export {MAX_FLOW_DEPTH, MAX_SUB_RUNS, SAMPLE_SIZE, SUB_RUN_SAMPLE_SIZE, START, END} from '#engine/constants';
 export {flowRunner} from '#engine/flow-runner';
 export {writesOutside} from '#engine/side-effects';
 export {flowOrder} from '#engine/flow-order';
