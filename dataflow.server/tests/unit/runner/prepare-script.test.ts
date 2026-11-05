@@ -4,12 +4,16 @@ process.env.SCRIPT_SYNC_TIMEOUT_MS = '300';
 const { prepareScript } = await import('#shared/runner/prepare-script');
 
 const logs: string[] = [];
+const levels: string[] = [];
 const globals = {
   run: { id: 'r1', mode: 'validation' as const, project: 'P', flow: 'F', startedAt: '2026-11-04T00:00:00Z' },
   parameters: { region: 'eu' },
   secrets: { TOKEN: 's3cret' },
   variables: { BASE: 'https://api.test' },
-  log: (message: string) => logs.push(message),
+  log: (message: string, level = 'info') => {
+    logs.push(message);
+    levels.push(level);
+  },
   // what the script waits for outside, as the engine would take it
   wait: <T>(promise: Promise<T>) => {
     waits.push('wait');
@@ -25,19 +29,24 @@ export function uploadIdOf(response: IUploadInitResponse): string { return respo
 export const header = (r: IUploadInitResponse) => 'id=' + uploadIdOf(r);`,
 };
 
-test('process runs with the run globals and log; types do not stop it', async () => {
+test('process runs with the run globals and log (the console at its levels); types do not stop it', async () => {
   logs.length = 0;
+  levels.length = 0;
   const process = await prepareScript(
     `async function process($input: Data): Promise<unknown> {
   const wrong: number = 'types are not checked here';
   log('hi', $input.n, $PARAMETERS.region, $VARIABLES.BASE, $FLOW_CURRENT_RUN.mode);
   console.log({ok: true});
+  console.warn('careful');
+  console.error('broke');
+  console.debug('detail');
   return { double: $input.n * 2, hasSecret: typeof $SECRETS.TOKEN === 'string' };
 }`,
     globals,
   );
   expect(await process({ n: 21 })).toEqual({ double: 42, hasSecret: true });
-  expect(logs).toEqual(['hi 21 eu https://api.test validation', '{"ok":true}']);
+  expect(logs).toEqual(['hi 21 eu https://api.test validation', '{"ok":true}', 'careful', 'broke', 'detail']);
+  expect(levels).toEqual(['info', 'info', 'warning', 'error', 'debug']);
 });
 
 test("it imports the project's scripts, which import each other", async () => {
