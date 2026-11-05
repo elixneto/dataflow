@@ -1,4 +1,4 @@
-import type { FlowFile, RunProgress, RunRecord } from '@dataflow/core';
+import type { FlowCall, FlowFile, RunProgress, RunRecord } from '@dataflow/core';
 import { api, type ApiResult } from '@/lib/api';
 import type { Flow, Folder, ProjectContents } from './flow';
 
@@ -149,4 +149,15 @@ export type LastRun = {
 
 export function getLastRun(flowId: string): Promise<ApiResult<LastRun>> {
   return api<LastRun>(`/flows/${flowId}/last-run`);
+}
+
+/** the calls between a project's flows (their Flow Invokers, from the drafts), the flows they name and the circular chains */
+export type FlowCalls = {
+  flows: { id: string; name: string; folder: string; available: boolean }[];
+  calls: FlowCall[];
+  cycles: string[][];
+};
+
+export function getFlowCalls(projectId: string): Promise<ApiResult<FlowCalls>> {
+  return api<FlowCalls>(`/projects/${projectId}/calls`);
 }

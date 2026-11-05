@@ -127,4 +127,37 @@ describe('folders and flows api', () => {
     expect((await call('GET', `/flows/${flowId}/draft`)).status).toBe(200);
     expect((await call('PUT', `/flows/${flowId}/draft`, { revision: 1, flow })).status).toBe(404);
   });
+  test("the calls between the project's flows, from their drafts: who calls whom, the circular chains, an archived one unavailable", async () => {
+    const make = async (name: string) => (await call('POST', `/projects/${projectId}/flows`, { name })).body.id as string;
+    const [one, two, gone] = [await make('Calls 1'), await make('Calls 2'), await make('Calls gone')];
+    const calling = (id: string, name: string, to: string[]) => ({
+      revision: 1,
+      flow: {
+        format: 'dataflow.flow', version: 1, id, name,
+        nodes: [
+          { id: 'start', type: 'start', position: { x: 0, y: 0 }, config: {} },
+          ...to.map((flowId, i) => ({ id: `w${i}`, type: 'flow', label: `Invoker ${i}`, position: { x: 160, y: i * 80 }, config: { flowId } })),
+          { id: 'end', type: 'end', position: { x: 320, y: 0 }, config: {} },
+        ],
+        edges: to.flatMap((_, i) => [
+          { source: 'start', sourcePort: 'out-0', target: `w${i}`, targetPort: 'in-0' },
+          { source: `w${i}`, sourcePort: 'out-0', target: 'end', targetPort: 'in-0' },
+        ]),
+      },
+    });
+    const store = (id: string, name: string, to: string[]) => db.query(`UPDATE flows SET draft_definition = $1 WHERE id = $2`, [JSON.stringify(calling(id, name, to)), id]);
+    await store(one, 'Calls 1', [two, gone]);
+    await store(two, 'Calls 2', [one]);
+    expect((await call('POST', `/flows/${gone}/archive`)).status).toBe(200);
+
+    const answer = await call('GET', `/projects/${projectId}/calls`);
+    expect(answer.status).toBe(200);
+    const body = answer.body as { flows: { id: string; available: boolean }[]; calls: { from: string; to: string; nodeLabel: string }[]; cycles: string[][] };
+    expect(body.calls.map(c => [c.from, c.to, c.nodeLabel])).toEqual([[one, two, 'Invoker 0'], [one, gone, 'Invoker 1'], [two, one, 'Invoker 0']]);
+    expect(body.cycles).toHaveLength(1);
+    expect(body.cycles[0]).toHaveLength(3);
+    expect(body.flows.find(f => f.id === gone)).toMatchObject({ available: false });
+    expect(body.flows.find(f => f.id === one)).toMatchObject({ available: true, folder: '' });
+    expect((await call('GET', `/projects/${crypto.randomUUID()}/calls`)).status).toBe(404);
+  });
 });

@@ -10,7 +10,6 @@ const start = {
     { name: 'since', type: 'number' as const, default: '', required: true },
     { name: 'tag', type: 'text' as const, default: 'a' },
   ],
-  calls: [] as string[],
 };
 const render = (props: Partial<Parameters<typeof CalledFlowSetting>[0]>) =>
   renderToStaticMarkup(
@@ -44,8 +43,7 @@ test('the input the called flow takes: none (a warning when DATA is sent), or an
   expect(open).toContain('The flow has no parameters.');
 });
 
-test('a called flow that calls this one back is a circular call: said above the parameters', () => {
-  expect(render({ start: { ...start, calls: ['f1'] }, selfId: 'f1' })).toContain('This flow calls this one back');
-  expect(render({ start: { ...start, calls: ['f2'] }, selfId: 'f1' })).not.toContain('calls this one back');
-  expect(render({ start: { ...start, calls: ['f1'] } })).not.toContain('calls this one back');
+test('a called flow that calls this one back (down the chain too) is a circular call: the chain, above the parameters', () => {
+  expect(render({ cycle: ['Flow 1', 'Flow 2', 'Flow 3', 'Flow 1'] })).toContain('Circular call: Flow 1 → Flow 2 → Flow 3 → Flow 1.');
+  expect(render({})).not.toContain('Circular call');
 });

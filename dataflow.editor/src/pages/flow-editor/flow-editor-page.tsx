@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { flowFileName, flowToYaml } from '@dataflow/core';
+import { flowCalls, flowFileName, flowToYaml, toExecutableFlow } from '@dataflow/core';
 import { canvasToFlowFile, saveFile } from '@/editor/flow-file';
 import { useParams } from 'react-router';
 import type { Flow, Folder } from '@/data/flows/flow';
@@ -11,6 +11,7 @@ import { ThemeToggle } from '@/layout/theme-toggle';
 import { ProjectBreadcrumb } from '@/pages/project-flows/project-breadcrumb';
 import { ServerGate } from '@/components/server-gate';
 import { FlowActions } from './flow-actions';
+import { FlowCallsButton } from './flow-calls';
 import { SaveStatus } from './save-status';
 import type { DraftSave } from '@/editor/flow-save';
 import { FlowCanvas, type CanvasHandle } from './flow-canvas';
@@ -266,6 +267,17 @@ export function FlowEditorPage() {
         <div className="ml-auto flex shrink-0 items-center gap-1">
           <SaveStatus save={save} />
           <span className="mx-1 h-5 w-px bg-border" aria-hidden />
+          {current?.flow && (
+            <FlowCallsButton
+              projectId={projectId}
+              flowId={flowId}
+              // this flow's calls as the canvas has them now
+              ownCalls={() => {
+                const now = canvas.current?.snapshot();
+                return now ? flowCalls([toExecutableFlow(canvasToFlowFile({ id: flowId, name: flowName }, now.nodes, now.edges), '')]) : null;
+              }}
+            />
+          )}
           <FlowActions onDownload={current?.flow ? download : undefined} running={running} onRun={current?.flow ? run : undefined} />
           <span className="mx-1 h-5 w-px bg-border" aria-hidden />
           <ConnectionStatus />

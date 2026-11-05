@@ -1,4 +1,5 @@
 import type {ExecutableFlow} from '#types/executable-flow.type';
+import {MAX_FLOW_DEPTH} from '#engine/constants';
 
 /** A call from one flow to another (a Flow Invoker node). */
 export type FlowCall = {
@@ -45,4 +46,81 @@ export function flowCalls(flows: ExecutableFlow[]): FlowCall[] {
 export function flowDependencies(flows: ExecutableFlow[], id: string): {uses: FlowCall[]; usedBy: FlowCall[]} {
   const calls = flowCalls(flows);
   return {uses: calls.filter(c => c.from === id), usedBy: calls.filter(c => c.to === id && c.from !== id)};
+}
+
+/** The shortest chain of calls from one flow to another (ids, both ends included), or null when it does not reach it. */
+export function callPath(calls: FlowCall[], from: string, to: string): string[] | null {
+  const previous = new Map<string, string>([[from, '']]);
+  const queue = [from];
+  while (queue.length) {
+    const current = queue.shift()!;
+    for (const c of calls) {
+      if (c.from !== current) continue;
+      if (c.to === to) {
+        const chain = [to, current];
+        for (let at = current; previous.get(at); at = previous.get(at)!) chain.push(previous.get(at)!);
+        return chain.reverse();
+      }
+      if (!previous.has(c.to)) {
+        previous.set(c.to, current);
+        queue.push(c.to);
+      }
+    }
+  }
+  return null;
+}
+
+/**
+ * Every circular chain of calls (the first flow repeated at the end: a → b → a), each once whatever flow it is read
+ * from; the engine refuses each such call when it comes.
+ */
+export function callCycles(calls: FlowCall[]): string[][] {
+  const seen = new Set<string>();
+  const cycles: string[][] = [];
+  for (const c of calls) {
+    const back = c.from === c.to ? [c.to] : callPath(calls, c.to, c.from);
+    if (!back) continue;
+    const ring = c.from === c.to ? [c.from] : [c.from, ...back.slice(0, -1)];
+    // the same ring read from another of its flows: kept once, starting from its smallest id
+    const start = ring.indexOf([...ring].sort()[0]!);
+    const key = [...ring.slice(start), ...ring.slice(0, start)].join('>');
+    if (seen.has(key)) continue;
+    seen.add(key);
+    cycles.push([...ring, ring[0]!]);
+  }
+  return cycles;
+}
+
+/**
+ * One call of a flow's call tree: the call, how deep (1 = the flow's own Flow Invokers), what the called flow calls in
+ * turn; `cycle` when the called flow is already up the chain (its calls are not followed again), `tooDeep` past
+ * MAX_FLOW_DEPTH (the engine refuses the call).
+ */
+export type CallTreeNode = {call: FlowCall; depth: number; cycle?: true; tooDeep?: true; children: CallTreeNode[]};
+
+/** How many calls a tree holds at most (one that calls the same flows from many places grows fast); past it, `truncated`. */
+export const MAX_CALL_TREE = 500;
+
+/** What a flow calls, and what those call, down the chain: each call once per place it is made. */
+export function callTree(calls: FlowCall[], root: string): {nodes: CallTreeNode[]; truncated: boolean} {
+  let size = 0;
+  let truncated = false;
+  const grow = (from: string, chain: string[], depth: number): CallTreeNode[] => {
+    const nodes: CallTreeNode[] = [];
+    for (const call of calls.filter(c => c.from === from)) {
+      if (size >= MAX_CALL_TREE) {
+        truncated = true;
+        break;
+      }
+      size += 1;
+      const node: CallTreeNode = {call, depth, children: []};
+      if (chain.includes(call.to)) node.cycle = true;
+      else if (depth > MAX_FLOW_DEPTH) node.tooDeep = true;
+      else node.children = grow(call.to, [...chain, call.to], depth + 1);
+      nodes.push(node);
+    }
+    return nodes;
+  };
+  const nodes = grow(root, [root], 1);
+  return {nodes, truncated};
 }

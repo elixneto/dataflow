@@ -1,7 +1,7 @@
 import { createContext, lazy, Suspense, useContext, type ReactNode } from 'react';
 import { useParams } from 'react-router';
 import { ArrowDown, ArrowRight, ArrowUp, LoaderCircle, Plus, Trash } from 'lucide-react';
-import { inputTypeRef, settingDefault, settingsDefaults, settingValue, settingVisible, withSetting, type ExpressionField, type SettingField } from '@dataflow/core';
+import { callPath, inputTypeRef, settingDefault, settingsDefaults, settingValue, settingVisible, withSetting, type ExpressionField, type SettingField } from '@dataflow/core';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -12,6 +12,7 @@ import { ExpressionBox } from './expression-box';
 import { loadCodeEditor } from './code-editor-loader';
 import { ScriptTypePicker, TypedInputSetting } from './typed-input';
 import { CalledFlowSetting, useCalledStart, type InvokerParameter } from './called-flow';
+import { useProjectCalls } from './project-calls';
 
 type Values = Record<string, unknown>;
 
@@ -82,7 +83,12 @@ export function SettingsForm(props: { id: string; nodeId?: string; fields: Setti
 function CalledFlowParameters(props: { id: string; field: SettingField; flowId: string; values: Values; onChange: (items: InvokerParameter[]) => void }) {
   const { id, field, flowId, values, onChange } = props;
   const start = useCalledStart(flowId);
-  const { flowId: selfId } = useParams();
+  const { projectId = '', flowId: selfId } = useParams();
+  // a chain from the called flow back to this one: each call would fail (the same calls the top bar's Calls shows)
+  const project = useProjectCalls(projectId);
+  const back = selfId && project ? callPath(project.calls.filter(c => c.from !== selfId), flowId, selfId) : null;
+  const names = new Map(project?.flows.map(f => [f.id, f.name]));
+  const cycle = back && selfId ? [selfId, ...back].map(id => names.get(id) ?? id) : undefined;
   const items = Array.isArray(values[field.key]) ? (values[field.key] as InvokerParameter[]) : [];
   if (start.status === 'loading') {
     return <p className="text-xs text-muted-foreground">Reading the flow…</p>;
@@ -98,7 +104,7 @@ function CalledFlowParameters(props: { id: string; field: SettingField; flowId: 
       start={start}
       items={items}
       sendEnvelope={values.sendEnvelope === true}
-      selfId={selfId}
+      cycle={cycle}
       onChange={onChange}
       renderValue={(valueId, value, placeholder, change) => (
         <ValueControl id={valueId} field={{ key: 'value', label: 'Value', kind: 'value' }} value={value} placeholder={placeholder} onChange={change} />

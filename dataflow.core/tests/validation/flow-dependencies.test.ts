@@ -1,5 +1,5 @@
 import {expect, test} from 'bun:test';
-import {flowCalls, flowDependencies} from '#validation/flow-dependencies';
+import {callCycles, callPath, callTree, flowCalls, flowDependencies} from '#validation/flow-dependencies';
 import type {ExecutableFlow} from '#types/executable-flow.type';
 
 const flow = (id: string, calls: string[]): ExecutableFlow => ({
@@ -38,4 +38,29 @@ test('dependencies: an invoker on the error port of another one handles its erro
   const [multiply, handling] = flowCalls([parent]);
   expect(multiply.onErrorOf).toBeUndefined();
   expect(handling).toEqual({from: 'parent', to: 'errors', nodeId: 'handling', nodeLabel: 'Error handling', onErrorOf: 'mult', onErrorOfLabel: 'Multiply'});
+});
+
+test('call paths, cycles and the call tree: down the chain, a cycle closed where it comes back, past the depth limit marked', () => {
+  const flows = [flow('a', ['b', 'c']), flow('b', ['c']), flow('c', ['a']), flow('d', ['d'])];
+  const calls = flowCalls(flows);
+  expect(callPath(calls, 'a', 'c')).toEqual(['a', 'c']);
+  expect(callPath(calls, 'b', 'a')).toEqual(['b', 'c', 'a']);
+  expect(callPath(calls, 'd', 'a')).toBeNull();
+  // a → c → a and a → b → c → a, and d calling itself; each once
+  expect(callCycles(calls)).toEqual([['a', 'b', 'c', 'a'], ['a', 'c', 'a'], ['d', 'd']]);
+
+  const {nodes, truncated} = callTree(calls, 'a');
+  expect(truncated).toBe(false);
+  const shape = (n: ReturnType<typeof callTree>['nodes']): unknown[] => n.map(x => [x.call.to, x.depth, x.cycle ? 'cycle' : '', shape(x.children)]);
+  expect(shape(nodes)).toEqual([
+    ['b', 1, '', [['c', 2, '', [['a', 3, 'cycle', []]]]]],
+    ['c', 1, '', [['a', 2, 'cycle', []]]],
+  ]);
+
+  // a chain longer than the engine follows: the call past it is marked, not followed
+  const chain = Array.from({length: 13}, (_, i) => flow(`f${i}`, i < 12 ? [`f${i + 1}`] : []));
+  let deepest = callTree(flowCalls(chain), 'f0').nodes[0]!;
+  while (deepest.children.length) deepest = deepest.children[0]!;
+  expect(deepest.depth).toBe(11);
+  expect(deepest.tooDeep).toBe(true);
 });
