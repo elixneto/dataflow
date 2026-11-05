@@ -67,6 +67,17 @@ describe('connection profiles', () => {
     }
   });
 
+  test('OAuth 2.0: Authorization code is shown as (soon), not selectable; Client credentials is the default', () => {
+    const grant = visibleFields('rest-oauth2', {}).find(f => f.key === 'grant')!;
+    expect(grant.default).toBe('clientCredentials');
+    expect(grant.options).toEqual([
+      { value: 'clientCredentials', label: 'Client credentials' },
+      { value: 'authorizationCode', label: 'Authorization code (soon)', disabled: true },
+    ]);
+    // with Client credentials (what can be picked) the Authorization URL never shows
+    expect(visibleFields('rest-oauth2', defaultConfig('rest-oauth2')).map(f => f.key)).not.toContain('authorizeUrl');
+  });
+
   test('the fields that apply follow the selects', () => {
     expect(visibleFields('http-client', { auth: 'none' }).map(f => f.key)).toEqual(['auth', 'headers', 'timeout']);
     expect(visibleFields('http-client', { auth: 'bearer' }).map(f => f.key)).toContain('token');

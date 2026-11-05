@@ -16,8 +16,8 @@ export type ConnectionField = {
   required?: boolean;
   default?: string;
   placeholder?: string;
-  /** for selects */
-  options?: {value: string; label: string}[];
+  /** for selects; `disabled`: shown, not selectable yet (a profile saved with it still shows it) */
+  options?: {value: string; label: string; disabled?: boolean}[];
   /** shown only when another field has one of these values (e.g. the token only for bearer auth) */
   when?: {key: string; values: string[]};
 };
@@ -62,13 +62,14 @@ export type ConnectionType = {
 
 // ---- building blocks
 
-const select = (key: string, label: string, options: [string, string][], fallback: string, when?: ConnectionField['when']): ConnectionField => ({
+/** a select: its options as [value, label] (or [value, label, true]: shown, not selectable yet) */
+const select = (key: string, label: string, options: ([string, string] | [string, string, true])[], fallback: string, when?: ConnectionField['when']): ConnectionField => ({
   key,
   label,
   kind: 'select',
   required: true,
   default: fallback,
-  options: options.map(([value, text]) => ({value, label: text})),
+  options: options.map(([value, text, disabled]) => ({value, label: text, ...(disabled ? {disabled} : {})})),
   when,
 });
 
@@ -115,7 +116,8 @@ export const CONNECTION_TYPES: ConnectionType[] = [
     label: 'REST OAuth 2.0',
     group: 'api',
     fields: [
-      select('grant', 'Grant type', [['clientCredentials', 'Client credentials'], ['authorizationCode', 'Authorization code']], 'clientCredentials'),
+      // the authorization code grant needs a person to log in (a Connect in the profile): not in a run yet
+      select('grant', 'Grant type', [['clientCredentials', 'Client credentials'], ['authorizationCode', 'Authorization code (soon)', true]], 'clientCredentials'),
       {key: 'authorizeUrl', label: 'Authorization URL', kind: 'text', required: true, when: {key: 'grant', values: ['authorizationCode']}},
       {key: 'tokenUrl', label: 'Token URL', kind: 'text', required: true, placeholder: 'https://auth.example.com/oauth/token'},
       {key: 'clientId', label: 'Client ID', kind: 'text', required: true},

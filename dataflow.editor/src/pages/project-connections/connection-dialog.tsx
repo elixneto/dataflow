@@ -266,7 +266,7 @@ function FieldInput({ field, value, invalid, secretNames, onChange, onAddSecret 
     return (
       <select id={id} value={value} aria-invalid={aria} className={SELECT} onChange={event => onChange(event.target.value)}>
         {field.options?.map(option => (
-          <option key={option.value} value={option.value}>
+          <option key={option.value} value={option.value} disabled={option.disabled}>
             {option.label}
           </option>
         ))}
