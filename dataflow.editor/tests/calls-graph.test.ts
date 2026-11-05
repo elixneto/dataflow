@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import type { FlowCall } from '@dataflow/core';
-import { callsGraph, graphCalls, reached, scriptArrows } from '../src/pages/project-flows/calls-graph';
+import { callsGraph, graphCalls, LABEL_MAX, reached, scriptArrows, shortLabel } from '../src/pages/project-flows/calls-graph';
 
 const call = (from: string, to: string, nodeLabel = `Calls ${to}`, onErrorOf?: string): FlowCall => ({
   from,
@@ -90,5 +90,15 @@ describe("the project's calls graph", () => {
     const arrows = callsGraph(data).calls;
     expect([...reached(arrows, 'script:lib/math', 'usedBy')].sort()).toEqual(['a', 'd', 'lonely', 'script:upload/types', 'b'].sort());
     expect([...reached(arrows, 'a', 'uses')].sort()).toEqual(['a', 'b', 'c', 'script:lib/math', 'script:upload/types'].filter(id => id !== 'a').sort());
+  });
+});
+
+describe('shortLabel', () => {
+  test('a short label as it is; a long one cut at LABEL_MAX with an ellipsis', () => {
+    expect(shortLabel('Flow Invoker')).toBe('Flow Invoker');
+    const long = shortLabel('Componente que não fala nada nada nada nada');
+    expect(long.length).toBeLessThanOrEqual(LABEL_MAX);
+    expect(long.endsWith('…')).toBe(true);
+    expect(shortLabel('abc def ghi', 5)).toBe('abc…');
   });
 });

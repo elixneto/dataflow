@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { loadProjectCalls, useProjectCalls } from '@/editor/project-calls';
 import { cn } from '@/lib/utils';
 import { readGraphScripts, saveGraphScripts } from '@/lib/view-preference';
-import { callsGraph, NODE_HEIGHT, NODE_WIDTH, reached, SCRIPT_HEIGHT, type GraphFlow, type GraphScript } from './calls-graph';
+import { callsGraph, NODE_HEIGHT, NODE_WIDTH, reached, SCRIPT_HEIGHT, shortLabel, type GraphFlow, type GraphScript } from './calls-graph';
 
 /**
  * The project's dependencies (Flows › Graph): a box per flow that calls or is called, inside its folder's box, an arrow
@@ -142,7 +142,17 @@ function Graph({ projectId }: { projectId: string }) {
       sourceHandle: back ? 'back-out' : 'out',
       targetHandle: back ? 'back-in' : 'in',
       ...(back ? { type: 'smoothstep', pathOptions: { offset: 28, borderRadius: 12 } } : call.points ? { type: 'routed', data: { points: call.points } } : {}),
-      ...(call.label ? { label: call.label } : {}),
+      // a long label cut short (its whole text on hover), so it stays between the boxes
+      ...(call.label
+        ? {
+            label: (
+              <tspan>
+                <title>{call.label}</title>
+                {shortLabel(call.label)}
+              </tspan>
+            ),
+          }
+        : {}),
       markerEnd: { type: MarkerType.ArrowClosed, ...(color ? { color } : {}) },
       style: { ...(color ? { stroke: color } : {}), ...(call.onError || unavailable ? { strokeDasharray: '6 4' } : {}), ...(call.circular ? { strokeWidth: 2 } : {}) },
       className: cn(impact && (faded(call.from) || faded(call.to)) && 'opacity-20'),
@@ -193,7 +203,7 @@ function Graph({ projectId }: { projectId: string }) {
           </span>
         )}
       </div>
-      <div className="calls-graph overflow-hidden rounded-lg border [&_.react-flow__edge-text]:text-[11px]" style={{ height: `min(65vh, ${Math.max(260, tall + 140)}px)` }}>
+      <div className="calls-graph overflow-hidden rounded-lg border [&_.react-flow__edge-text]:text-xs" style={{ height: `min(75vh, ${Math.max(320, tall * 1.4 + 120)}px)` }}>
         <ReactFlow
           // with or without the scripts: fitted again
           key={withScripts ? 'scripts' : 'flows'}
@@ -202,7 +212,7 @@ function Graph({ projectId }: { projectId: string }) {
           nodeTypes={NODE_TYPES}
           edgeTypes={EDGE_TYPES}
           fitView
-          fitViewOptions={{ padding: 0.06, maxZoom: 1 }}
+          fitViewOptions={{ padding: 0.06, maxZoom: 1.4 }}
           nodesDraggable={false}
           nodesConnectable={false}
           edgesFocusable={false}
@@ -230,7 +240,7 @@ function FlowNode({ data }: NodeProps<Node<FlowData>>) {
   return (
     <div
       className={cn(
-        'flex h-14 w-[220px] items-center gap-2 rounded-md border bg-card px-3 text-left shadow-sm transition-opacity',
+        'flex h-16 w-[220px] items-center gap-2 rounded-md border bg-card px-3 text-left shadow-sm transition-opacity',
         !flow.available && 'border-dashed text-muted-foreground',
         role === 'selected' && 'border-2 border-primary',
         role === 'dependent' && 'border-amber-500 bg-amber-50 dark:bg-amber-950/40',
@@ -243,8 +253,8 @@ function FlowNode({ data }: NodeProps<Node<FlowData>>) {
       <Handle id="in" type="target" position={Position.Left} className="opacity-0" isConnectable={false} />
       <Handle id="back-in" type="target" position={Position.Bottom} style={{ left: '30%' }} className="opacity-0" isConnectable={false} />
       <div className="flex min-w-0 flex-1 flex-col">
-        <span className={cn('truncate text-sm font-medium', !flow.known && 'text-destructive', flow.known && !flow.available && 'line-through')}>{flow.name}</span>
-        <span className="truncate text-xs text-muted-foreground">{!flow.known ? 'Removed' : !flow.available ? 'Archived' : flow.folder || 'Flows (root)'}</span>
+        <span className={cn('truncate text-base font-medium', !flow.known && 'text-destructive', flow.known && !flow.available && 'line-through')}>{flow.name}</span>
+        <span className="truncate text-sm text-muted-foreground">{!flow.known ? 'Removed' : !flow.available ? 'Archived' : flow.folder || 'Flows (root)'}</span>
       </div>
       {flow.known && (
         <a
@@ -272,7 +282,7 @@ function ScriptNode({ data }: NodeProps<Node<ScriptData>>) {
   return (
     <div
       className={cn(
-        'flex h-10 w-[220px] items-center gap-2 rounded-md border border-violet-400 bg-violet-50 px-3 text-left shadow-sm transition-opacity dark:border-violet-700 dark:bg-violet-950/40',
+        'flex h-12 w-[220px] items-center gap-2 rounded-md border border-violet-400 bg-violet-50 px-3 text-left shadow-sm transition-opacity dark:border-violet-700 dark:bg-violet-950/40',
         !script.known && 'border-dashed border-destructive bg-card dark:border-destructive dark:bg-card',
         role === 'selected' && 'border-2 border-primary dark:border-primary',
         role === 'dependent' && 'border-amber-500 bg-amber-50 dark:border-amber-500 dark:bg-amber-950/40',
@@ -285,7 +295,7 @@ function ScriptNode({ data }: NodeProps<Node<ScriptData>>) {
       <Handle id="in" type="target" position={Position.Left} className="opacity-0" isConnectable={false} />
       <Handle id="back-in" type="target" position={Position.Bottom} style={{ left: '30%' }} className="opacity-0" isConnectable={false} />
       <FileCode2 className={cn('size-4 shrink-0', script.known ? 'text-violet-600 dark:text-violet-400' : 'text-destructive')} aria-hidden />
-      <span className={cn('min-w-0 flex-1 truncate font-mono text-xs', !script.known && 'text-destructive')}>
+      <span className={cn('min-w-0 flex-1 truncate font-mono text-sm', !script.known && 'text-destructive')}>
         {slash > 0 && <span className="text-muted-foreground">{script.path.slice(0, slash + 1)}</span>}
         {script.path.slice(slash + 1)}
         {!script.known && ' · Not found'}
@@ -313,7 +323,7 @@ function ScriptNode({ data }: NodeProps<Node<ScriptData>>) {
 function FolderNode({ data }: NodeProps<Node<{ name: string }>>) {
   return (
     <div className="pointer-events-none size-full rounded-lg border border-dashed bg-muted/30">
-      <span className="block truncate px-2 pt-1 text-xs font-medium text-muted-foreground">{data.name}</span>
+      <span className="block truncate px-2 pt-1 text-sm font-medium text-muted-foreground">{data.name}</span>
     </div>
   );
 }

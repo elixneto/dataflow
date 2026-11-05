@@ -11,9 +11,16 @@ import type { FlowCalls } from '@/data/flows/flows-api';
  */
 
 export const NODE_WIDTH = 220;
-export const NODE_HEIGHT = 56;
-export const SCRIPT_HEIGHT = 40;
-const RANK_SEP = 90;
+export const NODE_HEIGHT = 64;
+export const SCRIPT_HEIGHT = 48;
+/** the gap between columns: room for an arrow's label (at most LABEL_MAX characters) between the boxes */
+const RANK_SEP = 150;
+export const LABEL_MAX = 22;
+
+/** an arrow's label as drawn: cut at LABEL_MAX characters with an ellipsis, so it stays in the gap and off the boxes */
+export function shortLabel(label: string, max = LABEL_MAX): string {
+  return label.length <= max ? label : `${label.slice(0, max - 1).trimEnd()}…`;
+}
 
 /** a script's box id: `script:<path>` (a flow's is its id) */
 export const scriptNodeId = (path: string) => `script:${path}`;
