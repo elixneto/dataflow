@@ -138,7 +138,7 @@ function ProjectForm({ target, onClose, existing, onSave }: Props & { target: Pr
 
       <div className="grid gap-2">
         <Label id="project-icon">Icon</Label>
-        {/* 20 icons: two even rows of 10 */}
+        {/* 70 icons: seven even rows of 10 */}
         <div role="group" aria-labelledby="project-icon" className="grid grid-cols-10 gap-1">
           {iconNames.map(name => {
             const Icon = PROJECT_ICONS[name];

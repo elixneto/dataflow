@@ -76,7 +76,7 @@ function VariableForm({ target, existing, onClose, onSave }: Props & { target: V
             autoComplete="off"
             spellCheck={false}
             value={name}
-            placeholder="api-base-url"
+            placeholder="api_base_url"
             className="font-mono"
             aria-invalid={errors.name ? true : undefined}
             onChange={event => setName(event.target.value)}

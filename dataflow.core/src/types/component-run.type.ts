@@ -8,8 +8,9 @@ import type {RunProgress, RunRecord} from '#types/run-record.type';
  * times, logs, and up to SUB_RUN_SAMPLE_SIZE envelopes per port), as it goes while it runs. A record only for the
  * first MAX_SUB_RUNS calls. `fireAndForget`: the caller did not wait for it; in a real run it was queued as a run of its
  * own (status `queued`, no record here: it has its own, under its id). `envelopes`: how many it took (a batch).
+ * `parameters`: the Start parameters the call sent (secret values hidden; the others took their default).
  */
-export type SubRun = {id: string; flow: string; status: RunStatus | 'running' | 'queued'; durationMs: number; error?: string; record?: RunRecord | RunProgress; fireAndForget?: true; envelopes?: number};
+export type SubRun = {id: string; flow: string; status: RunStatus | 'running' | 'queued'; durationMs: number; error?: string; record?: RunRecord | RunProgress; fireAndForget?: true; envelopes?: number; parameters?: Record<string, string>};
 
 export type ComponentRun = {
   nodeId: string;

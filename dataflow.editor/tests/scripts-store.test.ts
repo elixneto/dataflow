@@ -62,7 +62,7 @@ test('typing saves with the revision read (at Ctrl+S here); what it exports foll
   expect(projectScripts('p1').save).toBe('unsaved');
   await flushScripts('p1');
   expect(projectScripts('p1')).toMatchObject({ save: 'saved', contents: { 'upload/types': { code: 'export function shape() {}', revision: 1 } } });
-  expect(projectScripts('p1').scripts[0]!.exports).toEqual([{ name: 'shape', typeOnly: false }]);
+  expect(projectScripts('p1').scripts[0]!.exports).toEqual([{ name: 'shape', typeOnly: false, function: true }]);
 
   // someone else saved meanwhile
   server.scripts.set('upload/types', { content: 'theirs', revision: 5 });

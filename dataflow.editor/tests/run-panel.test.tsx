@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { newFlowFile, type ComponentRun, type FlowFile } from '@dataflow/core';
 import { EnvelopeCount } from '../src/editor/component-node';
 import { mockRunRecord } from './fixtures/mock-run';
-import { DEFAULT_LOGS_FILTER, firstTab, RunDetails, RunLogs, RunPanel, type LogsFilter, type RunTab } from '../src/pages/flow-editor/run-panel';
+import { DEFAULT_LOGS_FILTER, errorParts, firstTab, RunDetails, RunLogs, RunPanel, type LogsFilter, type RunTab } from '../src/pages/flow-editor/run-panel';
 
 const flow: FlowFile = {
   ...newFlowFile('Orders', 'f1'),
@@ -422,5 +422,24 @@ describe('the runs a Flow Invoker called, in the panel', () => {
     const html = renderToStaticMarkup(<ComponentLastRun c={queued} />);
     expect(html).toMatch(/aria-label="Queued runs".*Call 1: <span[^>]*>Background<\/span> queued · 100 envelopes.*run-7/);
     expect(html).not.toContain('aria-label="Called flows"');
+  });
+});
+
+describe('a run that could not start', () => {
+  const error = 'The input does not fit Order: input.items[0].qty: missing (required). input.paidAt: expected text, got the number 1.';
+
+  test('an input that does not fit is split into its lead and one issue per place', () => {
+    expect(errorParts(error)).toEqual({
+      lead: 'The input does not fit Order',
+      issues: ['input.items[0].qty: missing (required).', 'input.paidAt: expected text, got the number 1.'],
+    });
+    expect(errorParts('The server is down')).toEqual({ lead: 'The server is down', issues: [] });
+  });
+
+  test('shows the lead in the header and the issues as a list in the panel, not over the canvas', () => {
+    const html = renderToStaticMarkup(<RunPanel record={null} error={error} running={null} onFocus={() => {}} pinned={new Set()} onPin={() => {}} onClose={() => {}} />);
+    expect(html).toContain('<span class="truncate">Could not run: The input does not fit Order</span>');
+    expect(html).toMatch(/role="alert" class="min-h-0 flex-1 overflow-auto[^"]*"/);
+    expect(html).toContain('<li class="break-all">input.paidAt: expected text, got the number 1.</li>');
   });
 });

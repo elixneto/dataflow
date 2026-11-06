@@ -239,9 +239,9 @@ export function RunPanel({
                             className="font-mono text-xs font-normal text-muted-foreground">{ms(record.durationMs)}</span>}
           </span>
                 ) : error ? (
-                    <span className="flex items-center gap-2 font-medium text-destructive">
-            <CircleX className="size-4" aria-hidden/>
-            Could not run: {error}
+                    <span className="flex min-w-0 items-center gap-2 font-medium text-destructive">
+            <CircleX className="size-4 shrink-0" aria-hidden/>
+            <span className="truncate">Could not run: {errorParts(error).lead}</span>
           </span>
                 ) : record ? (
                     <>
@@ -290,6 +290,7 @@ export function RunPanel({
                     </Button>
                 </div>
             </header>
+            {!collapsed && error && <CouldNotRun error={error}/>}
             {!collapsed && record && !error && 'error' in record && record.error && !stoppedRun(record) && (
                 // why the run failed, in sight without looking for it
                 <p role="alert"
@@ -312,6 +313,28 @@ export function RunPanel({
                 </div>
             )}
         </section>
+    );
+}
+
+/** a start error split into its lead and, for an input that does not fit its type, one issue per place */
+export function errorParts(error: string): { lead: string; issues: string[] } {
+    const at = error.search(/: input[.[]/);
+    if (at < 0) return {lead: error, issues: []};
+    return {lead: error.slice(0, at), issues: error.slice(at + 2).split(/(?<=\.)\s+(?=input[.[])/)};
+}
+
+/** why the run could not start, scrolling in the panel instead of over the canvas */
+function CouldNotRun({error}: { error: string }) {
+    const {lead, issues} = errorParts(error);
+    return (
+        <div role="alert" className="min-h-0 flex-1 overflow-auto px-3 py-2 text-sm text-destructive">
+            <p className="break-words font-medium">{issues.length ? `${lead}:` : lead}</p>
+            {issues.length > 0 && (
+                <ul className="mt-1 list-disc space-y-0.5 pl-5 font-mono text-xs">
+                    {issues.map((issue, i) => <li key={i} className="break-all">{issue}</li>)}
+                </ul>
+            )}
+        </div>
     );
 }
 
@@ -595,6 +618,10 @@ function LogList({items, match, onFocus, depth, focus}: {
     );
 }
 
+/** what a Flow Invoker's call sent as the called flow's parameters (`since="10", region="eu"`), '' for none */
+const sentParameters = (parameters?: Record<string, string>) =>
+    Object.entries(parameters ?? {}).map(([name, value]) => `${name}=${JSON.stringify(value)}`).join(', ');
+
 /** "Called Flow 2: Completed in 12 ms · 2 error lines", collapsed (open while searching); open, the called run's lines under it */
 function SubRunGroup({item, match, onFocus, depth, focus}: {
     item: Extract<LogItem, { kind: 'sub' }>;
@@ -606,6 +633,7 @@ function SubRunGroup({item, match, onFocus, depth, focus}: {
     const {sub} = item;
     const errors = errorLines(sub.record);
     const status = STATUS[sub.status]?.label ?? sub.status;
+    const sent = sentParameters(sub.parameters);
     return (
         <details className="group/sub" open={match.text ? true : undefined}>
             <summary
@@ -623,6 +651,7 @@ function SubRunGroup({item, match, onFocus, depth, focus}: {
                 <span className="min-w-0 break-words text-muted-foreground">
           Called <span
                     className="text-foreground">{sub.flow}</span>: {sub.status === 'running' ? 'running' : `${status.toLowerCase()} in ${ms(sub.durationMs)}`}
+                    {sent && <span aria-label="Parameters sent"> · with <span className="text-foreground">{sent}</span></span>}
                     {errors > 0 &&
                         <span className="text-destructive"> · {errors} error line{errors === 1 ? '' : 's'}</span>}
         </span>
@@ -649,7 +678,7 @@ const ports = (counts: Record<string, number>, name: (port: string) => string) =
 const inputName = (type: string, port: string) => inputPorts(type).find(p => p.id === port)?.label ?? port;
 
 /** a time a component worked or waited: below 10 ms the fraction is worth showing (most components take tenths of a ms) */
-const shortMs = (value?: number) => (value === undefined ? '—' : value < 10 ? `${value.toLocaleString('en-US', {maximumFractionDigits: 2})} ms` : ms(value));
+const shortMs = (value?: number) => (value === undefined ? '—' : value < 1000 ? `${value.toLocaleString('en-US', {maximumFractionDigits: 2})} ms` : ms(value));
 const bytes = (value: number) => (value < 1024 ? `${value} B` : value < 1024 ** 2 ? `${(value / 1024).toFixed(1)} KB` : `${(value / 1024 ** 2).toFixed(1)} MB`);
 
 /** the Metrics columns, with what each one measures */
@@ -702,7 +731,7 @@ export function Timeline({c, runStart, runMs}: { c: ComponentRun; runStart: numb
     const width = Math.min(share(open), 100 - left);
     const active = Math.min(c.activeTimeMs ?? 0, open);
     const waiting = Math.min(c.waitingMs ?? 0, open - active);
-    const title = `Open ${ms(open)} (from ${time(c.start)}) · active ${shortMs(active)}${c.waitingMs !== undefined ? ` · waiting ${shortMs(waiting)}` : ''}`;
+    const title = `Open ${shortMs(open)} (from ${time(c.start)}) · active ${shortMs(active)}${c.waitingMs !== undefined ? ` · waiting ${shortMs(waiting)}` : ''}`;
     return (
         <span className="relative block h-3 w-full min-w-40 overflow-hidden rounded-sm bg-muted/60" title={title}
               aria-label={title}>
@@ -798,7 +827,7 @@ function MetricsRows(props: {
                     </td>
                     <td className={cn(CELL, 'text-right font-mono')}>{c.type === 'start' && total(c.inputs) === 0 ? '—' : ports(c.inputs, port => inputName(c.type, port))}</td>
                     <td className={cn(CELL, 'text-right font-mono')}>{c.type === 'end' ? '—' : ports(c.outputs, port => (focus ? portLabel(c.type, {}, port) : portName(c.nodeId, c.type, port)))}</td>
-                    <td className={cn(CELL, 'text-right font-mono')}>{ms(c.durationMs)}</td>
+                    <td className={cn(CELL, 'text-right font-mono')}>{shortMs(c.durationMs)}</td>
                     <td className={cn(CELL, 'text-right font-mono')}>{shortMs(c.activeTimeMs)}</td>
                     <td className={cn(CELL, 'text-right font-mono', c.waitingMs === undefined && 'text-muted-foreground')}>{shortMs(c.waitingMs)}</td>
                     <td className={cn(CELL, 'text-right font-mono')}>
@@ -1162,7 +1191,7 @@ export function ComponentLastRun({c, about, portName = defaultPortName}: {
     const facts: [string, string][] = [
         ['In', String(total(c.inputs))],
         ['Out', String(total(c.outputs))],
-        ['Open', ms(c.durationMs)],
+        ['Open', shortMs(c.durationMs)],
         ['Active', shortMs(c.activeTimeMs)],
         ['Waiting', shortMs(c.waitingMs)],
         ...(c.memory && c.memory.peakEnvelopes > 0 ? [['Memory', bytes(c.memory.peakBytes)] as [string, string]] : []),
@@ -1238,7 +1267,7 @@ function QueuedRuns({c}: { c: ComponentRun }) {
                 {queued.map((sub, index) => (
                     <li key={sub.id} className="flex items-center gap-2 px-4 py-0.5">
                         <StatusIcon status="queued" className="size-3.5"/>
-                        <span>Call {index + 1}: <span className="text-foreground">{sub.flow}</span> queued{sub.envelopes !== undefined ? ` · ${sub.envelopes} envelope${sub.envelopes === 1 ? '' : 's'}` : ''}</span>
+                        <span>Call {index + 1}: <span className="text-foreground">{sub.flow}</span> queued{sub.envelopes !== undefined ? ` · ${sub.envelopes} envelope${sub.envelopes === 1 ? '' : 's'}` : ''}{sentParameters(sub.parameters) && <span aria-label="Parameters sent"> · with <span className="text-foreground">{sentParameters(sub.parameters)}</span></span>}</span>
                         <span className="text-muted-foreground" title="The run's id">{sub.id}</span>
                     </li>
                 ))}

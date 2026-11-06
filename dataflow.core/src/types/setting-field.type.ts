@@ -10,13 +10,14 @@
  * - value: an ExpressionField `{value, expression}`, a fixed value or an expression (the fx toggle; a Mapper's value);
  * - code: a longer text in a language (SQL, JavaScript, JSON);
  * - secret: the name of one of the project's secrets (the value never goes in the flow);
- * - connection: the id of one of the project's connection profiles of `connectionType`;
+ * - connection: the id of one of the project's connection profiles of `connectionType` (or DYNAMIC_CONNECTION);
  * - list: a list of items, each with the `item` settings (a Mapper's fields, a Router's cases);
  * - grid: a table, its columns (name and one of `options` as type) in `key` and its rows (text cells) in `rows`;
  * - flow: the id of another flow of the project;
+ * - script-function: a function a project script exports, as `path#name` (a Script Invoker's);
  * - script-type: a type (interface or type alias) a project script exports, as `path#Name` (a Start's input type).
  */
-export type SettingKind = 'text' | 'number' | 'select' | 'boolean' | 'expression' | 'value' | 'code' | 'secret' | 'connection' | 'list' | 'grid' | 'flow' | 'script-type';
+export type SettingKind = 'text' | 'number' | 'select' | 'boolean' | 'expression' | 'value' | 'code' | 'secret' | 'connection' | 'list' | 'grid' | 'flow' | 'script-function' | 'script-type';
 
 export type SettingField = {
   key: string;
@@ -37,6 +38,8 @@ export type SettingField = {
   connectionType?: string;
   /** connection: the profile types it can pick (default: `connectionType`); an HTTP request takes any API's */
   connectionTypes?: string[];
+  /** connection: it can also pick its profile in the run, by the name an expression gives (DYNAMIC_CONNECTION) */
+  connectionDynamic?: boolean;
   /** list: each item's settings */
   item?: SettingField[];
   /**
@@ -57,6 +60,11 @@ export type SettingField = {
    * each one a value or an expression, in place of names typed by hand
    */
   parametersOf?: string;
+  /**
+   * list (a Script Invoker's arguments): one row per parameter of the function another setting (a `script-function`)
+   * names, in its order, each one a value or an expression
+   */
+  argumentsOf?: string;
   /** shown only when another setting (of the same level) has one of these values; several: all of them */
   when?: SettingCondition | SettingCondition[];
 };

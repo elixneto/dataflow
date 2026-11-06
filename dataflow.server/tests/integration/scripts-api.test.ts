@@ -28,7 +28,7 @@ describe('scripts api', () => {
     return { status: response.status, body: (await response.json()) as Record<string, unknown> };
   };
   const scripts = async () =>
-    (await call('GET', `/projects/${projectId}/scripts`)).body as { scripts: { path: string; revision: number; exports: { name: string; typeOnly: boolean }[] }[]; folders: string[] };
+    (await call('GET', `/projects/${projectId}/scripts`)).body as { scripts: { path: string; revision: number; exports: { name: string; typeOnly: boolean; function?: true }[] }[]; folders: string[] };
   const content = async (path: string) => (await call('GET', `/projects/${projectId}/scripts/content?path=${encodeURIComponent(path)}`)).body;
 
   beforeAll(async () => {
@@ -165,5 +165,54 @@ async function process($input: IItem) {
     const refused = await call('POST', `/flows/${flowId}/runs`, { mode: 'validation' });
     expect(refused.status).toBe(400);
     expect((refused.body.error as { message: string }).message).toBe('The flow cannot run: "Shape" imports @myproject/scripts/missing/one, which does not exist.');
+  });
+
+  test("a Script Invoker calls a script's function: the run takes that script; its exports say which names are functions", async () => {
+    await call('POST', `/projects/${projectId}/scripts`, {
+      kind: 'script',
+      path: 'pricing/total',
+      content: `export const VAT = 0.2;\nexport function withVat(net: number, rate = VAT): number { return net * (1 + rate); }\n`,
+    });
+    // saved before the list said which names are functions (the migration empties it): read again once, and kept
+    await db.query(`UPDATE scripts SET exports = NULL WHERE path = 'pricing/total'`);
+    const listed = (await scripts()).scripts.find(s => s.path === 'pricing/total')!;
+    expect(listed.exports).toEqual([{ name: 'VAT', typeOnly: false }, { name: 'withVat', typeOnly: false, function: true }]);
+    const [kept] = await db.query<{ exports: unknown }>(`SELECT exports FROM scripts WHERE path = 'pricing/total'`);
+    expect(kept!.exports).toEqual(listed.exports);
+
+    const flowId = (await call('POST', `/projects/${projectId}/flows`, { name: 'Calls a function', folderId: null })).body.id as string;
+    const draft = (await call('GET', `/flows/${flowId}/draft`)).body as { flow: Record<string, unknown> };
+    await call('PUT', `/flows/${flowId}/draft`, {
+      revision: 0,
+      flow: {
+        ...draft.flow,
+        nodes: [
+          { id: 'start', type: 'start', position: { x: 0, y: 0 }, config: { acceptsInput: true, testInput: '[{"net": 10}]' } },
+          {
+            id: 'fn', type: 'script', position: { x: 160, y: 0 },
+            config: { function: 'pricing/total#withVat', arguments: [{ name: 'net', type: 'number', value: '$net', expression: true }, { name: 'rate', type: '', value: '', expression: false }] },
+          },
+          { id: 'end', type: 'end', position: { x: 320, y: 0 }, config: {} },
+        ],
+        edges: [
+          { source: 'start', sourcePort: 'out-0', target: 'fn', targetPort: 'in-0' },
+          { source: 'fn', sourcePort: 'out-0', target: 'end', targetPort: 'in-0' },
+        ],
+      },
+    });
+    expect((await call('GET', `/projects/${projectId}/scripts/usage?path=pricing`)).body).toEqual({ flows: [{ id: flowId, name: 'Calls a function' }], scripts: [] });
+
+    const id = (await call('POST', `/flows/${flowId}/runs`, { mode: 'validation' })).body.id;
+    const [queued] = await db.query<{ scripts: Record<string, string> }>('SELECT scripts FROM test_runs WHERE id = $1', [id]);
+    expect(Object.keys(queued!.scripts)).toEqual(['pricing/total']);
+    let record: RunRecord | null = null;
+    for (let i = 0; i < 200 && !record; i++) {
+      const run = await call('GET', `/runs/${id}`);
+      record = run.body.status === 'queued' || run.body.status === 'running' ? null : (run.body.record as RunRecord);
+      await new Promise(resolve => setTimeout(resolve, 20));
+    }
+
+    expect(record!.status).toBe('completed');
+    expect(record!.components.find(c => c.nodeId === 'fn')!.outputSample['out-0']).toEqual([{ net: 10, result: 12 }]);
   });
 });

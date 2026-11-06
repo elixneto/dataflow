@@ -46,7 +46,7 @@ export type { Other } from './elsewhere';`;
   expect(scriptExports(code)).toEqual([
     {name: 'IUploadInitResponse', typeOnly: true},
     {name: 'Id', typeOnly: true},
-    {name: 'uploadIdOf', typeOnly: false},
+    {name: 'uploadIdOf', typeOnly: false, function: true},
     {name: 'LIMIT', typeOnly: false},
     {name: 'Client', typeOnly: false},
     {name: 'a', typeOnly: false},

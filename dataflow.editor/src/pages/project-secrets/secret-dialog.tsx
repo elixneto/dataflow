@@ -78,7 +78,7 @@ function SecretForm({ target, existing, onClose, onSave }: Props & { target: Sec
             data-lpignore="true"
             autoFocus
             value={name}
-            placeholder="db-password"
+            placeholder="db_password"
             className="font-mono"
             aria-invalid={errors.name ? true : undefined}
             onChange={event => setName(event.target.value)}

@@ -1,4 +1,4 @@
-import {connectionUse} from '../connections/connection-access';
+import {connectionUse, dynamicConnection} from '../connections/connection-access';
 import {connectionType, type ConnectionTypeName} from '../connections/connection-types';
 import {aggregateConfig} from './aggregate';
 import {startConfig} from './start';
@@ -6,6 +6,7 @@ import {dataGridConfig} from './datagrid';
 import {distinctKeys} from './distinct';
 import {filterCondition} from './filter';
 import {flowInvokerConfig} from './flow';
+import {scriptInvokerConfig} from './script-invoker';
 import {httpConfig} from './http-request';
 import {limitConfig} from './limit';
 import {logConfig} from './log';
@@ -50,6 +51,8 @@ const collection = (database: string, name: string) => single('Collection', [dat
  * profiles nor its flows) or what its own fields say (host and database, the authentication).
  */
 function connection(type: ConnectionTypeName, config: Record<string, unknown>, nameOf?: (id: string) => string | undefined): SummarySection[] {
+  const byName = dynamicConnection(config);
+  if (byName) return single('Connection', shown(byName.value, byName.expression), byName.expression);
   const use = connectionUse(type, config);
   if ('profile' in use) return [{title: 'Connection', lines: [{value: nameOf?.(use.profile) ?? use.profile}]}];
   if (type === 'http-client' && (use.inline.auth ?? 'none') === 'none') return [];
@@ -134,6 +137,11 @@ function sections(type: string, config: Record<string, unknown>, nameOf?: (id: s
     case 'flow': {
       const {flowId, parameters} = flowInvokerConfig(config);
       return [...single('Flow', flowId ? (nameOf?.(flowId) ?? flowId) : '', false), ...section('Parameters', parameters.map(p => ({label: p.name, value: shown(p.value, p.expression), code: true})))];
+    }
+    case 'script': {
+      const {target, arguments: args} = scriptInvokerConfig(config);
+      const given = args.filter(a => a.expression ? a.value.trim() : a.value !== '');
+      return [...single('Function', target ? `${target.name} (${target.path})` : '', false), ...section('Arguments', given.map(a => ({label: a.name, value: shown(a.value, a.expression), code: true})))];
     }
     default:
       return [];

@@ -1,6 +1,8 @@
 import {withKey} from '#envelope/envelope-data';
 import {toError} from '#errors/normalize-error';
 import type {ComponentLogic} from '#types/component-logic.type';
+import type {Envelope} from '#types/envelope.type';
+import type {ExecutableNode} from '#types/executable-node.type';
 
 /**
  * TypeScript: the user writes `async function process($input)` (and as many helper functions as they want).
@@ -21,6 +23,18 @@ export function typescriptConfig(config: Record<string, unknown>) {
 }
 
 const isObject = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
+
+/**
+ * Where what a script returned goes: without Override, into the node's output key of the envelope; with it, the whole
+ * DATA (object = 1 envelope, list = 1 per item, null/undefined = none). `who` names the function in the error.
+ */
+export function scriptOutputs(doc: Envelope, returned: unknown, node: ExecutableNode, who = 'process'): Envelope[] {
+  if (!node.override) return [withKey(doc, node.outputKey || 'result', returned ?? null)];
+  if (returned === null || returned === undefined) return [];
+  const items = Array.isArray(returned) ? returned : [returned];
+  if (!items.every(isObject)) throw new TypeError(`With Override, ${who} must return an object, a list of objects or null.`);
+  return items.map(DATA => ({FLOW_CURRENT_RUN: doc.FLOW_CURRENT_RUN, PARAMETERS: doc.PARAMETERS, DATA}));
+}
 
 export const typescript: ComponentLogic = {
   type: 'typescript',
@@ -44,17 +58,9 @@ export const typescript: ComponentLogic = {
       received += 1;
       try {
         const returned = await process(doc.DATA);
-        if (!ctx.node.override) {
+        for (const out of scriptOutputs(doc, returned, ctx.node)) {
           sent += 1;
-          yield {port: 'out-0', doc: withKey(doc, ctx.node.outputKey || 'result', returned ?? null)};
-          continue;
-        }
-        if (returned === null || returned === undefined) continue;
-        const items = Array.isArray(returned) ? returned : [returned];
-        if (!items.every(isObject)) throw new TypeError('With Override, process must return an object, a list of objects or null.');
-        for (const DATA of items) {
-          sent += 1;
-          yield {port: 'out-0', doc: {FLOW_CURRENT_RUN: doc.FLOW_CURRENT_RUN, PARAMETERS: doc.PARAMETERS, DATA}};
+          yield {port: 'out-0', doc: out};
         }
       } catch (e) {
         yield {error: toError(e), doc};

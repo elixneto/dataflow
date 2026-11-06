@@ -36,6 +36,7 @@ test('every component has a summary case (none falls to the default by mistake)'
     'mongodb-delete': {collection: 'orders'},
     'http-request': {url: {value: 'https://example.com', expression: false}},
     flow: {flowId: 'f1'},
+    script: {function: 'math/ops#times'},
   };
   for (const type of Object.keys(COMPONENTS)) {
     expect(`${type}: ${componentSummary(type, withConfig[type] ?? {}).length > 0}`).toBe(`${type}: true`);

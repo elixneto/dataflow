@@ -2,7 +2,7 @@ import {timed, timedRequests} from '#engine/stopwatch';
 import {checkedCall, invokeFlow, queueFlow} from '#engine/invoke-flow';
 import {envelopeVariables} from '#envelope/expression-variables';
 import {toError} from '#errors/normalize-error';
-import {API_CONNECTION_TYPES, connectionHeaders, connectionString, resolveConnection, type ConnectionUse} from '../connections/connection-access';
+import {API_CONNECTION_TYPES, connectionHeaders, connectionString, findProfile, resolveConnection, type ConnectionUse} from '../connections/connection-access';
 import {cachedAccessTokens, oauthFingerprint, oauthTokenFromMemory} from '../connections/oauth-token-cache';
 import type {FlowExecution} from '#engine/flow-execution';
 import type {ComponentContext} from '#types/component-context.type';
@@ -183,8 +183,9 @@ export function componentContext(execution: FlowExecution, node: ExecutableNode,
           const resolved = resolveConnection('http-client', auth, options.connections, options.secrets, API_CONNECTION_TYPES);
           if (resolved.type === 'rest-oauth2' && !dryRun) {
             const fingerprint = oauthFingerprint(resolved);
-            const key = 'profile' in auth ? `profile:${auth.profile}` : `inline:${fingerprint}`;
-            const name = 'profile' in auth ? (options.connections?.[auth.profile]?.name ?? auth.profile) : 'of the HTTP Request';
+            const found = 'profile' in auth ? findProfile(options.connections, auth.profile) : undefined;
+            const key = found ? `profile:${found.id}` : `inline:${fingerprint}`;
+            const name = 'profile' in auth ? (found?.profile.name ?? auth.profile) : 'of the HTTP Request';
             const source = options.oauthTokens ?? (r => oauthTokenFromMemory(r, http, execution.control.signal));
             oauth = {
               name,

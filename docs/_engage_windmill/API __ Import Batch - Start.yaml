@@ -1,0 +1,151 @@
+summary: "API :: Import Batch - Start"
+description: ""
+value:
+  modules:
+    - id: load_public_api_variables
+      value:
+        path: f/cradle/public_api/load_variables
+        type: script
+        is_trigger: false
+        input_transforms:
+          environment:
+            expr: flow_input.environment
+            type: javascript
+          tenantPrefix:
+            expr: flow_input.tenant_prefix
+            type: javascript
+      summary: Load public API variables
+    - id: api_start_import_batch
+      value:
+        lock: >
+          {
+            "dependencies": {
+              "windmill-client": "latest"
+            }
+          }
+
+          //bun.lock
+
+          {
+            "lockfileVersion": 1,
+            "configVersion": 1,
+            "workspaces": {
+              "": {
+                "dependencies": {
+                  "windmill-client": "latest",
+                },
+              },
+            },
+            "packages": {
+              "windmill-client": ["windmill-client@1.783.0", "", {}, "sha512-SOwY/EN8IZDl2kE3BzIcNMzlA7rvMyh1TSgL4+UD6pSbYqTIvWRWrDhwDzP5pi3UJl0S43Xkx/pmNFo8KS1/GQ=="],
+            }
+          }
+        type: rawscript
+        content: >
+          import * as wmill from "windmill-client";
+
+          import { OmniproApiVariablesType } from "../../load_variables";
+
+          import { ImportBatchRequest } from "../../../interfaces/importbatch";
+
+          import { main as rest, OAuthVariablesType as oAuthType } from
+          "../../../../generic/rest/rest_api";
+
+
+          export async function main(
+            opVariables: OmniproApiVariablesType,
+            currentUserEmail: string,
+            importBatchRequest: ImportBatchRequest,
+            elementsUrl: string,
+            userHeaderName: string,
+            batchId: string
+          ) {
+            const oAuthSettings: oAuthType = {
+              url: `${await wmill.getVariable(opVariables.basePathVariable)}${await wmill.getVariable(opVariables.tokenUrlVariable)}`,
+              clientIdVariableName: opVariables.clientIdVariable,
+              clientSecretVariableName: opVariables.clientSecretVariable,
+              authorizationType: "Bearer"
+            };
+
+            const apiUrl = `${await wmill.getVariable(opVariables.basePathVariable)}/${elementsUrl}/importbatch/start/${batchId}`;
+            const headers: Headers = new Headers();
+            headers.append(userHeaderName, currentUserEmail || await wmill.getVariable(opVariables.usernameVariable));
+            headers.append("Content-Type", "application/json");
+
+            const options = {
+              method: "POST",
+              headers: headers,
+              body: JSON.stringify(importBatchRequest),
+            };
+            return rest(apiUrl, options, oAuthSettings);
+          }
+        language: bun
+        input_transforms:
+          batchId:
+            expr: flow_input.batch_id
+            type: javascript
+          elementsUrl:
+            type: static
+            value: $var:f/cradle/public_api/elements/base_url
+          opVariables:
+            expr: results.load_public_api_variables
+            type: javascript
+          userHeaderName:
+            type: static
+            value: $var:f/cradle/public_api/user_header_name
+          currentUserEmail:
+            expr: flow_input.current_user_email
+            type: javascript
+          importBatchRequest:
+            expr: flow_input.importBatchRequest
+            type: javascript
+      summary: "Engage API :: Start Import Batch"
+schema:
+  $schema: https://json-schema.org/draft/2020-12/schema
+  properties:
+    environment:
+      type: string
+      description: ""
+      default: ""
+      nullable: false
+    tenant_prefix:
+      type: string
+      description: ""
+      default: ""
+      nullable: false
+    current_user_email:
+      type: string
+      description: ""
+      default: ""
+    batch_id:
+      type: string
+      description: ""
+      default: ""
+      nullable: false
+    importBatchRequest:
+      default: null
+      required: []
+      type: object
+      description: ""
+      properties:
+        requesterEmail:
+          type: string
+          description: ""
+          default: ""
+        itemsCount:
+          type: integer
+          description: ""
+      order:
+        - requesterEmail
+        - itemsCount
+  required:
+    - environment
+    - tenant_prefix
+    - batch_id
+  type: object
+  order:
+    - environment
+    - tenant_prefix
+    - current_user_email
+    - batch_id
+    - importBatchRequest

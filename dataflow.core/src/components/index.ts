@@ -17,6 +17,7 @@ import {sort} from './sort';
 import {sqlserver} from './sqlserver';
 import {typescript} from './typescript';
 import {flowInvoker} from './flow';
+import {scriptInvoker} from './script-invoker';
 import {discard} from './discard';
 
 /** Logic of each component, by type. New component = add it here (and its visual part in the editor). */
@@ -38,6 +39,7 @@ export const COMPONENTS: Record<string, ComponentLogic> = {
   [mongodbDelete.type]: mongodbDelete,
   [httpRequest.type]: httpRequest,
   [flowInvoker.type]: flowInvoker,
+  [scriptInvoker.type]: scriptInvoker,
   [log.type]: log,
   [discard.type]: discard,
 };

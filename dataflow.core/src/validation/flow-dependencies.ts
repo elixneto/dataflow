@@ -1,6 +1,7 @@
 import type {ExecutableFlow} from '#types/executable-flow.type';
 import {MAX_FLOW_DEPTH} from '#engine/constants';
 import {componentSettings, settingVisible} from '../components/settings';
+import {scriptCodeOf} from '../components/script-invoker';
 import {scriptImports} from '../scripts/script-path';
 import {inputTypeRef} from '../scripts/type-shape';
 
@@ -129,7 +130,7 @@ export function callTree(calls: FlowCall[], root: string): {nodes: CallTreeNode[
 }
 
 /**
- * A project script a flow uses: imported by a TypeScript component's code (`import`), or named as a type by a setting
+ * A project script a flow uses: imported by a TypeScript component's code or called by a Script Invoker (`import`), or named as a type by a setting
  * (`type`: the Start's input type, any setting of kind script-type that is in use).
  */
 export type ScriptUse = {from: string; path: string; nodeId: string; nodeLabel: string; how: 'import' | 'type'};
@@ -142,7 +143,8 @@ export function flowScriptUses(flows: ExecutableFlow[]): ScriptUse[] {
       const add = (path: string, how: ScriptUse['how']) => {
         if (!uses.has(path)) uses.set(path, {from: wf.id ?? '', path, nodeId: n.id, nodeLabel: n.label, how});
       };
-      if (n.type === 'typescript' && typeof n.config.code === 'string') scriptImports(n.config.code).forEach(path => add(path, 'import'));
+      const code = scriptCodeOf(n.type, n.config);
+      if (code !== undefined) scriptImports(code).forEach(path => add(path, 'import'));
       const fields = componentSettings(n.type);
       for (const field of fields.filter(f => f.kind === 'script-type' && settingVisible(f, n.config, fields))) {
         const ref = inputTypeRef(n.config[field.key]);

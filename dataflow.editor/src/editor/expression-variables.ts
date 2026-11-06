@@ -101,12 +101,22 @@ export function rememberInputSamples(flowId: string, samples: InputSamples) {
 /** how many suggestions the list shows at once */
 const MAX_SUGGESTIONS = 50;
 
-/** the `$...` being typed right before the cursor, if any */
+/** the `$...` being typed right before the cursor, if any (a member in brackets too: `$VARIABLES['my-u`) */
 export function tokenAt(text: string, cursor: number): { start: number; text: string } | null {
-  const match = /\$[\w.]*$/.exec(text.slice(0, cursor));
+  const match = /\$[\w.\-[\]']*$/.exec(text.slice(0, cursor));
   return match ? { start: cursor - match[0].length, text: match[0] } : null;
 }
 
-/** the suggestions for what is being typed: the paths that start with it (ignoring case), not the one already typed */
-export const suggestionsFor = (variables: AvailableVariable[], token: string) =>
-  variables.filter(v => v.path.toLowerCase().startsWith(token.toLowerCase()) && v.path !== token).slice(0, MAX_SUGGESTIONS);
+/** a path with its bracketed members as dotted ones (`$VARIABLES['my-url']` → `$VARIABLES.my-url`): how one types it */
+const dotted = (path: string) => path.replace(/\['((?:[^'\\]|\\.)*)'\]/g, (_, key: string) => `.${key.replace(/\\(.)/g, '$1')}`);
+
+/**
+ * the suggestions for what is being typed: the paths that start with it (ignoring case), as written or dotted, not
+ * the one already typed
+ */
+export const suggestionsFor = (variables: AvailableVariable[], token: string) => {
+  const typed = token.toLowerCase();
+  return variables
+    .filter(v => v.path !== token && (v.path.toLowerCase().startsWith(typed) || dotted(v.path).toLowerCase().startsWith(typed)))
+    .slice(0, MAX_SUGGESTIONS);
+};

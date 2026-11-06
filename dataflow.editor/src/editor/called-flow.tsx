@@ -134,7 +134,7 @@ function CalledInput({ inputType, acceptsInput, sendEnvelope }: { inputType: str
     return (
       <Note warn={sendEnvelope}>
         {sendEnvelope
-          ? 'This flow takes no input (Accepts input is off in its Start): each call would fail. Turn off sending the DATA, or turn on Accepts input there.'
+          ? 'This flow takes no input (Accepts input is off in its Start): each call would fail. Turn off sending an input, or turn on Accepts input there.'
           : 'This flow takes no input: it starts with one empty envelope per call.'}
       </Note>
     );
@@ -155,12 +155,12 @@ function CalledInput({ inputType, acceptsInput, sendEnvelope }: { inputType: str
           )}
           <p className="text-xs text-muted-foreground">
             {sendEnvelope
-              ? 'Each envelope’s DATA is checked against it: one that does not fit goes to On error, and the flow does not run for it.'
-              : 'The DATA is not sent: the flow starts with no input.'}
+              ? 'Each envelope’s input is checked against it: one that does not fit goes to On error, and the flow does not run for it.'
+              : 'No input is sent: the flow starts with no input.'}
           </p>
         </>
       ) : (
-        <p className="text-xs text-muted-foreground">Any JSON (its Start has no input type).{sendEnvelope ? '' : ' The DATA is not sent: the flow starts with no input.'}</p>
+        <p className="text-xs text-muted-foreground">Any JSON (its Start has no input type).{sendEnvelope ? '' : ' No input is sent: the flow starts with no input.'}</p>
       )}
     </div>
   );

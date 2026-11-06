@@ -28,7 +28,8 @@ export {componentSummary, type SummaryLine, type SummarySection} from './compone
 export {mapperFields, mapper, type MapperField} from './components/mapper';
 export {filterCondition, filter} from './components/filter';
 export {lookupConfig, lookup, type LookupKey, type IfNotFound} from './components/lookup';
-export {DEFAULT_CODE, typescriptConfig, typescript} from './components/typescript';
+export {DEFAULT_CODE, scriptOutputs, typescriptConfig, typescript} from './components/typescript';
+export {invokerCode, scriptCodeOf, scriptInvoker, scriptInvokerConfig, type ScriptArgument} from './components/script-invoker';
 export {aggregate, aggregateConfig, MAX_BATCH_SIZE} from './components/aggregate';
 export {split, splitList} from './components/split';
 export {distinct, distinctKeys} from './components/distinct';

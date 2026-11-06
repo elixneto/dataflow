@@ -334,7 +334,7 @@ function SecretPicker({ id, value, invalid, secretNames, onChange, onAddSecret }
         <div className="grid gap-2 rounded-md border border-dashed p-3">
           <Input
             value={name}
-            placeholder="new-secret-name"
+            placeholder="new_secret_name"
             aria-label="New secret name"
             className="font-mono"
             autoComplete="off"

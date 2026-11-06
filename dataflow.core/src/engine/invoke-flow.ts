@@ -1,6 +1,7 @@
 import {Channel} from '../channel';
 import {MAX_SUB_RUNS, MAX_FLOW_DEPTH, SUB_RUN_SAMPLE_SIZE} from '#engine/constants';
 import {flowRunner} from '#engine/flow-runner';
+import {hiddenValues, maskText} from '#engine/component-context';
 import {inputIssues} from '../scripts/type-shape';
 import type {FlowExecution} from '#engine/flow-execution';
 import type {ComponentContext} from '#types/component-context.type';
@@ -10,6 +11,13 @@ import type {ComponentRun, SubRun} from '#types/component-run.type';
 import type {RunProgress, RunRecord} from '#types/run-record.type';
 
 type Invoke = ComponentContext['invokeFlow'];
+
+/** a call's parameters for its entry in `subRuns` (secret values hidden), when it sends any */
+function sentParameters(values: Record<string, string>, options: FlowExecution['options']): Pick<SubRun, 'parameters'> {
+  if (Object.keys(values).length === 0) return {};
+  const hidden = hiddenValues(options);
+  return {parameters: Object.fromEntries(Object.entries(values).map(([name, value]) => [name, maskText(value, hidden)]))};
+}
 
 /**
  * What both kinds of call check first: a circular call, a chain longer than MAX_FLOW_DEPTH, a flow that is not there or
@@ -51,7 +59,7 @@ export async function queueFlow(execution: FlowExecution, node: ExecutableNode, 
     flowId, parameters, ...(input !== undefined ? {input} : {}), chain, rootName: options.rootName ?? wf.flow, nodeId: node.id, nodeLabel: node.label,
   });
   const list = (execution.recordOf(node.id).subRuns ??= []);
-  if (list.length < MAX_SUB_RUNS) list.push({id: queued.id, flow: child.flow, status: 'queued', durationMs: 0, fireAndForget: true, ...(Array.isArray(input) ? {envelopes: input.length} : {})});
+  if (list.length < MAX_SUB_RUNS) list.push({id: queued.id, flow: child.flow, status: 'queued', durationMs: 0, fireAndForget: true, ...sentParameters(parameters, options), ...(Array.isArray(input) ? {envelopes: input.length} : {})});
   return queued;
 }
 
@@ -74,7 +82,7 @@ export function invokeFlow(execution: FlowExecution, node: ExecutableNode, flowI
   const list = (execution.recordOf(node.id).subRuns ??= []);
   // the call's entry in the caller's record, live while the child runs; past the cap, only the child runs
   const entry: SubRun | undefined = list.length < MAX_SUB_RUNS
-    ? {id, flow: child.flow, status: 'running', durationMs: 0, ...(fireAndForget ? {fireAndForget: true as const, ...(Array.isArray(input) ? {envelopes: input.length} : {})} : {})}
+    ? {id, flow: child.flow, status: 'running', durationMs: 0, ...sentParameters(values, options), ...(fireAndForget ? {fireAndForget: true as const, ...(Array.isArray(input) ? {envelopes: input.length} : {})} : {})}
     : undefined;
   if (entry) list.push(entry);
   const result = flowRunner(child, {

@@ -1,16 +1,24 @@
+import type {ExpressionField} from '#types/expression-field.type';
 import type {SettingField} from '#types/setting-field.type';
 import {connectionType, visibleFields, type ConnectionField, type ConnectionTypeName} from './connection-types';
 
 /*
  * How a component that talks to an outside system (a database, an API) gets in. The user picks one: one of the
  * project's connection profiles (its id in `config.connection`), or no profile and the profile type's fields filled in
- * the component itself (inline, in its own config). A sensitive value is never in the flow either way: it is a
+ * the component itself (inline, in its own config). An HTTP request may also pick its profile in the run, by the name
+ * an expression gives (DYNAMIC_CONNECTION). A sensitive value is never in the flow either way: it is a
  * `secret` field naming one of the project's secrets. The runner turns both into the same thing: a connection string,
  * or the headers of an API's authentication.
  */
 
 /** the key of a component's config holding the chosen profile's id ('' or missing: no profile, the inline fields apply) */
 export const CONNECTION_KEY = 'connection';
+
+/** `config.connection` of a component that picks its profile in the run, by the name `config.connectionName` gives */
+export const DYNAMIC_CONNECTION = '$dynamic';
+
+/** the key of the value (an expression on the envelope) naming the profile of a DYNAMIC_CONNECTION */
+export const CONNECTION_NAME_KEY = 'connectionName';
 
 /** the fields of each profile type a component fills in when it uses no profile */
 export const INLINE_FIELDS: Partial<Record<ConnectionTypeName, string[]>> = {
@@ -74,8 +82,22 @@ const toSetting = (f: ConnectionField): SettingField => ({
  * a component's settings for its connection: the profile picker (profiles of the `accepted` types), then the inline
  * fields of `type` (shown when no profile is picked)
  */
-export function connectionSettings(type: ConnectionTypeName, accepted: ConnectionTypeName[] = [type], label = 'Connection'): SettingField[] {
-  return [{key: CONNECTION_KEY, label, kind: 'connection', connectionType: type, connectionTypes: accepted, default: ''}, ...inlineFields(type).map(toSetting)];
+export function connectionSettings(type: ConnectionTypeName, accepted: ConnectionTypeName[] = [type], label = 'Connection', dynamic = false): SettingField[] {
+  const picker: SettingField = {key: CONNECTION_KEY, label, kind: 'connection', connectionType: type, connectionTypes: accepted, default: '', ...(dynamic ? {connectionDynamic: true} : {})};
+  const byName: SettingField[] = dynamic
+    ? [{
+      key: CONNECTION_NAME_KEY, label: 'Connection name', kind: 'value', required: true, default: {value: '', expression: true},
+      placeholder: '`[${$env}] My API`', when: {key: CONNECTION_KEY, values: [DYNAMIC_CONNECTION]},
+    }]
+    : [];
+  return [picker, ...byName, ...inlineFields(type).map(toSetting)];
+}
+
+/** the value naming the profile when the config picks it in the run (DYNAMIC_CONNECTION), undefined otherwise */
+export function dynamicConnection(config: Record<string, unknown>): ExpressionField | undefined {
+  if (config[CONNECTION_KEY] !== DYNAMIC_CONNECTION) return undefined;
+  const f = config[CONNECTION_NAME_KEY] as Partial<ExpressionField> | undefined;
+  return {value: typeof f?.value === 'string' ? f.value : '', expression: typeof f?.expression === 'boolean' ? f.expression : true};
 }
 
 /** the connection a component's config asks for: a profile's id, or its inline fields (unset ones take their default) */
@@ -90,6 +112,8 @@ export const usesProfile = (type: ConnectionTypeName, config: Record<string, unk
 
 /** the config's connection issue: none with a profile; without one, the inline fields that are required and empty */
 export function connectionIssues(type: ConnectionTypeName, config: Record<string, unknown>): string[] {
+  const dynamic = dynamicConnection(config);
+  if (dynamic) return dynamic.value.trim() ? [] : ['has no connection name.'];
   const use = connectionUse(type, config);
   if ('profile' in use) return [];
   const missing = applying(inlineFields(type), use.inline).filter(f => f.required && !use.inline[f.key]);
@@ -97,9 +121,18 @@ export function connectionIssues(type: ConnectionTypeName, config: Record<string
   return [`has no connection (choose one, or fill in ${missing.map(f => f.label.toLowerCase()).join(', ')}).`];
 }
 
+/** a profile by its id or, failing that, by its name (unique in the project, whatever the case) */
+export function findProfile(profiles: Record<string, ConnectionProfileData> | undefined, ref: string): {id: string; profile: ConnectionProfileData} | undefined {
+  if (!profiles) return undefined;
+  if (profiles[ref]) return {id: ref, profile: profiles[ref]};
+  const name = ref.trim().toLowerCase();
+  const found = Object.entries(profiles).find(([, p]) => p.name?.trim().toLowerCase() === name);
+  return found && {id: found[0], profile: found[1]};
+}
+
 /**
- * The connection ready to use: the profile (by id, of one of the `accepted` types: its own type then) or the inline
- * fields (of `type`), and the values of their secret fields. Throws when the profile or a secret is not in this runner.
+ * The connection ready to use: the profile (by id or name, of one of the `accepted` types: its own type then) or the
+ * inline fields (of `type`), and the values of their secret fields. Throws when the profile or a secret is not in this runner.
  */
 export function resolveConnection(
   type: ConnectionTypeName,
@@ -111,7 +144,7 @@ export function resolveConnection(
   let config: Record<string, string>;
   let fields: ConnectionField[];
   if ('profile' in use) {
-    const profile = profiles?.[use.profile];
+    const profile = findProfile(profiles, use.profile)?.profile;
     if (!profile) throw new Error(`The connection "${use.profile}" does not exist in this runner.`);
     if (!accepted.includes(profile.type as ConnectionTypeName)) {
       throw new Error(`The connection "${profile.name ?? use.profile}" is not a ${accepted.map(t => connectionType(t).label).join(' or ')} connection.`);

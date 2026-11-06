@@ -1,7 +1,7 @@
 import type {AvailableVariable} from '#types/available-variable.type';
 import type {FlowParameter} from '#types/flow-parameter.type';
 import type {RunRecord} from '#types/run-record.type';
-import {dataVariables, mergeSamples} from './available-variables';
+import {dataVariables, memberPath, mergeSamples} from './available-variables';
 
 /*
  * What an expression can use at a component, for the editor's suggestions: the DATA that reached it in the runs so far
@@ -35,16 +35,17 @@ const RUN_FIELDS: AvailableVariable[] = [
   {path: '$FLOW_CURRENT_RUN.startedAt', type: 'string'},
 ];
 
-/** the system variables: the flow's parameters (from its Start), the project's variables and secrets (names), the run */
+/**
+ * the system variables: the flow's parameters (from its Start), the project's variables and secrets (names), the run;
+ * a group with nothing in it is left out
+ */
 export function systemVariables(parameters: FlowParameter[], variables: {name: string; value?: string}[], secrets: string[]): AvailableVariable[] {
+  const group = (root: string, members: AvailableVariable[]): AvailableVariable[] => (members.length ? [{path: root, type: 'object'}, ...members] : []);
   return [
-    {path: '$PARAMETERS', type: 'object'},
-    ...parameters.filter(p => p.name).map(p => ({path: `$PARAMETERS.${p.name}`, type: p.type === 'text' ? 'string' : p.type, ...(p.default ? {example: p.type === 'text' ? JSON.stringify(p.default) : p.default} : {})})),
-    {path: '$VARIABLES', type: 'object'},
-    ...variables.map(v => ({path: `$VARIABLES.${v.name}`, type: 'string', ...(v.value !== undefined ? {example: JSON.stringify(v.value).slice(0, 40)} : {})})),
-    {path: '$SECRETS', type: 'object'},
+    ...group('$PARAMETERS', parameters.filter(p => p.name).map(p => ({path: memberPath('$PARAMETERS', p.name), type: p.type === 'text' ? 'string' : p.type, ...(p.default ? {example: p.type === 'text' ? JSON.stringify(p.default) : p.default} : {})}))),
+    ...group('$VARIABLES', variables.map(v => ({path: memberPath('$VARIABLES', v.name), type: 'string', ...(v.value !== undefined ? {example: JSON.stringify(v.value).slice(0, 40)} : {})}))),
     // a secret: its name only, never a sample of its value
-    ...secrets.map(name => ({path: `$SECRETS.${name}`, type: 'secret'})),
+    ...group('$SECRETS', secrets.map(name => ({path: memberPath('$SECRETS', name), type: 'secret'}))),
     ...RUN_FIELDS,
   ];
 }

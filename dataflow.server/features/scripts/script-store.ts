@@ -1,4 +1,4 @@
-import { insideScriptFolder, movedScriptPath, normalizeScriptPath, scriptExports, scriptImport, scriptImports, scriptPathIssue, type ScriptExport } from '@dataflow/core';
+import { insideScriptFolder, movedScriptPath, normalizeScriptPath, scriptCodeOf, scriptExports, scriptImport, scriptImports, scriptPathIssue, type ScriptExport } from '@dataflow/core';
 import type { Database } from '#shared/database/database';
 
 /*
@@ -16,6 +16,13 @@ export async function listScripts(db: Database, orgId: string, projectId: string
     `SELECT path, revision, exports, updated_by AS "updatedBy", updated_at AS "updatedAt" FROM scripts WHERE org_id = $1 AND project_id = $2 ORDER BY path`,
     [orgId, projectId],
   );
+  // a script saved before the list kept what it exports the way it does now (exports null, a migration): read once more
+  for (const script of scripts.filter(s => s.exports === null)) {
+    const exports = exportsOf((await getScript(db, orgId, projectId, script.path))?.content ?? '');
+    await db.query('UPDATE scripts SET exports = $4::text::jsonb WHERE org_id = $1 AND project_id = $2 AND path = $3 AND exports IS NULL', [orgId, projectId, script.path, exports]);
+    script.exports = JSON.parse(exports) as ScriptExport[];
+  }
+
   const folders = await db.query<{ path: string }>('SELECT path FROM script_folders WHERE org_id = $1 AND project_id = $2 ORDER BY path', [orgId, projectId]);
   return { scripts, folders: folders.map(f => f.path) };
 }
@@ -105,7 +112,7 @@ export async function newPathIssue(db: Database, orgId: string, projectId: strin
   return null;
 }
 
-/** who imports a script or anything in a folder: the project's flows (their TypeScript code) and other scripts */
+/** who imports a script or anything in a folder: the project's flows (their TypeScript code, their Script Invokers) and other scripts */
 export async function scriptUsage(db: Database, orgId: string, projectId: string, path: string): Promise<{ flows: { id: string; name: string }[]; scripts: string[] }> {
   const imports = (code: string) => scriptImports(code).some(p => insideScriptFolder(p, path));
   const scripts = await db.query<{ path: string; content: string }>('SELECT path, content FROM scripts WHERE org_id = $1 AND project_id = $2', [orgId, projectId]);
@@ -114,9 +121,8 @@ export async function scriptUsage(db: Database, orgId: string, projectId: string
     [orgId, projectId],
   );
   const codeOf = (draft: unknown) =>
-    ((draft as { flow?: { nodes?: { type: string; config?: { code?: unknown } }[] } } | null)?.flow?.nodes ?? [])
-      .filter(n => n.type === 'typescript')
-      .map(n => String(n.config?.code ?? ''))
+    ((draft as { flow?: { nodes?: { type: string; config?: Record<string, unknown> }[] } } | null)?.flow?.nodes ?? [])
+      .map(n => scriptCodeOf(n.type, n.config ?? {}) ?? '')
       .join('\n');
   return {
     flows: flows.filter(f => imports(codeOf(f.draft))).map(f => ({ id: f.id, name: f.name })),

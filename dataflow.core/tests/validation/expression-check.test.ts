@@ -14,6 +14,7 @@ test('syntax: compiles without running', () => {
 test('used and unknown variables ignore strings and use only the root', () => {
   expect(usedVariables('$customer.name + " $notVar " + `$also` + \'$too\' + $PARAMETERS.x')).toEqual(['$customer', '$PARAMETERS']);
   expect(unknownVariables('$customer.name + $order.total', ['$customer', '$customer.name', '$PARAMETERS.limit'])).toEqual(['$order']);
+  expect(unknownVariables("$VARIABLES['my-url']", ["$VARIABLES['my-url']"])).toEqual([]);
 });
 
 test('variables from samples: merged keys, nested paths, type and example', () => {

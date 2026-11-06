@@ -1,4 +1,4 @@
-import {API_CONNECTION_TYPES, connectionIssues, connectionSettings, connectionUse} from '../connections/connection-access';
+import {API_CONNECTION_TYPES, connectionIssues, connectionSettings, connectionUse, dynamicConnection, type ConnectionUse} from '../connections/connection-access';
 import {RESPONSE_HEADER_MODES, responseHeaders, type ResponseHeaderMode} from '../connections/sensitive-headers';
 import {withKey} from '#envelope/envelope-data';
 import {toError} from '#errors/normalize-error';
@@ -8,7 +8,7 @@ import type {ExpressionField} from '#types/expression-field.type';
 import type {HttpResponse} from '#types/http-response.type';
 
 /**
- * HTTP Request: one request per envelope (the authentication from a project's API connection, or set in the component) (method, URL, query params, headers and body are expressions on it; $SECRETS
+ * HTTP Request: one request per envelope (the authentication from a project's API connection, picked or named by an expression on each envelope, or set in the component) (method, URL, query params, headers and body are expressions on it; $SECRETS
  * works, e.g. `'Bearer ' + $SECRETS.TOKEN`), and the envelope goes on with `{status, headers, body}` in its output key
  * (the body parsed when the response is JSON). With "Fail on non-2xx", an error status is an error of the envelope.
  * A GET only reads; POST, PUT, PATCH and DELETE write, so in a test run they send nothing and the envelope goes on with
@@ -68,7 +68,7 @@ export const httpRequest: ComponentLogic = {
   defaultOutputKey: 'response',
   sideEffects: httpWrites,
   settings: [
-    ...connectionSettings('http-client', API_CONNECTION_TYPES),
+    ...connectionSettings('http-client', API_CONNECTION_TYPES, 'Connection', true),
     {key: 'method', label: 'Method', kind: 'select', default: 'GET', options: HTTP_METHODS.map(m => ({value: m, label: m}))},
     {key: 'url', label: 'URL', kind: 'value', required: true, default: {value: '', expression: false}, placeholder: 'https://api.example.com/orders'},
     {
@@ -114,7 +114,8 @@ export const httpRequest: ComponentLogic = {
 
   async* execute(inputs, config, ctx) {
     const {method, url, query, headers, body, timeoutS, concurrency, failOnError, responseHeaders: headerMode} = httpConfig(config);
-    const auth = connectionUse('http-client', config);
+    const fixedAuth = connectionUse('http-client', config);
+    const byName = dynamicConnection(config);
     const key = ctx.node.outputKey || 'response';
     const counts = {ok: 0, client: 0, server: 0, other: 0, errors: 0, notSent: 0};
     const t0 = performance.now();
@@ -123,6 +124,12 @@ export const httpRequest: ComponentLogic = {
     const send = async (doc: Envelope): Promise<Outcome> => {
       try {
         const value = (f: ExpressionField) => ctx.fieldValue(f, doc);
+        let auth: ConnectionUse = fixedAuth;
+        if (byName) {
+          const name = String(value(byName) ?? '').trim();
+          if (!name) throw new Error('The connection name is empty.');
+          auth = {profile: name};
+        }
         let target = String(value(url) ?? '').trim();
         if (!/^https?:\/\//i.test(target)) throw new Error(`The URL "${ctx.mask(target)}" does not start with http:// or https://.`);
         const params = query.filter(p => p.name?.trim()).map(p => {

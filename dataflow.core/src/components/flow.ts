@@ -5,12 +5,12 @@ import type {ComponentLogic} from '#types/component-logic.type';
 import type {ComponentContext} from '#types/component-context.type';
 import type {ComponentOutput} from '#types/component-output.type';
 import type {Envelope} from '#types/envelope.type';
-import type {EnvelopeData} from '#types/envelope-data.type';
 
 /**
  * Flow Invoker (in SnapLogic, Pipeline Execute): for each incoming envelope, runs another flow, passing the
- * parameters of its Start (text or expression on the envelope) and, if checked, the envelope's DATA as input.
- * The DATA sent is checked against the other flow's Start type first (ExecutableFlow.inputType): one that does not fit
+ * parameters of its Start (text or expression on the envelope) and, if "Send an input" is checked, an input: the
+ * envelope's DATA or an expression on it (`{__requester__: $__requester__, count: $assets.length}`: only what the other
+ * flow needs). The input sent is checked against the other flow's Start type first (ExecutableFlow.inputType): one that does not fit
  * is an error of the envelope, and the flow does not run. Circular calls and more than 10 levels are blocked. Two ways:
  *
  * - wait (default): each envelope that reaches the other flow's End goes out of here with its DATA merged into the
@@ -18,7 +18,8 @@ import type {EnvelopeData} from '#types/envelope-data.type';
  *   and follows the "On error" policy: with Divert, the error port can call a third flow.
  * - fire and forget: the envelope goes on as it came, at once, and joins a batch (Batch size, those with the same
  *   parameter values together); each full batch, and what is left at the end, is one run of the other flow: with "Send
- *   the envelope's DATA", the batch is its input (its Start: one envelope per item); without it, the run starts with no
+ *   an input", the envelopes' inputs are its input (its Start: one envelope per item; an input that is a list adds its
+ *   items); without it, the run starts with no
  *   input (once per batch). In a real run that run is queued as a run of its own (a supervisor runs it later, its
  *   status and errors its own; its parent is this run). In a test run nothing is queued: it runs beside this one,
  *   without holding the envelopes, and shows under the Flow Invoker as a called run. On error is always Throw: the
@@ -30,16 +31,21 @@ export type InvokerParameter = ExpressionField & {name: string};
 
 export type InvokerCall = 'wait' | 'fire-and-forget';
 
+export type InvokerInputSource = 'data' | 'expression';
+
 /** envelopes per fire and forget run, by default; at most MAX_BATCH_SIZE */
 export const DEFAULT_BATCH_SIZE = 100;
 export const MAX_BATCH_SIZE = 10_000;
 
 export function flowInvokerConfig(config: Record<string, unknown>) {
   const size = Number(config.batchSize);
+  const input = config.input as ExpressionField | undefined;
   return {
     flowId: typeof config.flowId === 'string' ? config.flowId : '',
     parameters: Array.isArray(config.parameters) ? (config.parameters as InvokerParameter[]) : [],
     sendEnvelope: config.sendEnvelope === true,
+    inputSource: (config.inputSource === 'expression' ? 'expression' : 'data') as InvokerInputSource,
+    input: {value: typeof input?.value === 'string' ? input.value : '', expression: true} as ExpressionField,
     call: (config.call === 'fire-and-forget' ? 'fire-and-forget' : 'wait') as InvokerCall,
     batchSize: Number.isInteger(size) && size >= 1 ? Math.min(size, MAX_BATCH_SIZE) : DEFAULT_BATCH_SIZE,
   };
@@ -54,6 +60,11 @@ function parameterValues(parameters: InvokerParameter[], doc: Envelope, ctx: Com
     if (value !== undefined && value !== null) values[p.name] = typeof value === 'object' ? JSON.stringify(value) : String(value);
   }
   return values;
+}
+
+/** what a call sends as the other flow's input: nothing, the envelope's DATA or the expression's value on it */
+function inputOf({sendEnvelope, inputSource, input}: ReturnType<typeof flowInvokerConfig>, ctx: ComponentContext) {
+  return (doc: Envelope): unknown => (!sendEnvelope ? undefined : inputSource === 'expression' ? ctx.fieldValue(input, doc) : doc.DATA);
 }
 
 export const flowInvoker: ComponentLogic = {
@@ -81,12 +92,23 @@ export const flowInvoker: ComponentLogic = {
         {key: 'value', label: 'Value', kind: 'value', spread: true, default: {value: '', expression: false}},
       ],
     },
-    {key: 'sendEnvelope', label: "Send the envelope's DATA as the flow's input", kind: 'boolean'},
+    {key: 'sendEnvelope', label: 'Send an input to the flow', kind: 'boolean'},
+    {
+      key: 'inputSource', label: 'Input', kind: 'select', default: 'data',
+      options: [{value: 'data', label: "The envelope's DATA"}, {value: 'expression', label: 'An expression'}],
+      when: {key: 'sendEnvelope', values: [true]},
+    },
+    {
+      key: 'input', label: 'Input expression', kind: 'value', default: {value: '', expression: true},
+      placeholder: '{id: $id, total: $price * $quantity}',
+      when: [{key: 'sendEnvelope', values: [true]}, {key: 'inputSource', values: ['expression']}],
+    },
   ],
 
   validate(config) {
-    const {flowId, call} = flowInvokerConfig(config);
+    const {flowId, call, sendEnvelope, inputSource, input} = flowInvokerConfig(config);
     if (!flowId) return ['has no flow selected.'];
+    if (sendEnvelope && inputSource === 'expression' && !input.value.trim()) return ['has no input expression.'];
     return call === 'fire-and-forget' && (config.onError === 'continue' || config.onError === 'divert')
       ? ['fires and forgets: its On error is always Throw (the calls answer nothing to continue or divert with).']
       : [];
@@ -95,9 +117,11 @@ export const flowInvoker: ComponentLogic = {
   fixedOnError: config => (flowInvokerConfig(config).call === 'fire-and-forget' ? 'throw' : undefined),
 
   async* execute(inputs, config, ctx) {
-    const {flowId, parameters, sendEnvelope, call: how, batchSize} = flowInvokerConfig(config);
+    const settings = flowInvokerConfig(config);
+    const {flowId, parameters, call: how, batchSize} = settings;
+    const input = inputOf(settings, ctx);
     if (how === 'fire-and-forget') {
-      yield* fireAndForget(inputs['in-0'] ?? [], {flowId, parameters, sendEnvelope, batchSize}, ctx);
+      yield* fireAndForget(inputs['in-0'] ?? [], {flowId, parameters, input, sends: settings.sendEnvelope, batchSize}, ctx);
       return;
     }
     let calls = 0;
@@ -106,7 +130,7 @@ export const flowInvoker: ComponentLogic = {
       calls += 1;
       let call: ReturnType<typeof ctx.invokeFlow> | undefined;
       try {
-        call = ctx.invokeFlow(flowId, {parameters: parameterValues(parameters, doc, ctx), input: sendEnvelope ? doc.DATA : undefined});
+        call = ctx.invokeFlow(flowId, {parameters: parameterValues(parameters, doc, ctx), input: input(doc)});
         let thisCall = 0;
         // waiting for the other flow is not this one's active time
         for await (const data of ctx.waitEach(call.envelopes)) {
@@ -132,7 +156,7 @@ export const flowInvoker: ComponentLogic = {
 
 /**
  * Fire and forget: each envelope goes on as it came and joins the batch of its parameter values. A full batch, and
- * each one left at the end, is one call (the batch its input, with Send the DATA): a real run queues it as a run of its
+ * each one left at the end, is one call (the batch its input, with Send an input): a real run queues it as a run of its
  * own; a test run runs it beside this one (its End's envelopes go nowhere) and waits for them all at the end, so its
  * record shows them. A called run that fails is its own failure, not this run's; a batch that cannot be queued is an
  * error line of this component (the runner logs it too) and the others go on.
@@ -141,8 +165,8 @@ export const flowInvoker: ComponentLogic = {
  * batches stop closing on their size and take the rest of the envelopes (none is lost; a warning says so). Parameter
  * values that need a new batch past the limit stop the run (On error is Throw).
  */
-async function* fireAndForget(source: AsyncIterable<Envelope>, {flowId, parameters, sendEnvelope, batchSize}: {flowId: string; parameters: InvokerParameter[]; sendEnvelope: boolean; batchSize: number}, ctx: ComponentContext): AsyncGenerator<ComponentOutput> {
-  type Batch = {parameters: Record<string, string>; items: EnvelopeData[]; count: number};
+async function* fireAndForget(source: AsyncIterable<Envelope>, {flowId, parameters, input, sends, batchSize}: {flowId: string; parameters: InvokerParameter[]; input: (doc: Envelope) => unknown; sends: boolean; batchSize: number}, ctx: ComponentContext): AsyncGenerator<ComponentOutput> {
+  type Batch = {parameters: Record<string, string>; items: unknown[]; count: number};
   const batches = new Map<string, Batch>();
   const beside: Promise<unknown>[] = [];
   const limit = ctx.maxFireAndForgetRuns ?? Number.POSITIVE_INFINITY;
@@ -151,7 +175,7 @@ async function* fireAndForget(source: AsyncIterable<Envelope>, {flowId, paramete
   let lost = 0;
   let capped = false;
   const fire = async (batch: Batch) => {
-    const call = {parameters: batch.parameters, input: sendEnvelope ? batch.items : undefined};
+    const call = {parameters: batch.parameters, input: sends ? batch.items : undefined};
     try {
       if (ctx.run.mode === 'execution') {
         await ctx.queueFlow(flowId, call);
@@ -172,8 +196,9 @@ async function* fireAndForget(source: AsyncIterable<Envelope>, {flowId, paramete
 
   for await (const doc of source) {
     const values = parameterValues(parameters, doc, ctx);
+    const data = input(doc);
     // On error is Throw: an envelope whose call would not start stops the run here
-    ctx.checkFlowCall(flowId, sendEnvelope ? doc.DATA : undefined);
+    ctx.checkFlowCall(flowId, data);
     const key = JSON.stringify(Object.entries(values).sort(([a], [b]) => a.localeCompare(b)));
     let batch = batches.get(key);
     if (!batch) {
@@ -188,7 +213,7 @@ async function* fireAndForget(source: AsyncIterable<Envelope>, {flowId, paramete
       capped = true;
       ctx.log('warning', `Limit of ${limit} fire and forget runs reached (4 × the server's workers): the last batches take more than ${batchSize} envelopes each.`);
     }
-    if (sendEnvelope) batch.items.push(doc.DATA);
+    if (sends) batch.items.push(...(Array.isArray(data) ? data : [data]));
     batch.count += 1;
     yield {port: 'out-0', doc};
     // firing it would leave no room for the next batch of these values: it stays open and grows instead

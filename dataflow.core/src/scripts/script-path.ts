@@ -60,8 +60,8 @@ export const insideScriptFolder = (path: string, folder: string) => path === fol
 /** `path` moved from the folder (or script) `from` to `to` (a rename or a move); unchanged when it is not inside */
 export const movedScriptPath = (path: string, from: string, to: string) => (insideScriptFolder(path, from) ? `${to}${path.slice(from.length)}` : path);
 
-/** a name a script exports; `typeOnly`: an interface or a type (imported with `import type`) */
-export type ScriptExport = {name: string; typeOnly: boolean};
+/** a name a script exports; `typeOnly`: an interface or a type (imported with `import type`); `function`: a function declaration */
+export type ScriptExport = {name: string; typeOnly: boolean; function?: true};
 
 /** The names a script exports (`export interface X`, `export function y`...): what the editor offers to import. */
 export function scriptExports(code: string): ScriptExport[] {
@@ -69,7 +69,7 @@ export function scriptExports(code: string): ScriptExport[] {
   const pattern = /^[ \t]*export[ \t]+(?:declare[ \t]+)?(interface|type|(?:async[ \t]+)?function\*?|const|let|var|(?:abstract[ \t]+)?class|enum)[ \t]+([A-Za-z_$][\w$]*)/gm;
   for (const match of code.matchAll(pattern)) {
     const name = match[2]!;
-    if (!found.has(name)) found.set(name, {name, typeOnly: match[1] === 'interface' || match[1] === 'type'});
+    if (!found.has(name)) found.set(name, {name, typeOnly: match[1] === 'interface' || match[1] === 'type', ...(/function/.test(match[1]!) ? {function: true as const} : {})});
   }
   // export { a, b as c } (not re-exports from elsewhere: those are another script's)
   for (const match of code.matchAll(/^[ \t]*export[ \t]+(type[ \t]+)?\{([^}]*)\}(?![ \t]*from)/gm)) {

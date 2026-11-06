@@ -522,3 +522,52 @@ export function shapeText(shape: TypeShape, depth = 0): string {
     case 'json': return 'unknown';
   }
 }
+
+/** a parameter of a function a script exports: its name (`arg2` for a destructured one), its type as written ('' when it has none) */
+export type FunctionParam = {name: string; type: string; optional: boolean; rest?: true};
+
+/** a function a project script exports (`export [async] function name(...)`): what a Script Invoker calls */
+export type ExportedFunction = {name: string; params: FunctionParam[]};
+
+/** a parameter's text split at its top-level `:` (the type) and `=` (a default; not an arrow's `=>`) */
+function paramParts(text: string): {head: string; type: string; hasDefault: boolean} {
+  let colon = -1;
+  let equals = -1;
+  for (let i = 0; i < text.length && equals < 0; i++) {
+    const c = text[i]!;
+    if (c === '"' || c === "'" || c === '`') i = text.indexOf(c, i + 1) < 0 ? text.length : text.indexOf(c, i + 1);
+    else if ('{<(['.includes(c)) i = closing(text, i);
+    else if (c === ':' && colon < 0) colon = i;
+    else if (c === '=' && text[i + 1] !== '>' && text[i + 1] !== '=') equals = i;
+  }
+  const headEnd = colon >= 0 ? colon : equals >= 0 ? equals : text.length;
+  return {
+    head: text.slice(0, headEnd).trim(),
+    type: colon >= 0 ? text.slice(colon + 1, equals >= 0 ? equals : text.length).trim() : '',
+    hasDefault: equals >= 0,
+  };
+}
+
+/** The functions a script exports and their parameters, in order (an overloaded one: its last signature). */
+export function scriptFunctions(code: string): ExportedFunction[] {
+  const text = withoutComments(code);
+  const found = new Map<string, ExportedFunction>();
+  for (const match of text.matchAll(/^[ \t]*export[ \t]+(?:async[ \t]+)?function\*?[ \t]*([A-Za-z_$][\w$]*)\s*/gm)) {
+    let at = match.index + match[0].length;
+    if (text[at] === '<') at = closing(text, at) + 1;
+    while (/\s/.test(text[at] ?? '')) at++;
+    if (text[at] !== '(') continue;
+    const params = splitTop(text.slice(at + 1, closing(text, at)), ',')
+      .map(part => {
+        const rest = part.startsWith('...');
+        const {head, type, hasDefault} = paramParts(rest ? part.slice(3) : part);
+        const optional = head.endsWith('?');
+        const name = optional ? head.slice(0, -1).trim() : head;
+        return {name, type, optional: optional || hasDefault || rest, ...(rest ? {rest: true as const} : {})};
+      })
+      .filter(p => p.name !== 'this')
+      .map((p, i) => (IDENTIFIER.test(p.name) ? p : {...p, name: `arg${i + 1}`}));
+    found.set(match[1]!, {name: match[1]!, params});
+  }
+  return [...found.values()];
+}

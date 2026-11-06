@@ -40,11 +40,18 @@ function example(value: unknown): string | undefined {
   return text.length > MAX_EXAMPLE ? `${text.slice(0, MAX_EXAMPLE - 1)}…` : text;
 }
 
+/**
+ * `base` then its member `key` as an expression reads it: `.key` for a name JavaScript accepts there, `['key']`
+ * otherwise (a hyphen, a space: `$VARIABLES.my-url` would be a subtraction)
+ */
+export const memberPath = (base: string, key: string) =>
+  /^[A-Za-z_$][\w$]*$/.test(key) ? `${base}.${key}` : `${base}['${key.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}']`;
+
 /** The variable at `path` and, for an object, the fields inside it (up to MAX_DEPTH levels). */
 export function variablesOf(path: string, value: unknown, depth = 1): AvailableVariable[] {
   const variable: AvailableVariable = {path, type: typeOf(value), example: example(value)};
   if (!isObject(value) || depth >= MAX_DEPTH) return [variable];
-  return [variable, ...Object.entries(value).flatMap(([key, inner]) => variablesOf(`${path}.${key}`, inner, depth + 1))];
+  return [variable, ...Object.entries(value).flatMap(([key, inner]) => variablesOf(memberPath(path, key), inner, depth + 1))];
 }
 
 /** Variables of the DATA keys ($key, $key.field...) from a sample shape. */

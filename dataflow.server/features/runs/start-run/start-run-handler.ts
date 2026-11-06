@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { inputIssues, inputTypeRef, isFolderVisible, planRunFrom, scriptTypeShape, START, startConfig, toExecutableFlow, validateFlowFile, type FlowFile, type RunFromPlan, type RunRecord } from '@dataflow/core';
+import { inputIssues, inputTypeRef, isFolderVisible, planRunFrom, scriptCodeOf, scriptTypeShape, START, startConfig, toExecutableFlow, validateFlowFile, type FlowFile, type RunFromPlan, type RunRecord } from '@dataflow/core';
 import type { Database } from '#shared/database/database';
 import { FlowRepository, loadTree } from '#features/folders/project-tree';
 import { readDraft } from '#features/flows/flow-draft';
@@ -132,12 +132,14 @@ export class StartRunHandler implements UseCaseHandler<{ id: string }> {
     // the flows its Flow Invokers call (and those call), as they are now: their drafts (the run carries them too)
     const called = await calledFlows(ctx, row.projectId, tree, checked.value);
 
-    // the scripts its TypeScript components import (and those import), by the hash of their code as it is now; the
-    // called flows' ones too
+    // the scripts its TypeScript components and Script Invokers import (and those import), by the hash of their code as
+    // it is now; the called flows' ones too
     const users = [checked.value, ...called.flatMap(c => (c.flow ? [c.flow] : []))].flatMap(file =>
-      file.nodes
-        .filter(n => n.type === 'typescript')
-        .map(n => ({ label: file === checked.value ? n.label || 'TypeScript' : `${file.name} › ${n.label || 'TypeScript'}`, code: typeof n.config.code === 'string' ? n.config.code : '' })),
+      file.nodes.flatMap(n => {
+        const code = scriptCodeOf(n.type, n.config);
+        const label = n.label || (n.type === 'typescript' ? 'TypeScript' : 'Script Invoker');
+        return code === undefined ? [] : [{ label: file === checked.value ? label : `${file.name} › ${label}`, code }];
+      }),
     );
     const imported = await scriptsForRun(ctx.db, ctx.orgId, row.projectId, users);
     if (imported.error) {

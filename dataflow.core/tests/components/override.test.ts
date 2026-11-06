@@ -5,7 +5,7 @@ import {evaluate} from '../helpers';
 
 test('Override is offered by the components that produce data, as in the PoC, and by no other', () => {
   const offered = Object.values(COMPONENTS).filter(c => c.usesOverride).map(c => c.type).sort();
-  expect(offered).toEqual(['datagrid', 'flow', 'http-request', 'lookup', 'mapper', 'mongodb-delete', 'mongodb-pipeline', 'mongodb-upsert', 'sqlserver', 'typescript']);
+  expect(offered).toEqual(['datagrid', 'flow', 'http-request', 'lookup', 'mapper', 'mongodb-delete', 'mongodb-pipeline', 'mongodb-upsert', 'script', 'sqlserver', 'typescript']);
 });
 
 /** Start (one envelope {a: 1}) → the node → End */

@@ -1,7 +1,7 @@
 import { createContext, lazy, Suspense, useContext, type ReactNode } from 'react';
 import { useParams } from 'react-router';
 import { ArrowDown, ArrowRight, ArrowUp, LoaderCircle, Plus, Trash } from 'lucide-react';
-import { callPath, inputTypeRef, settingDefault, settingsDefaults, settingValue, settingVisible, withSetting, type ExpressionField, type SettingField } from '@dataflow/core';
+import { callPath, DYNAMIC_CONNECTION, inputTypeRef, settingDefault, settingsDefaults, settingValue, settingVisible, withSetting, type ExpressionField, type ScriptArgument, type SettingField } from '@dataflow/core';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -13,6 +13,7 @@ import { loadCodeEditor } from './code-editor-loader';
 import { ScriptTypePicker, TypedInputSetting } from './typed-input';
 import { CalledFlowSetting, useCalledStart, type InvokerParameter } from './called-flow';
 import { useProjectCalls } from './project-calls';
+import { ScriptArgumentsSetting, ScriptFunctionPicker, useScriptFunction } from './script-function';
 
 type Values = Record<string, unknown>;
 
@@ -67,12 +68,55 @@ export function SettingsForm(props: { id: string; nodeId?: string; fields: Setti
                 values={values}
                 onChange={items => onChange(withSetting(field, values, items))}
               />
+            ) : field.argumentsOf ? (
+              // a Script Invoker's arguments: the called function's parameters, one row each
+              <ScriptArguments
+                key={field.key}
+                id={`${id}-${field.key}`}
+                field={field}
+                target={typeof values[field.argumentsOf] === 'string' ? String(values[field.argumentsOf]) : ''}
+                values={values}
+                onChange={items => onChange(withSetting(field, values, items))}
+              />
             ) : (
               <Setting key={field.key} id={`${id}-${field.key}`} field={field} value={settingValue(field, values)} onChange={value => onChange(withSetting(field, values, value))} />
             ),
           )}
       </div>
     </NodeContext.Provider>
+  );
+}
+
+/**
+ * The arguments a Script Invoker passes to the function it calls: a row per parameter of that function. No function
+ * chosen yet, nothing; while its script loads, a note; a function that cannot be read, the plain list.
+ */
+function ScriptArguments(props: { id: string; field: SettingField; target: string; values: Values; onChange: (items: ScriptArgument[]) => void }) {
+  const { id, field, target, values, onChange } = props;
+  const called = useScriptFunction(target);
+  const items = Array.isArray(values[field.key]) ? (values[field.key] as ScriptArgument[]) : [];
+  if (!target) {
+    return null;
+  }
+
+  if (called.status === 'loading') {
+    return <p className="text-xs text-muted-foreground">Reading the script…</p>;
+  }
+
+  if (called.status === 'missing') {
+    return <Setting id={id} field={field} value={items} onChange={value => onChange(value as ScriptArgument[])} />;
+  }
+
+  return (
+    <ScriptArgumentsSetting
+      id={id}
+      fn={called.fn}
+      items={items}
+      onChange={onChange}
+      renderValue={(valueId, value, placeholder, change) => (
+        <ValueControl id={valueId} field={{ key: 'value', label: 'Value', kind: 'value' }} value={value} placeholder={placeholder} onChange={change} />
+      )}
+    />
   );
 }
 
@@ -194,9 +238,11 @@ function Control({ id, field, value, onChange }: { id: string; field: SettingFie
         </span>
       );
     case 'connection':
-      return <ConnectionPicker id={id} types={field.connectionTypes ?? [field.connectionType ?? '']} value={text} onChange={onChange} />;
+      return <ConnectionPicker id={id} types={field.connectionTypes ?? [field.connectionType ?? '']} dynamic={field.connectionDynamic === true} value={text} onChange={onChange} />;
     case 'secret':
       return <SecretPicker id={id} value={text} onChange={onChange} />;
+    case 'script-function':
+      return <ScriptFunctionPicker id={id} value={text} onChange={onChange} />;
     case 'script-type':
       return <ScriptTypePicker id={id} value={text} onChange={onChange} />;
     case 'flow':
@@ -215,23 +261,26 @@ function Control({ id, field, value, onChange }: { id: string; field: SettingFie
 }
 
 /**
- * One of the project's connection profiles of the type, or none (then the component's own fields below apply). A new
+ * One of the project's connection profiles of the type, or none (then the component's own fields below apply), or (when
+ * `dynamic`) one named in the run by an expression. A new
  * connection is made on the project's Connections tab (in a new tab, so the flow stays as it is); it shows up here when
  * this window comes back into focus.
  */
-function ConnectionPicker({ id, types, value, onChange }: { id: string; types: string[]; value: string; onChange: (value: string) => void }) {
+function ConnectionPicker({ id, types, dynamic, value, onChange }: { id: string; types: string[]; dynamic: boolean; value: string; onChange: (value: string) => void }) {
   const resources = useProjectResources();
   const profiles = resources.connections.filter(c => types.includes(c.type));
+  const known = profiles.some(p => p.id === value) || (dynamic && value === DYNAMIC_CONNECTION);
   return (
     <div className="flex items-center gap-2">
       <select id={id} value={value} className={SELECT} onFocus={resources.refresh} onChange={event => onChange(event.target.value)}>
         <option value="">None (set it here)</option>
+        {dynamic && <option value={DYNAMIC_CONNECTION}>By name (expression)</option>}
         {profiles.map(profile => (
           <option key={profile.id} value={profile.id}>
             {profile.name}
           </option>
         ))}
-        {value && !profiles.some(p => p.id === value) && <option value={value}>Missing connection</option>}
+        {value && !known && <option value={value}>Missing connection</option>}
       </select>
       <NewLink href={projectTabPath(resources.projectId, 'connections')}>New connection</NewLink>
     </div>

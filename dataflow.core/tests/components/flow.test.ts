@@ -50,6 +50,15 @@ describe('Flow Invoker', () => {
     expect(w.subRuns?.map(s => [s.flow, s.status])).toEqual([['Multiply', 'completed'], ['Multiply', 'completed']]);
   });
 
+  test("each call's entry keeps the parameters it sent, a secret's value hidden", async () => {
+    const r = await flowRunner(parent('B'), {mode: 'execution', id: 'params', evaluate, flows});
+    expect(r.components.find(c => c.nodeId === 'w')!.subRuns?.map(s => s.parameters)).toEqual([{times: '2'}, {times: '3'}]);
+    const withSecret = parent('B');
+    withSecret.nodes = withSecret.nodes.map(n => (n.id === 'w' ? {...n, config: {...n.config, parameters: [{name: 'times', value: "'k-' + $SECRETS.KEY", expression: true}]}} : n));
+    const s = await flowRunner(withSecret, {mode: 'execution', id: 'params2', evaluate, flows, secrets: {KEY: 'super-secret'}});
+    expect(s.components.find(c => c.nodeId === 'w')!.subRuns?.[0]?.parameters).toEqual({times: 'k-***'});
+  });
+
   test('a failing flow is an error of the envelope (Divert sends it to the error port)', async () => {
     const stopped = await flowRunner(parent('C'), {mode: 'execution', id: 'p1', evaluate, flows});
     expect(stopped.status).toBe('failed');
@@ -89,6 +98,40 @@ describe('Flow Invoker', () => {
     const ok = await flowRunner(parent('B'), {mode: 'execution', id: 'p5', evaluate, flows: {B: fits}});
     expect(ok.status).toBe('completed');
     expect(ok.components.find(c => c.nodeId === 'w')!.subRuns?.length).toBe(2);
+  });
+
+  test('an input expression sends only what it gives, checked against the type; the result merges into the whole envelope', async () => {
+    // E echoes its input: its End gets what its Start was given
+    const echo: ExecutableFlow = {
+      id: 'E', project: 'Test', flow: 'Echo', parameters: [],
+      inputType: {name: 'Scaled', shape: {kind: 'object', fields: [{name: 'm', optional: false, shape: {kind: 'number'}}]}},
+      nodes: [
+        {id: 'start', type: 'start', label: 'Start', config: {acceptsInput: true}},
+        {id: 'm', type: 'mapper', label: 'Mapper', config: {fields: []}},
+        {id: 'end', type: 'end', label: 'End', config: {}},
+      ],
+      edges: [edge('start', 'm'), edge('m', 'end')],
+    };
+    const calling = (input: string, onError = 'throw') => {
+      const p = parent('E', onError);
+      return {...p, nodes: p.nodes.map(n => (n.id === 'w' ? {...n, config: {...n.config, parameters: [], inputSource: 'expression', input: {value: input, expression: true}}} : n))};
+    };
+    const r = await flowRunner(calling('{m: $n * 10}'), {mode: 'execution', id: 'p6', evaluate, flows: {E: echo}});
+    expect(r.status).toBe('completed');
+    const w = r.components.find(c => c.nodeId === 'w')!;
+    expect(w.subRuns!.map(s => s.record!.components.find(c => c.nodeId === 'start')!.outputSample['out-0'])).toEqual([[{m: 10}], [{m: 20}]]);
+    expect(w.outputSample['out-0']).toEqual([{n: 1, m: 10}, {n: 2, m: 20}]);
+    // what does not fit the type is an error of the envelope, the flow not run
+    const wrong = await flowRunner(calling('{m: "x" + $n}', 'divert'), {mode: 'execution', id: 'p6b', evaluate, flows: {E: echo}});
+    const ww = wrong.components.find(c => c.nodeId === 'w')!;
+    expect(ww.outputs['error']).toBe(2);
+    expect(JSON.stringify(ww.outputSample['error'])).toContain('input.m: expected a number, got text \\"x1\\".');
+  });
+
+  test("an input expression is required when chosen", () => {
+    const validate = COMPONENTS.flow!.validate!;
+    expect(validate({flowId: 'B', sendEnvelope: true, inputSource: 'expression', input: {value: ' ', expression: true}})).toEqual(['has no input expression.']);
+    expect(validate({flowId: 'B', sendEnvelope: false, inputSource: 'expression'})).toEqual([]);
   });
 
   test("each call keeps the other flow's record (its components' logs, counts and times), with its samples cut short", async () => {
@@ -155,6 +198,7 @@ describe('Flow Invoker', () => {
       // not merged with what the other flow returns: it did not run here
       expect(w.outputSample['out-0']).toEqual([{n: 1}, {n: 2}, {n: 3}, {n: 4}, {n: 5}]);
       expect(w.subRuns?.map(s => [s.id, s.status, s.envelopes, s.fireAndForget])).toEqual([['child-1', 'queued', 2, true], ['child-2', 'queued', 2, true], ['child-3', 'queued', 1, true]]);
+      expect(w.subRuns?.map(s => s.parameters)).toEqual([{times: '2'}, {times: '2'}, {times: '2'}]);
     });
 
     test('by default batches of 100; envelopes with other parameter values go in batches of their own', async () => {
@@ -243,12 +287,20 @@ describe('Flow Invoker', () => {
       expect(asked).toEqual([]);
     });
 
-    test("without Send the envelope's DATA: one run per batch, with no input", async () => {
+    test("without Send an input: one run per batch, with no input", async () => {
       const {asked, queueFlow} = queueing();
       const r = await flowRunner(five(fire('B', 'throw', {...fixed, sendEnvelope: false, batchSize: 2})), {mode: 'execution', id: 'p14b', evaluate, flows, queueFlow});
       expect(r.status).toBe('completed');
       expect(asked.map(a => a.input)).toEqual([undefined, undefined, undefined]);
       expect(r.components.find(c => c.nodeId === 'w')!.outputs['out-0']).toBe(5);
+    });
+
+    test('an input expression: the batch holds what it gives per envelope (a list adds its items)', async () => {
+      const {asked, queueFlow} = queueing();
+      const byExpression = {...fixed, inputSource: 'expression', batchSize: 2, input: {value: '$n === 1 ? [{m: 1}, {m: 1.5}] : {m: $n}', expression: true}};
+      const r = await flowRunner(five(fire('B', 'throw', byExpression)), {mode: 'execution', id: 'p14c', evaluate, flows, queueFlow});
+      expect(r.status).toBe('completed');
+      expect(asked.map(a => a.input)).toEqual([[{m: 1}, {m: 1.5}, {m: 2}], [{m: 3}, {m: 4}], [{m: 5}]]);
     });
 
     test('a test run queues nothing: each batch runs beside it, the envelopes going on at once, and shows as a fire and forget called run', async () => {

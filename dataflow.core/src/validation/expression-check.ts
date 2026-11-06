@@ -25,6 +25,6 @@ export function usedVariables(expression: string): string[] {
 
 /** Variables the expression uses that are not among the known ones (paths: only their root counts). */
 export function unknownVariables(expression: string, known: string[]): string[] {
-  const roots = new Set(known.map(path => path.split('.')[0]));
+  const roots = new Set(known.map(path => path.split(/[.[]/)[0]));
   return usedVariables(expression).filter(name => !roots.has(name));
 }

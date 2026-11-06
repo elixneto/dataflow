@@ -1,0 +1,357 @@
+summary: "Main :: Bynder Import Assets"
+description: ""
+value:
+  modules:
+    - id: job_id
+      value:
+        lock: |-
+          {
+            "dependencies": {}
+          }
+          //bun.lock
+          <empty>
+        type: rawscript
+        content: |-
+          export async function main() {
+            return process.env.WM_FLOW_JOB_ID; // WM Workflow run ID
+          }
+        language: bun
+        input_transforms: {}
+      summary: get batch_id
+    - id: batch_start
+      value:
+        path: f/cradle/public_api/elements/import_batch_start
+        type: flow
+        input_transforms:
+          batch_id:
+            expr: results.job_id
+            type: javascript
+          environment:
+            expr: flow_input.__requester__.environment
+            type: javascript
+            value: ""
+          tenant_prefix:
+            expr: flow_input.__requester__.tenant_prefix
+            type: javascript
+            value: ""
+          current_user_email:
+            expr: flow_input.__requester__.user_email
+            type: javascript
+            value: ""
+          importBatchRequest:
+            expr: |-
+              ({
+                "requesterEmail": flow_input.__requester__.user_email,
+                "itemsCount": flow_input.assets.length
+              })
+            type: javascript
+      summary: batch - start
+      continue_on_error: false
+    - id: for_each_asset
+      value:
+        type: forloopflow
+        squash: false
+        modules:
+          - id: import_assets_response
+            value:
+              path: f/cradle/bynder/ingest_imported_assets_wrapper
+              type: flow
+              input_transforms:
+                asset:
+                  expr: flow_input.iter.value
+                  type: javascript
+                batch_id:
+                  expr: results.job_id
+                  type: javascript
+                  value: ""
+                __requester__:
+                  expr: flow_input.__requester__
+                  type: javascript
+            summary: Import Assets
+        iterator:
+          expr: flow_input.assets
+          type: javascript
+        parallel: false
+        skip_failures: true
+      summary: for each asset
+    - id: bynder_process_notification_results
+      value:
+        path: f/cradle/bynder/utils/send_mail
+        type: flow
+        input_transforms:
+          userEmail:
+            expr: "`${flow_input.__requester__.user_email}`"
+            type: javascript
+            value: ${flow_input.__requester__.user_email}
+          resultList:
+            expr: results.for_each_asset
+            type: javascript
+          environment:
+            expr: "`${flow_input.__requester__.environment}`"
+            type: javascript
+            value: ${flow_input.__requester__.environment}
+          tenantPrefix:
+            expr: "`${flow_input.__requester__.tenant_prefix}`"
+            type: javascript
+            value: ${flow_input.__requester__.tenant_prefix}
+      summary: Bynder Process Notifications
+    - id: assetResultQuery
+      value:
+        lock: |-
+          {
+            "dependencies": {}
+          }
+          //bun.lock
+          <empty>
+        type: rawscript
+        content: >
+          // import * as wmill from "windmill-client"
+
+
+          export async function main(importAssetResponse: {status:string,
+          assetId: string}[]) {
+            return importAssetResponse;
+          }
+        language: bun
+        input_transforms:
+          importAssetResponse:
+            expr: results.for_each_asset
+            type: javascript
+      summary: Return first asset
+  groups: []
+schema:
+  $schema: https://json-schema.org/draft/2020-12/schema
+  order:
+    - __requester__
+    - assets
+  properties:
+    __requester__:
+      type: object
+      description: ""
+      format: ""
+      order:
+        - environment
+        - tenant_id
+        - tenant_prefix
+        - tenant_name
+        - user_id
+        - user_email
+        - user_first_name
+        - user_last_name
+      properties:
+        environment:
+          type: string
+          description: ""
+          default: ""
+          enum:
+            - production
+            - sandbox
+            - staging1
+            - staging2
+            - ci
+            - ux
+            - development
+          enumLabels: {}
+        tenant_id:
+          type: string
+          description: ""
+          default: ""
+          format: uuid
+          nullable: false
+        tenant_prefix:
+          type: string
+          description: ""
+          default: ""
+          nullable: false
+          pattern: ^[a-zA-Z0-9]{3}$
+        tenant_name:
+          type: string
+          description: ""
+          default: ""
+        user_id:
+          type: string
+          description: ""
+          default: ""
+          format: uuid
+        user_email:
+          type: string
+          description: ""
+          default: ""
+          format: email
+          pattern: ^[\w-+.]+@([\w-]+\.)+[\w-]{2,4}$
+        user_first_name:
+          type: string
+          description: ""
+          default: ""
+        user_last_name:
+          type: string
+          description: ""
+          default: ""
+      required:
+        - environment
+        - tenant_id
+        - tenant_prefix
+    assets:
+      type: array
+      required: true
+      items:
+        type: object
+        properties:
+          Id:
+            type: string
+            description: ""
+            default: ""
+          DatabaseId:
+            type: string
+            description: ""
+            default: ""
+          Name:
+            type: string
+            description: ""
+            default: ""
+          Files:
+            default: null
+            type: object
+            description: ""
+          Url:
+            type: string
+            description: ""
+            default: ""
+          Tags:
+            default: []
+            items:
+              type: string
+            type: array
+            description: ""
+          TextMetaproperties:
+            default: []
+            items:
+              type: object
+              properties:
+                name:
+                  type: string
+                  description: ""
+                value:
+                  type: string
+                  description: ""
+            type: array
+            description: ""
+          Metaproperties:
+            required: []
+            format: ""
+            type: object
+            description: ""
+            properties:
+              Nodes:
+                default: []
+                items:
+                  type: object
+                  properties:
+                    Id:
+                      type: string
+                      description: ""
+                      default: ""
+                    Options:
+                      default: []
+                      items:
+                        type: object
+                        properties:
+                          id:
+                            type: string
+                            description: ""
+                            default: ""
+                          name:
+                            type: string
+                            description: ""
+                          displayLabel:
+                            type: string
+                            description: ""
+                          imageUrl:
+                            type: string
+                            description: ""
+                            default: ""
+                          assetCount:
+                            type: integer
+                            description: ""
+                      type: array
+                      description: ""
+                    Type:
+                      type: string
+                      description: ""
+                      default: ""
+                    Name:
+                      type: string
+                      description: ""
+                      default: ""
+                type: array
+                description: ""
+            order:
+              - Nodes
+          CreatedAt:
+            default: ""
+            format: date-time
+            type: string
+            description: ""
+          CreatedBy:
+            type: string
+            description: ""
+            default: ""
+          PublishedAt:
+            type: string
+            description: ""
+            default: ""
+            format: date-time
+          UpdatedAt:
+            type: string
+            description: ""
+            default: ""
+            format: date-time
+          FileSize:
+            type: number
+            description: ""
+          Derivatives:
+            required: []
+            format: ""
+            type: object
+            description: ""
+            properties:
+              Thumbnail:
+                type: string
+                description: ""
+                default: ""
+              WebImage:
+                type: string
+                description: ""
+                default: ""
+            order:
+              - Thumbnail
+              - WebImage
+          Extensions:
+            default: []
+            items:
+              type: string
+            type: array
+            description: ""
+          Type:
+            type: string
+            description: ""
+          PreviewUrls:
+            default: []
+            items:
+              type: string
+            type: array
+            description: ""
+        order:
+          - id
+          - databaseId
+          - name
+          - files
+          - url
+          - tags
+          - textMetaproperties
+          - metaproperties
+      default: []
+      description: ""
+  required:
+    - __requester__
+    - assets

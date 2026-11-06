@@ -96,6 +96,61 @@ test('in a run: a MongoDB component with a profile takes its database; an HTTP r
   expect(r.error).not.toContain('tok-123');
 });
 
+test('an HTTP request can name its profile in the run: by an expression on each envelope, matched by name whatever the case', async () => {
+  const {DYNAMIC_CONNECTION, findProfile} = await import('../../src/index');
+  const profiles = {
+    ...PROFILES,
+    dev: {name: '[dev_t0] Public API', type: 'http-client', config: {auth: 'bearer', token: 'DEV_TOKEN'}},
+    prd: {name: '[prd_t0] Public API', type: 'http-client', config: {auth: 'bearer', token: 'PRD_TOKEN'}},
+  };
+  expect(findProfile(profiles, 'prd')?.id).toBe('prd');
+  expect(findProfile(profiles, '[PRD_T0] public api')?.id).toBe('prd');
+  expect(findProfile(profiles, 'nope')).toBeUndefined();
+
+  const fields = connectionSettings('http-client', ['http-client'], 'Connection', true);
+  const shown = (values: Record<string, unknown>) => fields.filter(f => settingVisible(f, values, fields)).map(f => f.key);
+  expect(fields[0]).toMatchObject({connectionDynamic: true});
+  expect(shown({connection: DYNAMIC_CONNECTION})).toEqual(['connection', 'connectionName']);
+  expect(shown({connection: 'api'})).toEqual(['connection']);
+  expect(connectionIssues('http-client', {connection: DYNAMIC_CONNECTION})).toEqual(['has no connection name.']);
+  expect(connectionIssues('http-client', {connection: DYNAMIC_CONNECTION, connectionName: {value: '`[${$env}] API`', expression: true}})).toEqual([]);
+
+  const run = async (env: string) => {
+    const sent: Record<string, string>[] = [];
+    const wf: ExecutableFlow = {
+      project: 'Test', flow: 'Dynamic', parameters: [],
+      nodes: [
+        {id: 'start', type: 'start', label: 'Start', config: {acceptsInput: true}},
+        {id: 'h', type: 'http-request', label: 'Send', config: {
+          connection: DYNAMIC_CONNECTION,
+          connectionName: {value: '`[${$req.env}_${$req.tenant}] Public API`', expression: true},
+          url: {value: 'https://api.example.com/x', expression: false},
+        }},
+        {id: 'end', type: 'end', label: 'End', config: {}},
+      ],
+      edges: [
+        {source: 'start', sourcePort: 'out-0', target: 'h', targetPort: 'in-0'},
+        {source: 'h', sourcePort: 'out-0', target: 'end', targetPort: 'in-0'},
+      ],
+    };
+    const r = await flowRunner(wf, {
+      mode: 'execution', id: `dynamic-${env}`, evaluate, input: {req: {env, tenant: 'T0'}}, connections: profiles,
+      secrets: {DEV_TOKEN: 'dev-secret', PRD_TOKEN: 'prd-secret'},
+      http: async request => {
+        sent.push(request.headers);
+        return {status: 200, headers: {}, body: ''};
+      },
+    });
+    return {r, sent};
+  };
+  expect((await run('prd')).sent).toEqual([{Authorization: 'Bearer prd-secret'}]);
+  expect((await run('dev')).sent).toEqual([{Authorization: 'Bearer dev-secret'}]);
+  const missing = await run('qa');
+  expect(missing.sent).toEqual([]);
+  expect(missing.r.status).toBe('failed');
+  expect(missing.r.error).toContain('The connection "[qa_T0] Public API" does not exist in this runner.');
+});
+
 test('an HTTP request takes any API connection: basic (user and password), OAuth 2.0 (client credentials)', async () => {
   const {API_CONNECTION_TYPES, componentSettings} = await import('../../src/index');
   expect(componentSettings('http-request').find(f => f.key === 'connection')?.connectionTypes).toEqual(API_CONNECTION_TYPES);

@@ -37,3 +37,20 @@ test('the system variables: parameters with their type, the project variables, s
   expect(vars).toContainEqual({path: '$SECRETS.API_TOKEN', type: 'secret'});
   expect(vars.some(v => v.path === '$FLOW_CURRENT_RUN.startedAt')).toBe(true);
 });
+
+test('a group with nothing in it (no parameters, variables or secrets) is not suggested; the run always is', () => {
+  const paths = systemVariables([], [], []).map(v => v.path);
+  expect(paths.some(p => /^\$(PARAMETERS|VARIABLES|SECRETS)/.test(p))).toBe(false);
+  expect(paths).toContain('$FLOW_CURRENT_RUN');
+  expect(systemVariables([], [{name: 'REGION'}], []).map(v => v.path)).toEqual(expect.arrayContaining(['$VARIABLES', '$VARIABLES.REGION']));
+});
+
+test('a name an expression cannot read after a dot (a hyphen, a space) is suggested in brackets', async () => {
+  const {dataVariables} = await import('../../src/index');
+  const vars = systemVariables([], [{name: 'engage-base-url', value: 'x'}, {name: "it's", value: 'y'}], ['MY-KEY']);
+  expect(vars.map(v => v.path)).toEqual(expect.arrayContaining(["$VARIABLES['engage-base-url']", "$VARIABLES['it\\'s']", "$SECRETS['MY-KEY']"]));
+  expect(dataVariables({response: {headers: {'content-type': 'json', etag: '1'}}}).map(v => v.path))
+    .toEqual(['$response', '$response.headers', "$response.headers['content-type']", '$response.headers.etag']);
+  // what it suggests runs as written
+  expect(new Function('$VARIABLES', `return ${vars.find(v => v.path.includes('engage'))!.path}`)({'engage-base-url': 'ok'})).toBe('ok');
+});

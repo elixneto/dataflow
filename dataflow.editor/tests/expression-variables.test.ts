@@ -25,6 +25,16 @@ describe("an expression field's suggestions", () => {
     expect(suggestionsFor(variables, '$SECRETS.').map(v => [v.path, v.type, v.example])).toEqual([['$SECRETS.API_TOKEN', 'secret', undefined]]);
   });
 
+  test('a member in brackets (a name with a hyphen) is found typed with a dot or in brackets', () => {
+    const variables = systemVariables([], [{ name: 'engage-base-url', value: 'x' }], []);
+    const bracketed = "$VARIABLES['engage-base-url']";
+    expect(suggestionsFor(variables, '$VARIABLES.').map(v => v.path)).toEqual([bracketed]);
+    expect(suggestionsFor(variables, '$VARIABLES.engage-b').map(v => v.path)).toEqual([bracketed]);
+    expect(suggestionsFor(variables, "$VARIABLES['eng").map(v => v.path)).toEqual([bracketed]);
+    expect(tokenAt('`https://h/${$VARIABLES.engage-b', 32)).toEqual({ start: 13, text: '$VARIABLES.engage-b' });
+    expect(tokenAt("$VARIABLES['eng", 15)).toEqual({ start: 0, text: "$VARIABLES['eng" });
+  });
+
   test("a TypeScript component's Data comes from what reached it in the last runs (a component that got nothing keeps the earlier)", () => {
     const run = (samples: Record<string, object[]>): RunRecord => ({
       run: { id: 'r', mode: 'validation', project: 'p', flow: 'f', startedAt: '' },
