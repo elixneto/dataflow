@@ -1,0 +1,7 @@
+node_modules
+dist
+bun.lock
+POC_v0
+dataflow.perf/results
+dataflow.server/data.local*
+*.local.json

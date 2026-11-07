@@ -16,6 +16,17 @@
     "test": "bun test --cwd=dataflow.core && bun test --cwd=dataflow.server && bun test --cwd=dataflow.editor && bun test --cwd=dataflow.perf",
     "typecheck": "bun run --cwd=dataflow.core typecheck && bun run --cwd=dataflow.server typecheck && bun run --cwd=dataflow.editor typecheck && bun run --cwd=dataflow.perf typecheck",
     "perf": "bun dataflow.perf/src/cli.ts",
-    "migrate": "bun run --cwd=dataflow.server migrate"
+    "migrate": "bun run --cwd=dataflow.server migrate",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "prepare": "husky"
+  },
+  "lint-staged": {
+    "*.{ts,tsx,js,jsx,mjs,cjs,mts,cts,json,css,md,yml,yaml,html}": "prettier --write --ignore-unknown"
+  },
+  "devDependencies": {
+    "husky": "^9.1.7",
+    "lint-staged": "^17.6.0",
+    "prettier": "^3.9.10"
   }
 }
