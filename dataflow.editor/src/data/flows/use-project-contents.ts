@@ -60,6 +60,7 @@ export function useProjectContents(projectId: string) {
     createFlow: (folderId: string | null, name: string) => thenRefresh(flowsApi.createFlow(projectId, { name, folderId })),
     renameFlow: (id: string, name: string) => thenRefresh(flowsApi.renameFlow(id, name)),
     moveFlow: (id: string, folderId: string | null) => thenRefresh(flowsApi.moveFlow(id, folderId)),
+    cloneFlow: (id: string, name: string) => thenRefresh(flowsApi.cloneFlow(id, name)),
     archiveFlow: (id: string) => thenRefresh(flowsApi.archiveFlow(id)),
     restoreFlow: (id: string) => thenRefresh(flowsApi.restoreFlow(id)),
   };

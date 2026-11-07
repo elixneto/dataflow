@@ -98,6 +98,11 @@ export async function moveFlow(id: string, folderId: string | null): Promise<Api
   return map(await api<FlowDto>(`/flows/${id}/move`, { method: 'POST', body: { folderId } }), toFlow);
 }
 
+/** a new flow with a copy of this one's draft, under `name` (in the same folder) */
+export function cloneFlow(id: string, name: string): Promise<ApiResult<{ id: string }>> {
+  return api<{ id: string }>(`/flows/${id}/clone`, { method: 'POST', body: { name } });
+}
+
 export function archiveFlow(id: string): Promise<ApiResult<{ id: string }>> {
   return api<{ id: string }>(`/flows/${id}/archive`, { method: 'POST' });
 }

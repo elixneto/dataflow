@@ -104,6 +104,16 @@ describe("a component's settings form, from the core's settings", () => {
     const ts = render('typescript', {});
     expect(ts).toContain('aria-label="Code (loading)"');
     expect(ts).not.toContain('<textarea');
+    // by path (expression): the flow path field, the parameters typed by hand (the flow is known only in the run)
+    const dynamic = renderToStaticMarkup(
+      <ProjectResourcesContext.Provider value={resources}>
+        <SettingsForm id="n" fields={componentSettings('flow')} values={{ flowId: '$dynamic' }} onChange={() => {}} />
+      </ProjectResourcesContext.Provider>,
+    );
+    expect(dynamic).toContain('<option value="$dynamic" selected="">By path (expression)</option>');
+    expect(dynamic).toContain('Flow path');
+    expect(dynamic).not.toContain('Reading the flow…');
+    expect(dynamic).not.toContain('Missing flow');
   });
 
   test('the Start: Accepts input, its default input only when on, and the parameters with type and Required', () => {

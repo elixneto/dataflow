@@ -1,8 +1,9 @@
 import type {Envelope} from '#types/envelope.type';
 
 /**
- * Variables an expression sees in an envelope: the system ones and, directly, each DATA key.
- * E.g.: $PARAMETERS.prefix, $FLOW_CURRENT_RUN.startedAt, $VARIABLES.region, $csvLine.NAME.
+ * Variables an expression sees in an envelope: the system ones, the whole DATA ($DATA) and, directly, each DATA key
+ * (a key named DATA is that key's value, as before).
+ * E.g.: $PARAMETERS.prefix, $FLOW_CURRENT_RUN.startedAt, $VARIABLES.region, $DATA, $csvLine.NAME.
  */
 export function envelopeVariables(doc: Envelope, secrets: Record<string, string> = {}, projectVariables: Record<string, string> = {}): Record<string, unknown> {
   const variables: Record<string, unknown> = {
@@ -10,6 +11,7 @@ export function envelopeVariables(doc: Envelope, secrets: Record<string, string>
     $PARAMETERS: doc.PARAMETERS,
     $SECRETS: secrets,
     $VARIABLES: projectVariables,
+    $DATA: doc.DATA,
   };
 
   for (const [key, value] of Object.entries(doc.DATA)){

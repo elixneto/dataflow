@@ -1,7 +1,7 @@
 import { createContext, lazy, Suspense, useContext, type ReactNode } from 'react';
 import { useParams } from 'react-router';
 import { ArrowDown, ArrowRight, ArrowUp, LoaderCircle, Plus, Trash } from 'lucide-react';
-import { callPath, DYNAMIC_CONNECTION, inputTypeRef, settingDefault, settingsDefaults, settingValue, settingVisible, withSetting, type ExpressionField, type ScriptArgument, type SettingField } from '@dataflow/core';
+import { callPath, DYNAMIC_CONNECTION, DYNAMIC_TARGET, inputTypeRef, settingDefault, settingsDefaults, settingValue, settingVisible, withSetting, type ExpressionField, type ScriptArgument, type SettingField } from '@dataflow/core';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -58,7 +58,7 @@ export function SettingsForm(props: { id: string; nodeId?: string; fields: Setti
                 onChange={value => onChange(withSetting(field, values, value))}
                 json={<Control id={`${id}-${field.key}-json`} field={field} value={settingValue(field, values)} onChange={value => onChange(withSetting(field, values, value))} />}
               />
-            ) : field.parametersOf && typeof values[field.parametersOf] === 'string' && values[field.parametersOf] ? (
+            ) : field.parametersOf && typeof values[field.parametersOf] === 'string' && values[field.parametersOf] && values[field.parametersOf] !== DYNAMIC_TARGET ? (
               // a Flow Invoker's parameters: the called flow's Start parameters, one row each
               <CalledFlowParameters
                 key={field.key}
@@ -306,7 +306,7 @@ function SecretPicker({ id, value, onChange }: { id: string; value: string; onCh
   );
 }
 
-/** another flow of the project (not this one) */
+/** another flow of the project (not this one), or one named in the run by an expression (its whole path) */
 function FlowPicker({ id, value, onChange }: { id: string; value: string; onChange: (value: string) => void }) {
   const resources = useProjectResources();
   const { flowId } = useParams();
@@ -314,12 +314,13 @@ function FlowPicker({ id, value, onChange }: { id: string; value: string; onChan
   return (
     <select id={id} value={value} className={SELECT} onFocus={resources.refresh} onChange={event => onChange(event.target.value)}>
       <option value="">Choose a flow</option>
+      <option value={DYNAMIC_TARGET}>By path (expression)</option>
       {flows.map(flow => (
         <option key={flow.id} value={flow.id}>
           {flow.name}
         </option>
       ))}
-      {value && !flows.some(f => f.id === value) && <option value={value}>Missing flow</option>}
+      {value && value !== DYNAMIC_TARGET && !flows.some(f => f.id === value) && <option value={value}>Missing flow</option>}
     </select>
   );
 }

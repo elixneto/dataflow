@@ -107,3 +107,26 @@ test("the script's context has exactly the globals the core lists (what the code
   const process = await prepareScript(`async function process() { return Object.keys(globalThis).filter(k => !k.startsWith('__')); }`, globals);
   expect(((await process({})) as string[]).sort()).toEqual([...SCRIPT_RUNTIME_GLOBALS].sort());
 });
+
+test('an error says where it happened in the code as written: its line, or the script and line it is in', async () => {
+  const component = await prepareScript(
+    `import { uploadIdOf } from '@myproject/scripts/upload/types';
+interface Order { id: number }
+
+// a comment and a type: the bundle has neither, the line is still the code's
+async function process($input: Order) {
+  if ($input.id === 1) throw new Error('one is not allowed');
+  if ($input.id === 2) return uploadIdOf({} as never);
+  const total: number = 0;
+  return missing.value + total;
+}`,
+    globals,
+    SCRIPTS,
+  );
+  await expect(component({ id: 1 })).rejects.toThrow('one is not allowed (line 6)');
+  // in a script it imports: that script and its line
+  await expect(component({ id: 2 })).rejects.toThrow(/\(@myproject\/scripts\/upload\/types line 2\)$/);
+  await expect(component({ id: 3 })).rejects.toThrow(/missing is not defined \(line 9\)$/);
+  // the code around process (run once, when prepared): its line too
+  await expect(prepareScript(`const broken = null;\nconst x = broken.y;\nasync function process() { return x; }`, globals)).rejects.toThrow(/\(line 2\)$/);
+});

@@ -130,6 +130,20 @@ export function ProjectFlowsPage() {
         name: item.name,
         currentFolderId: kind === 'folder' ? (item as Folder).parentId : (item as Flow).folderId,
       }),
+    clone: flow => {
+      const siblings = siblingNames(contents, 'flow', flow.folderId);
+      const taken = (name: string) => siblings.some(s => s.name.toLowerCase() === name.toLowerCase());
+      let initial = `${flow.name} (copy)`;
+      for (let n = 2; taken(initial); n++) initial = `${flow.name} (copy ${n})`;
+      setNaming({
+        title: 'Clone flow',
+        description: `A copy of ${flow.name}. ${describe(flow.folderId)}`,
+        initial,
+        submitLabel: 'Clone',
+        siblings,
+        onSave: name => store.cloneFlow(flow.id, name),
+      });
+    },
     archive: (kind, item) => setArchiving({ kind, id: item.id, name: item.name }),
   };
 

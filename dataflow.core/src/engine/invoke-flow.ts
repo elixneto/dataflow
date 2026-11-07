@@ -3,9 +3,11 @@ import {MAX_SUB_RUNS, MAX_FLOW_DEPTH, SUB_RUN_SAMPLE_SIZE} from '#engine/constan
 import {flowRunner} from '#engine/flow-runner';
 import {hiddenValues, maskText} from '#engine/component-context';
 import {inputIssues} from '../scripts/type-shape';
+import {normalizedFlowPath} from '../folders/folder-tree';
 import type {FlowExecution} from '#engine/flow-execution';
 import type {ComponentContext} from '#types/component-context.type';
 import type {EnvelopeData} from '#types/envelope-data.type';
+import type {ExecutableFlow} from '#types/executable-flow.type';
 import type {ExecutableNode} from '#types/executable-node.type';
 import type {ComponentRun, SubRun} from '#types/component-run.type';
 import type {RunProgress, RunRecord} from '#types/run-record.type';
@@ -19,14 +21,25 @@ function sentParameters(values: Record<string, string>, options: FlowExecution['
   return {parameters: Object.fromEntries(Object.entries(values).map(([name, value]) => [name, maskText(value, hidden)]))};
 }
 
+/** the id of the flow a call names: its id, or its whole path (folders and name, any case) among the run's flows */
+export function resolveFlow(flows: Record<string, ExecutableFlow> | undefined, ref: string): string | undefined {
+  if (flows?.[ref]) return ref;
+  const wanted = normalizedFlowPath(ref);
+  return Object.entries(flows ?? {}).find(([, f]) => f.path !== undefined && normalizedFlowPath(f.path) === wanted)?.[0];
+}
+
 /**
  * What both kinds of call check first: a circular call, a chain longer than MAX_FLOW_DEPTH, a flow that is not there or
  * cannot be called, an input that does not fit its Start type (then the flow does not run: an error of the envelope).
+ * `flowRef`: the flow's id, or its whole path (a Flow Invoker that names it by expression).
  */
-export function checkedCall(execution: FlowExecution, flowId: string, input: unknown) {
+export function checkedCall(execution: FlowExecution, flowRef: string, input: unknown) {
   const {wf, options} = execution;
-  // a circular call first: the root flow is not among the callable ones (the run's own), so it would read as not found
-  const chain = [...(options.chain ?? [wf.id ?? wf.flow]), flowId];
+  const above = options.chain ?? [wf.id ?? wf.flow];
+  // a flow up the chain (the root is not among the callable ones) is still named: the call is circular, not missing
+  const flowId = resolveFlow(options.flows, flowRef) ?? (above.includes(flowRef) ? flowRef : undefined);
+  if (!flowId) throw new Error(`The flow "${flowRef}" was not found (a flow is named by its whole path: its folders and its name, e.g. Imports/Orders/Load).`);
+  const chain = [...above, flowId];
   if (chain.slice(0, -1).includes(flowId)) {
     const name = (id: string) => options.flows?.[id]?.flow ?? (id === chain[0] ? (options.rootName ?? wf.flow) : id);
     throw new Error(`Circular flow call: ${chain.map(name).join(' → ')}.`);
@@ -34,8 +47,7 @@ export function checkedCall(execution: FlowExecution, flowId: string, input: unk
   if (chain.length > MAX_FLOW_DEPTH + 1) {
     throw new Error(`More than ${MAX_FLOW_DEPTH} flows called in sequence.`);
   }
-  const child = options.flows?.[flowId];
-  if (!child) throw new Error(`The called flow (${flowId}) was not found.`);
+  const child = options.flows![flowId]!;
   if (child.unavailable) throw new Error(`The flow "${child.flow}" cannot be called: ${child.unavailable}`);
   if (input !== undefined && child.inputType) {
     const issues = inputIssues(input, child.inputType.shape);
@@ -43,7 +55,7 @@ export function checkedCall(execution: FlowExecution, flowId: string, input: unk
       throw Object.assign(new Error(`The input does not fit ${child.inputType.name} (the Start of "${child.flow}"): ${issues.join(' ')}`), {name: 'InputTypeError'});
     }
   }
-  return {chain, child};
+  return {chain, child, flowId};
 }
 
 /**
@@ -51,9 +63,9 @@ export function checkedCall(execution: FlowExecution, flowId: string, input: unk
  * as a call it waits for; the runner (RunOptions.queueFlow) stores it for a supervisor. Its entry in the caller's
  * `subRuns` says it was queued, with its id (its record is its own run's).
  */
-export async function queueFlow(execution: FlowExecution, node: ExecutableNode, flowId: string, {parameters, input}: {parameters: Record<string, string>; input?: unknown}): Promise<{id: string}> {
+export async function queueFlow(execution: FlowExecution, node: ExecutableNode, flowRef: string, {parameters, input}: {parameters: Record<string, string>; input?: unknown}): Promise<{id: string}> {
   const {wf, options} = execution;
-  const {chain, child} = checkedCall(execution, flowId, input);
+  const {chain, child, flowId} = checkedCall(execution, flowRef, input);
   if (!options.queueFlow) throw new Error('This runner does not queue runs: fire and forget needs a server.');
   const queued = await options.queueFlow({
     flowId, parameters, ...(input !== undefined ? {input} : {}), chain, rootName: options.rootName ?? wf.flow, nodeId: node.id, nodeLabel: node.label,

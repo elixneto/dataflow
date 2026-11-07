@@ -215,4 +215,49 @@ async function process($input: IItem) {
     expect(record!.status).toBe('completed');
     expect(record!.components.find(c => c.nodeId === 'fn')!.outputSample['out-0']).toEqual([{ net: 10, result: 12 }]);
   });
+
+  test('by path (expression): a Flow Invoker names a flow in a folder, that one a script function; the run takes every flow and script', async () => {
+    await call('POST', `/projects/${projectId}/scripts`, { kind: 'script', path: 'text/case', content: `export function shout(s: string) { return s.toUpperCase() + '!'; }\n` });
+    const folderId = (await call('POST', `/projects/${projectId}/folders`, { name: 'Helpers', parentId: null })).body.id as string;
+    const save = async (name: string, folder: string | null, nodes: unknown[], edges: unknown[]) => {
+      const id = (await call('POST', `/projects/${projectId}/flows`, { name, folderId: folder })).body.id as string;
+      const draft = (await call('GET', `/flows/${id}/draft`)).body as { flow: Record<string, unknown> };
+      await call('PUT', `/flows/${id}/draft`, { revision: 0, flow: { ...draft.flow, nodes, edges } });
+      return id;
+    };
+    const line = (ids: string[]) => ids.slice(1).map((id, i) => ({ source: ids[i], sourcePort: 'out-0', target: id, targetPort: 'in-0' }));
+    // Helpers/Shout: a Script Invoker naming its function by expression
+    await save('Shout', folderId, [
+      { id: 'start', type: 'start', position: { x: 0, y: 0 }, config: { acceptsInput: true } },
+      { id: 'fn', type: 'script', position: { x: 160, y: 0 }, config: { function: '$dynamic', functionPath: { value: "'text/' + 'case#shout'", expression: true }, arguments: [{ name: 's', value: '$word', expression: true }] } },
+      { id: 'end', type: 'end', position: { x: 320, y: 0 }, config: {} },
+    ], line(['start', 'fn', 'end']));
+    // the root: a Flow Invoker naming that flow by its path (any case)
+    const rootId = await save('Names a flow', null, [
+      { id: 'start', type: 'start', position: { x: 0, y: 0 }, config: { acceptsInput: true, testInput: '[{"word": "hi"}]' } },
+      { id: 'call', type: 'flow', position: { x: 160, y: 0 }, config: { flowId: '$dynamic', flowPath: { value: "'helpers/' + 'SHOUT'", expression: true }, sendEnvelope: true } },
+      { id: 'end', type: 'end', position: { x: 320, y: 0 }, config: {} },
+    ], line(['start', 'call', 'end']));
+
+    const id = (await call('POST', `/flows/${rootId}/runs`, { mode: 'validation' })).body.id;
+    const [queued] = await db.query<{ scripts: Record<string, string>; called_flows: { id: string; path?: string; unavailable?: string }[] }>(
+      'SELECT scripts, called_flows FROM test_runs WHERE id = $1',
+      [id],
+    );
+    // every flow of the project (with its path), the root as one that cannot be called; every script
+    expect(queued!.called_flows.find(c => c.path === 'Helpers/Shout')).toBeDefined();
+    expect(queued!.called_flows.find(c => c.id === rootId)).toMatchObject({ path: 'Names a flow', unavailable: expect.stringContaining('circular') });
+    // a flow of the project whose script is gone does not stop the run: only a call to it would fail
+    expect(queued!.called_flows.find(c => c.path === 'Uses a script')?.unavailable).toContain('which does not exist');
+    expect(Object.keys(queued!.scripts).sort()).toEqual((await scripts()).scripts.map(s => s.path).sort());
+    let record: RunRecord | null = null;
+    for (let i = 0; i < 200 && !record; i++) {
+      const run = await call('GET', `/runs/${id}`);
+      record = run.body.status === 'queued' || run.body.status === 'running' ? null : (run.body.record as RunRecord);
+      await new Promise(resolve => setTimeout(resolve, 20));
+    }
+
+    expect(record!.status).toBe('completed');
+    expect(record!.components.find(c => c.nodeId === 'call')!.outputSample['out-0']).toEqual([{ word: 'hi', result: 'HI!' }]);
+  });
 });

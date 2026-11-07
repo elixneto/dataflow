@@ -22,12 +22,21 @@ test("what reached a component in the runs so far: the DATA out of the ports fee
     {source: 'f', sourcePort: 'out-0', target: 'l', targetPort: 'in-0'},
     {source: 'f', sourcePort: 'out-1', target: 'l', targetPort: 'in-1'},
   ];
-  expect(inputVariables(known, edges, 'split').variables.map(v => v.path)).toEqual(['$response', '$response.status', '$response.body', '$response.body.data']);
-  expect(inputVariables(known, edges, 'split').variables[1]).toEqual({path: '$response.status', type: 'number', example: '200'});
-  expect(inputVariables(known, edges, 'l').variables.map(v => v.path)).toEqual(['$id', '$name', '$late']);
-  expect(inputVariables(known, edges, 'l', 'in-1').variables.map(v => v.path)).toEqual(['$id', '$late']);
+  // $DATA (the whole envelope's DATA) first, wherever something feeds the component
+  expect(inputVariables(known, edges, 'split').variables.map(v => v.path)).toEqual(['$DATA', '$response', '$response.status', '$response.body', '$response.body.data']);
+  expect(inputVariables(known, edges, 'split').variables[2]).toEqual({path: '$response.status', type: 'number', example: '200'});
+  expect(inputVariables(known, edges, 'l').variables.map(v => v.path)).toEqual(['$DATA', '$id', '$name', '$late']);
+  expect(inputVariables(known, edges, 'l', 'in-1').variables.map(v => v.path)).toEqual(['$DATA', '$id', '$late']);
   expect(inputVariables(known, edges, 'nobody')).toEqual({variables: [], seen: false});
   expect(inputVariables(known, edges, 'split').seen).toBe(true);
+});
+
+test('$DATA is the whole envelope, beside each of its keys; a key named DATA is still that key', async () => {
+  const {envelopeVariables} = await import('../../src/envelope/expression-variables');
+  const doc = {FLOW_CURRENT_RUN: {} as never, PARAMETERS: {}, DATA: {id: 1, tags: ['a']}};
+  expect(envelopeVariables(doc).$DATA).toEqual({id: 1, tags: ['a']});
+  expect(envelopeVariables(doc).$id).toBe(1);
+  expect(envelopeVariables({...doc, DATA: {DATA: 'mine'}}).$DATA).toBe('mine');
 });
 
 test('the system variables: parameters with their type, the project variables, secrets by name only, the run', () => {

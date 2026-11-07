@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { inputIssues, inputTypeRef, isFolderVisible, planRunFrom, scriptCodeOf, scriptTypeShape, START, startConfig, toExecutableFlow, validateFlowFile, type FlowFile, type RunFromPlan, type RunRecord } from '@dataflow/core';
+import { dynamicTargets, inputIssues, inputTypeRef, isFolderVisible, planRunFrom, scriptCodeOf, scriptImport, scriptTypeShape, START, startConfig, toExecutableFlow, validateFlowFile, type FlowFile, type RunFromPlan, type RunRecord } from '@dataflow/core';
 import type { Database } from '#shared/database/database';
 import { FlowRepository, loadTree } from '#features/folders/project-tree';
 import { readDraft } from '#features/flows/flow-draft';
@@ -7,7 +7,7 @@ import type { UseCaseContext } from '#shared/use-cases/use-case-context';
 import type { UseCaseHandler } from '#shared/use-cases/use-case-handler';
 import { fail, success, type UseCaseResult } from '#shared/use-cases/use-case-result';
 import { validate } from '#shared/use-cases/validate';
-import { scriptsForRun, typeSources } from '#features/scripts/script-store';
+import { listScripts, scriptsForRun, typeSources } from '#features/scripts/script-store';
 import { CHANNELS, notifyRunEvent } from '../run-queue';
 import { calledFlows } from './called-flows';
 import { runs, testRuns } from '../run';
@@ -134,13 +134,28 @@ export class StartRunHandler implements UseCaseHandler<{ id: string }> {
 
     // the scripts its TypeScript components and Script Invokers import (and those import), by the hash of their code as
     // it is now; the called flows' ones too
-    const users = [checked.value, ...called.flatMap(c => (c.flow ? [c.flow] : []))].flatMap(file =>
+    const usersOf = (file: FlowFile) =>
       file.nodes.flatMap(n => {
         const code = scriptCodeOf(n.type, n.config);
         const label = n.label || (n.type === 'typescript' ? 'TypeScript' : 'Script Invoker');
         return code === undefined ? [] : [{ label: file === checked.value ? label : `${file.name} › ${label}`, code }];
-      }),
-    );
+      });
+    const users = [checked.value, ...called.flatMap(c => (c.flow && !c.anyFlow ? [c.flow] : []))].flatMap(usersOf);
+    // a flow taken only because one is named by expression: a script it lacks makes it one that cannot be called
+    for (const c of called.filter(c => c.flow && c.anyFlow && !c.unavailable)) {
+      const own = usersOf(c.flow!);
+      const missing = own.length ? (await scriptsForRun(ctx.db, ctx.orgId, row.projectId, own)).error : undefined;
+      if (missing) c.unavailable = missing;
+      else users.push(...own);
+    }
+    // a Script Invoker that names its function by expression may call any script: every one that resolves goes
+    const files = [checked.value, ...called.flatMap(c => (c.flow && !c.unavailable ? [c.flow] : []))];
+    if (files.some(file => dynamicTargets(file.nodes).scripts)) {
+      for (const script of (await listScripts(ctx.db, ctx.orgId, row.projectId)).scripts) {
+        const user = { label: 'Script Invoker (by path)', code: `import '${scriptImport(script.path)}';` };
+        if (!(await scriptsForRun(ctx.db, ctx.orgId, row.projectId, [user])).error) users.push(user);
+      }
+    }
     const imported = await scriptsForRun(ctx.db, ctx.orgId, row.projectId, users);
     if (imported.error) {
       return fail('validation', `The flow cannot run: ${imported.error}`);

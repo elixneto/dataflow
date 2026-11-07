@@ -135,13 +135,15 @@ function sections(type: string, config: Record<string, unknown>, nameOf?: (id: s
     case 'typescript':
       return single('Code', typescriptConfig(config).code);
     case 'flow': {
-      const {flowId, parameters} = flowInvokerConfig(config);
-      return [...single('Flow', flowId ? (nameOf?.(flowId) ?? flowId) : '', false), ...section('Parameters', parameters.map(p => ({label: p.name, value: shown(p.value, p.expression), code: true})))];
+      const {flowId, flowPath, parameters} = flowInvokerConfig(config);
+      const flow = flowPath ? single('Flow', shown(flowPath.value, flowPath.expression), flowPath.expression) : single('Flow', flowId ? (nameOf?.(flowId) ?? flowId) : '', false);
+      return [...flow, ...section('Parameters', parameters.map(p => ({label: p.name, value: shown(p.value, p.expression), code: true})))];
     }
     case 'script': {
-      const {target, arguments: args} = scriptInvokerConfig(config);
+      const {target, functionPath, arguments: args} = scriptInvokerConfig(config);
       const given = args.filter(a => a.expression ? a.value.trim() : a.value !== '');
-      return [...single('Function', target ? `${target.name} (${target.path})` : '', false), ...section('Arguments', given.map(a => ({label: a.name, value: shown(a.value, a.expression), code: true})))];
+      const fn = functionPath ? single('Function', shown(functionPath.value, functionPath.expression), functionPath.expression) : single('Function', target ? `${target.name} (${target.path})` : '', false);
+      return [...fn, ...section('Arguments', given.map(a => ({label: a.name, value: shown(a.value, a.expression), code: true})))];
     }
     default:
       return [];

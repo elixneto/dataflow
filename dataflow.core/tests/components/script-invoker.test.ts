@@ -77,6 +77,23 @@ describe('Script Invoker', () => {
     expect(r.components.find(c => c.nodeId === 's')!.outputSample['out-0']).toEqual([{n: 1, result: 20}, {n: 2, result: 30}]);
   });
 
+  test('by path (expression): each envelope names the function (folders/script#function), prepared once per function; a bad path is its error', async () => {
+    const prepared: string[] = [];
+    const prepareScript = async (code: string) => {
+      prepared.push(code);
+      return async (input: unknown) => `${/import \{ (\w+) as/.exec(code)![1]}(${(input as unknown[]).join(',')})`;
+    };
+    const config = {function: '$dynamic', functionPath: {value: "$n === 1 ? 'math/ops#one' : 'math/ops#two'", expression: true}, arguments: args({name: 'n', value: '$n', expression: true})};
+    expect(COMPONENTS.script!.validate({function: '$dynamic'})).toEqual(['has no function path.']);
+    expect(COMPONENTS.script!.validate(config)).toEqual([]);
+    expect(scriptCodeOf('script', config)).toBeUndefined();
+    const r = await flowRunner(flow(config), {mode: 'execution', id: 'sp', evaluate, prepareScript});
+    expect(r.components.find(c => c.nodeId === 's')!.outputSample['out-0']).toEqual([{n: 1, result: 'one(1)'}, {n: 2, result: 'two(2)'}]);
+    expect(prepared).toEqual([invokerCode('math/ops', 'one'), invokerCode('math/ops', 'two')]);
+    const bad = await flowRunner(flow({...config, functionPath: {value: "'math/ops'", expression: true}}), {mode: 'execution', id: 'sp2', evaluate, prepareScript});
+    expect(bad.error).toContain('The function path "math/ops" is not a script and a function: folders/script#function');
+  });
+
   test('with Override the result is the DATA; an exception is an error of the envelope', async () => {
     const config = {function: 'math/ops#twice', arguments: args({name: 'n', value: '$n', expression: true})};
     const {prepareScript} = runner(n => [{v: n}, {v: n}]);

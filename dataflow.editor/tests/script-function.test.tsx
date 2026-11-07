@@ -55,6 +55,14 @@ test("its arguments: one row per parameter, in order, with its type; a required 
   expect(render({ function: 'pricing/ops#none' })).toContain('The function takes no arguments.');
 });
 
+test('by path (expression): the function path field, and the arguments as a plain list in order', () => {
+  const html = render({ function: '$dynamic', functionPath: { value: "'pricing/ops#withVat'", expression: true } });
+  expect(html).toContain('<option value="$dynamic" selected="">By path (expression)</option>');
+  expect(html).toContain('Function path');
+  expect(html).not.toContain('aria-label="argument order"');
+  expect(html).toMatch(/Add argument/i);
+});
+
 test('arguments kept for an older signature: a note, and matching takes the values by name, in the new order', () => {
   const kept = [{ name: 'rate', type: 'number', value: '0.1', expression: false }, { name: 'gone', value: 'x', expression: false }];
   expect(render({ function: 'pricing/ops#withVat', arguments: kept })).toContain('The function&#x27;s parameters changed (gone no longer there)');

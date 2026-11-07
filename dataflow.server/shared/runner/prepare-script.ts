@@ -1,5 +1,6 @@
 import vm from 'node:vm';
 import { SCRIPT_IMPORT_PREFIX, toError, type PrepareScript } from '@dataflow/core';
+import { bundleFrame, originalPosition, type SourceMap } from './source-position';
 
 /*
  * The TypeScript component, in the worker (as in the PoC, POC_v0/runner/src/scripts.ts): its code and the project
@@ -24,8 +25,11 @@ const bodyRead = async (response: Response) =>
 
 const text = (parts: unknown[]) => parts.map(p => (typeof p === 'string' ? p : JSON.stringify(p))).join(' ');
 
+/** a bundle: the code node:vm runs, and its source map (back to the component's code and the scripts) */
+export type Bundle = { js: string; map: SourceMap | null };
+
 /** the component's code and the scripts it imports as one script for node:vm; throws what does not compile */
-export async function bundleScript(code: string, scripts: Record<string, string>): Promise<string> {
+export async function bundleScript(code: string, scripts: Record<string, string>): Promise<Bundle> {
   // the component's code is a module that exports its process (an export keeps it an ES module, whatever it uses),
   // and a small entry hands it to the caller
   if (!/\bfunction\s+process\s*\(/.test(code)) {
@@ -41,6 +45,7 @@ export async function bundleScript(code: string, scripts: Record<string, string>
       target: 'browser',
       format: 'iife',
       minify: false,
+      sourcemap: 'external',
       throw: false,
       plugins: [
         {
@@ -88,16 +93,24 @@ export async function bundleScript(code: string, scripts: Record<string, string>
     throw new SyntaxError(`The code does not compile: ${messages.join('; ') || 'unknown error'}`);
   }
 
-  return result.outputs[0].text();
+  const map = result.outputs.find(output => output.kind === 'sourcemap');
+  let parsed: SourceMap | null = null;
+  try {
+    parsed = map ? (JSON.parse(await map.text()) as SourceMap) : null;
+  } catch {
+    // no map: errors say what happened, not where
+  }
+
+  return { js: await result.outputs[0].text(), map: parsed };
 }
 
 /** Prepares a TypeScript component's process with the project's scripts it may import (`scripts`: {path: code}). */
 /** bundles already made in this worker, by the component's code and its scripts' hashes: the latest ones */
-const bundles = new Map<string, string>();
+const bundles = new Map<string, Bundle>();
 const KEPT_BUNDLES = 50;
 
 /** the bundle of a component, made once per code and scripts (`hashes`: {path: hash}; none: not kept) */
-async function cachedBundle(code: string, scripts: Record<string, string>, hashes: Record<string, string>): Promise<string> {
+async function cachedBundle(code: string, scripts: Record<string, string>, hashes: Record<string, string>): Promise<Bundle> {
   if (Object.keys(scripts).length > 0 && Object.keys(hashes).length === 0) {
     return bundleScript(code, scripts);
   }
@@ -113,13 +126,35 @@ async function cachedBundle(code: string, scripts: Record<string, string>, hashe
     return known;
   }
 
-  const js = await bundleScript(code, scripts);
-  bundles.set(key, js);
+  const bundle = await bundleScript(code, scripts);
+  bundles.set(key, bundle);
   if (bundles.size > KEPT_BUNDLES) {
     bundles.delete(bundles.keys().next().value!);
   }
 
-  return js;
+  return bundle;
+}
+
+/** the name the bundle runs under: what its stack frames say */
+const BUNDLE_FILE = 'component.ts';
+
+/**
+ * The error with where it happened in the code as written, when its stack and the map say so: "(line 7)" in the
+ * component's code, "(@myproject/scripts/path line 3)" in a script it imports.
+ */
+export function located(error: unknown, map: SourceMap | null): unknown {
+  const stack = typeof (error as { stack?: unknown })?.stack === 'string' ? (error as { stack: string }).stack : '';
+  const frame = map ? bundleFrame(stack, BUNDLE_FILE) : null;
+  const position = frame ? originalPosition(map!, frame.line, frame.column) : null;
+  const source = position?.source.replace(/^dataflow:/, '') ?? '';
+  const where = source === 'component.ts'
+    ? `line ${position!.line}`
+    : source.startsWith('scripts/') ? `${SCRIPT_IMPORT_PREFIX}${source.slice('scripts/'.length, -'.ts'.length)} line ${position!.line}` : '';
+  const message = (error as { message?: unknown })?.message;
+  if (where && typeof message === 'string' && !message.endsWith(`(${where})`)) {
+    (error as { message: string }).message = `${message} (${where})`;
+  }
+  return error;
 }
 
 /**
@@ -127,7 +162,7 @@ async function cachedBundle(code: string, scripts: Record<string, string>, hashe
  * {path: hash}, what makes the bundle reusable by the next runs of this worker).
  */
 export const prepareScript = async (code: string, globals: Parameters<PrepareScript>[1], scripts: Record<string, string> = {}, hashes: Record<string, string> = {}) => {
-  const js = await cachedBundle(code, scripts, hashes);
+  const { js, map } = await cachedBundle(code, scripts, hashes);
   const log = (...parts: unknown[]) => globals.log(text(parts));
   // the script's console, at the component's log levels
   const at = (level: 'debug' | 'warning' | 'error') => (...parts: unknown[]) => globals.log(text(parts), level);
@@ -174,9 +209,9 @@ export const prepareScript = async (code: string, globals: Parameters<PrepareScr
     crypto: { randomUUID: () => crypto.randomUUID() },
   });
   try {
-    vm.runInContext(js, context, { timeout: SYNC_TIMEOUT_MS, filename: 'component.ts' });
+    vm.runInContext(js, context, { timeout: SYNC_TIMEOUT_MS, filename: BUNDLE_FILE });
   } catch (e) {
-    throw toError(e);
+    throw toError(located(e, map));
   }
 
   const run = (context as Record<string, unknown>)[EXPORTED];
@@ -186,13 +221,16 @@ export const prepareScript = async (code: string, globals: Parameters<PrepareScr
 
   return async (input: unknown) => {
     context.__input = input;
-    const promise = vm.runInContext(`${EXPORTED}(__input)`, context, { timeout: SYNC_TIMEOUT_MS }) as Promise<unknown>;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const overrun = new Promise<never>((_, reject) => {
       timer = setTimeout(() => reject(new Error(`process took longer than ${CALL_TIMEOUT_MS / 1000} s.`)), CALL_TIMEOUT_MS);
     });
     try {
+      const promise = vm.runInContext(`${EXPORTED}(__input)`, context, { timeout: SYNC_TIMEOUT_MS }) as Promise<unknown>;
       return await Promise.race([Promise.resolve(promise), overrun]);
+    } catch (e) {
+      // where it broke, in the code as written
+      throw located(e, map);
     } finally {
       clearTimeout(timer);
     }

@@ -50,6 +50,26 @@ describe('Flow Invoker', () => {
     expect(w.subRuns?.map(s => [s.flow, s.status])).toEqual([['Multiply', 'completed'], ['Multiply', 'completed']]);
   });
 
+  test('by path (expression): each envelope names the flow by its folders and name, any case; one not found is its error', async () => {
+    const byPath = {B: {...multiply, path: 'Math/Multiply'}, C: {...breaks, path: 'Math/Broken/Breaks'}};
+    const named = (path: string, onError = 'throw'): ExecutableFlow => {
+      const p = parent('B', onError);
+      return {...p, nodes: p.nodes.map(n => (n.id === 'w' ? {...n, config: {...n.config, flowId: '$dynamic', flowPath: {value: path, expression: true}}} : n))};
+    };
+    expect(COMPONENTS.flow!.validate({flowId: '$dynamic'})).toEqual(['has no flow path.']);
+    const r = await flowRunner(named("' math / MULTIPLY '"), {mode: 'execution', id: 'path1', evaluate, flows: byPath});
+    expect(r.status).toBe('completed');
+    expect(r.components.find(c => c.nodeId === 'w')!.outputSample['out-0']).toEqual([{n: 1, total: 2}, {n: 2, total: 6}]);
+    // per envelope: n = 1 goes to Multiply, n = 2 to a path that is not there (Divert: the error port)
+    const mixed = await flowRunner(named("$n === 1 ? 'Math/Multiply' : 'Math/Nope'", 'divert'), {mode: 'execution', id: 'path2', evaluate, flows: byPath});
+    const w = mixed.components.find(c => c.nodeId === 'w')!;
+    expect(w.outputs).toEqual({'out-0': 1, error: 1});
+    expect(w.logs.some(l => l.message.includes('The flow "Math/Nope" was not found'))).toBe(true);
+    // the root named back by its id (the run's own, never callable): circular, not missing
+    const back = await flowRunner(named("'A'"), {mode: 'execution', id: 'path3', evaluate, flows: byPath});
+    expect(back.error).toContain('Circular flow call: Parent → Parent.');
+  });
+
   test("each call's entry keeps the parameters it sent, a secret's value hidden", async () => {
     const r = await flowRunner(parent('B'), {mode: 'execution', id: 'params', evaluate, flows});
     expect(r.components.find(c => c.nodeId === 'w')!.subRuns?.map(s => s.parameters)).toEqual([{times: '2'}, {times: '3'}]);
@@ -199,6 +219,15 @@ describe('Flow Invoker', () => {
       expect(w.outputSample['out-0']).toEqual([{n: 1}, {n: 2}, {n: 3}, {n: 4}, {n: 5}]);
       expect(w.subRuns?.map(s => [s.id, s.status, s.envelopes, s.fireAndForget])).toEqual([['child-1', 'queued', 2, true], ['child-2', 'queued', 2, true], ['child-3', 'queued', 1, true]]);
       expect(w.subRuns?.map(s => s.parameters)).toEqual([{times: '2'}, {times: '2'}, {times: '2'}]);
+    });
+
+    test('by path: a batch per flow the envelopes name, each queued with the flow resolved to its id', async () => {
+      const {asked, queueFlow} = queueing();
+      const both = {B: {...multiply, path: 'Multiply'}, D: {...multiply, id: 'D', flow: 'Multiply again', path: 'Other/Multiply'}};
+      const f = five(fire('$dynamic', 'throw', {...fixed, flowPath: {value: "$n % 2 ? 'multiply' : 'other/multiply'", expression: true}}));
+      const r = await flowRunner(f, {mode: 'execution', id: 'p10p', evaluate, flows: both, queueFlow});
+      expect(r.status).toBe('completed');
+      expect(asked.map(a => [a.flowId, a.input])).toEqual([['B', [{n: 1}, {n: 3}, {n: 5}]], ['D', [{n: 2}, {n: 4}]]]);
     });
 
     test('by default batches of 100; envelopes with other parameter values go in batches of their own', async () => {

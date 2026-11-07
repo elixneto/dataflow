@@ -1,5 +1,6 @@
 import {toError} from '#errors/normalize-error';
 import {mergeFields} from '#envelope/envelope-data';
+import {DYNAMIC_TARGET} from './dynamic-target';
 import type {ExpressionField} from '#types/expression-field.type';
 import type {ComponentLogic} from '#types/component-logic.type';
 import type {ComponentContext} from '#types/component-context.type';
@@ -11,7 +12,9 @@ import type {Envelope} from '#types/envelope.type';
  * parameters of its Start (text or expression on the envelope) and, if "Send an input" is checked, an input: the
  * envelope's DATA or an expression on it (`{__requester__: $__requester__, count: $assets.length}`: only what the other
  * flow needs). The input sent is checked against the other flow's Start type first (ExecutableFlow.inputType): one that does not fit
- * is an error of the envelope, and the flow does not run. Circular calls and more than 10 levels are blocked. Two ways:
+ * is an error of the envelope, and the flow does not run. Circular calls and more than 10 levels are blocked. The flow
+ * is the one chosen or, "By path (expression)", the one whose whole path (folders and name) an expression on each
+ * envelope gives; its parameters are then a plain list. Two ways:
  *
  * - wait (default): each envelope that reaches the other flow's End goes out of here with its DATA merged into the
  *   caller envelope's (Override = only the other one's). If the other flow fails, it is an error of the caller envelope
@@ -40,8 +43,11 @@ export const MAX_BATCH_SIZE = 10_000;
 export function flowInvokerConfig(config: Record<string, unknown>) {
   const size = Number(config.batchSize);
   const input = config.input as ExpressionField | undefined;
+  const path = config.flowPath as ExpressionField | undefined;
   return {
     flowId: typeof config.flowId === 'string' ? config.flowId : '',
+    /** the flow named by an expression on each envelope (its whole path): the flow setting is DYNAMIC_TARGET */
+    flowPath: config.flowId === DYNAMIC_TARGET ? {value: typeof path?.value === 'string' ? path.value : '', expression: path?.expression !== false} as ExpressionField : null,
     parameters: Array.isArray(config.parameters) ? (config.parameters as InvokerParameter[]) : [],
     sendEnvelope: config.sendEnvelope === true,
     inputSource: (config.inputSource === 'expression' ? 'expression' : 'data') as InvokerInputSource,
@@ -67,6 +73,16 @@ function inputOf({sendEnvelope, inputSource, input}: ReturnType<typeof flowInvok
   return (doc: Envelope): unknown => (!sendEnvelope ? undefined : inputSource === 'expression' ? ctx.fieldValue(input, doc) : doc.DATA);
 }
 
+/** the flow a call goes to: the one chosen (its id) or, by expression, the whole path the envelope gives */
+function targetOf({flowId, flowPath}: ReturnType<typeof flowInvokerConfig>, ctx: ComponentContext) {
+  return (doc: Envelope): string => {
+    if (!flowPath) return flowId;
+    const path = ctx.fieldValue(flowPath, doc);
+    if (typeof path !== 'string' || !path.trim()) throw new Error(`The flow path is empty (its expression gave ${JSON.stringify(path) ?? 'undefined'}).`);
+    return path.trim();
+  };
+}
+
 export const flowInvoker: ComponentLogic = {
   type: 'flow',
   inputs: 1,
@@ -74,6 +90,10 @@ export const flowInvoker: ComponentLogic = {
   usesOverride: true,
   settings: [
     {key: 'flowId', label: 'Flow', kind: 'flow', required: true},
+    {
+      key: 'flowPath', label: 'Flow path', kind: 'value', required: true, default: {value: '', expression: true},
+      placeholder: "'Imports/' + $source + '/Load'", when: {key: 'flowId', values: [DYNAMIC_TARGET]},
+    },
     {
       key: 'call', label: 'Call', kind: 'select', default: 'wait',
       options: [
@@ -106,8 +126,9 @@ export const flowInvoker: ComponentLogic = {
   ],
 
   validate(config) {
-    const {flowId, call, sendEnvelope, inputSource, input} = flowInvokerConfig(config);
+    const {flowId, flowPath, call, sendEnvelope, inputSource, input} = flowInvokerConfig(config);
     if (!flowId) return ['has no flow selected.'];
+    if (flowPath && !flowPath.value.trim()) return ['has no flow path.'];
     if (sendEnvelope && inputSource === 'expression' && !input.value.trim()) return ['has no input expression.'];
     return call === 'fire-and-forget' && (config.onError === 'continue' || config.onError === 'divert')
       ? ['fires and forgets: its On error is always Throw (the calls answer nothing to continue or divert with).']
@@ -118,10 +139,11 @@ export const flowInvoker: ComponentLogic = {
 
   async* execute(inputs, config, ctx) {
     const settings = flowInvokerConfig(config);
-    const {flowId, parameters, call: how, batchSize} = settings;
+    const {parameters, call: how, batchSize} = settings;
     const input = inputOf(settings, ctx);
+    const flowOf = targetOf(settings, ctx);
     if (how === 'fire-and-forget') {
-      yield* fireAndForget(inputs['in-0'] ?? [], {flowId, parameters, input, sends: settings.sendEnvelope, batchSize}, ctx);
+      yield* fireAndForget(inputs['in-0'] ?? [], {flowOf, parameters, input, sends: settings.sendEnvelope, batchSize}, ctx);
       return;
     }
     let calls = 0;
@@ -130,7 +152,7 @@ export const flowInvoker: ComponentLogic = {
       calls += 1;
       let call: ReturnType<typeof ctx.invokeFlow> | undefined;
       try {
-        call = ctx.invokeFlow(flowId, {parameters: parameterValues(parameters, doc, ctx), input: input(doc)});
+        call = ctx.invokeFlow(flowOf(doc), {parameters: parameterValues(parameters, doc, ctx), input: input(doc)});
         let thisCall = 0;
         // waiting for the other flow is not this one's active time
         for await (const data of ctx.waitEach(call.envelopes)) {
@@ -165,8 +187,8 @@ export const flowInvoker: ComponentLogic = {
  * batches stop closing on their size and take the rest of the envelopes (none is lost; a warning says so). Parameter
  * values that need a new batch past the limit stop the run (On error is Throw).
  */
-async function* fireAndForget(source: AsyncIterable<Envelope>, {flowId, parameters, input, sends, batchSize}: {flowId: string; parameters: InvokerParameter[]; input: (doc: Envelope) => unknown; sends: boolean; batchSize: number}, ctx: ComponentContext): AsyncGenerator<ComponentOutput> {
-  type Batch = {parameters: Record<string, string>; items: unknown[]; count: number};
+async function* fireAndForget(source: AsyncIterable<Envelope>, {flowOf, parameters, input, sends, batchSize}: {flowOf: (doc: Envelope) => string; parameters: InvokerParameter[]; input: (doc: Envelope) => unknown; sends: boolean; batchSize: number}, ctx: ComponentContext): AsyncGenerator<ComponentOutput> {
+  type Batch = {flow: string; parameters: Record<string, string>; items: unknown[]; count: number};
   const batches = new Map<string, Batch>();
   const beside: Promise<unknown>[] = [];
   const limit = ctx.maxFireAndForgetRuns ?? Number.POSITIVE_INFINITY;
@@ -178,9 +200,9 @@ async function* fireAndForget(source: AsyncIterable<Envelope>, {flowId, paramete
     const call = {parameters: batch.parameters, input: sends ? batch.items : undefined};
     try {
       if (ctx.run.mode === 'execution') {
-        await ctx.queueFlow(flowId, call);
+        await ctx.queueFlow(batch.flow, call);
       } else {
-        const running = ctx.invokeFlow(flowId, {...call, fireAndForget: true});
+        const running = ctx.invokeFlow(batch.flow, {...call, fireAndForget: true});
         beside.push((async () => {
           for await (const _ of running.envelopes) { /* its End's envelopes go nowhere */ }
           await running.result;
@@ -197,15 +219,17 @@ async function* fireAndForget(source: AsyncIterable<Envelope>, {flowId, paramete
   for await (const doc of source) {
     const values = parameterValues(parameters, doc, ctx);
     const data = input(doc);
+    const flow = flowOf(doc);
     // On error is Throw: an envelope whose call would not start stops the run here
-    ctx.checkFlowCall(flowId, data);
-    const key = JSON.stringify(Object.entries(values).sort(([a], [b]) => a.localeCompare(b)));
+    ctx.checkFlowCall(flow, data);
+    // a batch per flow (one named by expression may differ per envelope) and parameter values
+    const key = JSON.stringify([flow, ...Object.entries(values).sort(([a], [b]) => a.localeCompare(b))]);
     let batch = batches.get(key);
     if (!batch) {
       if (runs + batches.size >= limit) {
         throw new Error(`More than ${limit} fire and forget runs: these parameter values need a batch of their own past the limit (4 × the server's workers).`);
       }
-      batch = {parameters: values, items: [], count: 0};
+      batch = {flow, parameters: values, items: [], count: 0};
       batches.set(key, batch);
     }
     // a full batch kept open at the limit takes one more: the runs left are fewer than the batches would need

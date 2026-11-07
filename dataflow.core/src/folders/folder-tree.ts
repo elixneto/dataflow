@@ -40,6 +40,14 @@ export function folderPath<F extends TreeFolder>(folders: F[], folderId: string 
   return path;
 }
 
+/** A flow's whole path, as a Flow Invoker names it by expression: its folders and its name (`Imports/Bynder/Main`). */
+export const flowPath = (folders: TreeFolder[], flow: {folderId: string | null; name: string}) =>
+  [...folderPath(folders, flow.folderId).map(f => f.name), flow.name].join('/');
+
+/** a path as written, for comparing: no slashes at the ends nor spaces around them, any case */
+export const normalizedFlowPath = (path: string) =>
+  path.trim().replace(/\s*\/\s*/g, '/').replace(/^\/+|\/+$/g, '').toLowerCase();
+
 /** The ids of the folder and of every folder under it. */
 export function subtreeIds(folders: TreeFolder[], folderId: string): Set<string> {
   const ids = new Set([folderId]);

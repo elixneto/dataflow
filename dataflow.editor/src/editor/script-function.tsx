@@ -1,6 +1,6 @@
 import { useContext, useEffect, type ReactNode } from 'react';
 import { AlertTriangle } from 'lucide-react';
-import { inputTypeRef, scriptFunctions, type ExportedFunction, type ExpressionField, type ScriptArgument } from '@dataflow/core';
+import { DYNAMIC_TARGET, inputTypeRef, scriptFunctions, type ExportedFunction, type ExpressionField, type ScriptArgument } from '@dataflow/core';
 import { loadScriptContent, useProjectScripts } from '@/data/scripts/scripts-store';
 import { ProjectResourcesContext } from './project-resources';
 
@@ -21,6 +21,7 @@ export function ScriptFunctionPicker({ id, value, onChange }: { id: string; valu
   return (
     <select id={id} value={value} className={SELECT} onChange={event => onChange(event.target.value)}>
       <option value="">{functions.length ? 'Choose a function' : 'No script exports a function'}</option>
+      <option value={DYNAMIC_TARGET}>By path (expression)</option>
       {missing && <option value={value}>{`${chosen.name} (${chosen.path}, missing)`}</option>}
       {[...new Set(functions.map(f => f.path))].map(path => (
         <optgroup key={path} label={path}>

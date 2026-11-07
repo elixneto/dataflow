@@ -2,6 +2,7 @@ import type {ExecutableFlow} from '#types/executable-flow.type';
 import {MAX_FLOW_DEPTH} from '#engine/constants';
 import {componentSettings, settingVisible} from '../components/settings';
 import {scriptCodeOf} from '../components/script-invoker';
+import {DYNAMIC_TARGET} from '../components/dynamic-target';
 import {scriptImports} from '../scripts/script-path';
 import {inputTypeRef} from '../scripts/type-shape';
 
@@ -26,7 +27,8 @@ export type FlowCall = {
 const INVOKER = 'flow';
 const ERROR_PORT = 'error';
 
-const target = (config: Record<string, unknown>) => (typeof config.flowId === 'string' ? config.flowId : '');
+/** the flow a Flow Invoker calls, '' when none is chosen or an expression names it in the run (no call to draw) */
+const target = (config: Record<string, unknown>) => (typeof config.flowId === 'string' && config.flowId !== DYNAMIC_TARGET ? config.flowId : '');
 
 /** Every Flow Invoker call in the flows (the ones without a flow chosen are left out). */
 export function flowCalls(flows: ExecutableFlow[]): FlowCall[] {

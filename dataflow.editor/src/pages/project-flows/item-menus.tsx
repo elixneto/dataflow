@@ -1,4 +1,4 @@
-import { Archive, Ellipsis, FolderInput, FolderPlus, Pencil, Plus } from 'lucide-react';
+import { Archive, Copy, Ellipsis, FolderInput, FolderPlus, Pencil, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -17,6 +17,7 @@ export type ItemActions = {
   newFlow: (folderId: string | null) => void;
   rename: (kind: 'folder' | 'flow', item: Folder | Flow) => void;
   move: (kind: 'folder' | 'flow', item: Folder | Flow) => void;
+  clone: (flow: Flow) => void;
   archive: (kind: 'folder' | 'flow', item: Folder | Flow) => void;
 };
 
@@ -57,7 +58,7 @@ export function FolderMenu({ folder, actions, className }: { folder: Folder; act
   );
 }
 
-/** "..." of a flow: Rename, Move to..., Archive. */
+/** "..." of a flow: Rename, Move to..., Clone..., Archive. */
 export function FlowMenu({ flow, actions, className }: { flow: Flow; actions: ItemActions; className?: string }) {
   return (
     <DropdownMenu>
@@ -68,6 +69,9 @@ export function FlowMenu({ flow, actions, className }: { flow: Flow; actions: It
         </DropdownMenuItem>
         <DropdownMenuItem onSelect={() => actions.move('flow', flow)}>
           <FolderInput /> Move to...
+        </DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => actions.clone(flow)}>
+          <Copy /> Clone...
         </DropdownMenuItem>
         <DropdownMenuItem onSelect={() => actions.archive('flow', flow)}>
           <Archive /> Archive

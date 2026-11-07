@@ -26,11 +26,13 @@ export class FlowRepository extends OrgRepository<typeof flows> {
   }
 }
 
-/** every folder and flow of the project, archived included (the core rules use archivedAt) */
+/** every folder and flow of the project, archived included (the core rules use archivedAt), in the order they were made */
 export type ProjectTree = {
   folders: (Folder & { archivedAt: Date | null })[];
   flows: (Flow & { archivedAt: Date | null })[];
 };
+
+const byCreation = <T extends { createdAt: Date; id: string }>(a: T, b: T) => a.createdAt.getTime() - b.createdAt.getTime() || a.id.localeCompare(b.id);
 
 export async function loadTree(db: Database, orgId: string, projectId: string): Promise<ProjectTree> {
   const [folderRows, flowRows] = await Promise.all([
@@ -38,9 +40,10 @@ export async function loadTree(db: Database, orgId: string, projectId: string): 
     new FlowRepository(db, orgId).findAll(eq(flows.projectId, projectId)),
   ]);
 
+  // the database's own order changes with updates: the calls, the lists, the clones' order would not hold
   return {
-    folders: folderRows.map(row => ({ ...row, archivedAt: row.deletedAt })),
-    flows: flowRows.map(row => ({ ...row, archivedAt: row.deletedAt })),
+    folders: folderRows.sort(byCreation).map(row => ({ ...row, archivedAt: row.deletedAt })),
+    flows: flowRows.sort(byCreation).map(row => ({ ...row, archivedAt: row.deletedAt })),
   };
 }
 

@@ -50,7 +50,10 @@ export function systemVariables(parameters: FlowParameter[], variables: {name: s
   ];
 }
 
-/** what reaches a component (at `port`, when given): the DATA variables of the ports feeding it, without repeats */
+/**
+ * what reaches a component (at `port`, when given): $DATA (the whole envelope's DATA) and the DATA variables of the
+ * ports feeding it, without repeats
+ */
 export function inputVariables(known: KnownVariables, edges: {source: string; sourcePort: string; target: string; targetPort: string}[], nodeId: string, port?: string): {variables: AvailableVariable[]; seen: boolean} {
   const feeding = edges.filter(e => e.target === nodeId && (port === undefined || e.targetPort === port));
   const byPath = new Map<string, AvailableVariable>();
@@ -61,5 +64,6 @@ export function inputVariables(known: KnownVariables, edges: {source: string; so
     seen = true;
     for (const v of variables) if (!byPath.has(v.path)) byPath.set(v.path, v);
   }
-  return {variables: [...byPath.values()], seen};
+  const whole: AvailableVariable[] = feeding.length && !byPath.has('$DATA') ? [{path: '$DATA', type: 'object'}] : [];
+  return {variables: [...whole, ...byPath.values()], seen};
 }

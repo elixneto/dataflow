@@ -49,6 +49,34 @@ describe('folders and flows api', () => {
     expect((await call('POST', `/flows/${flowId}/restore`)).body).toMatchObject({ archivedAt: null });
   });
 
+  test('clone: a new flow under the name chosen, with a copy of the draft (revision 0), in the same folder or another', async () => {
+    // a project of its own: the other tests list every flow of theirs
+    const project = (await call('POST', '/projects', { name: 'Clones' })).body.id as string;
+    const folder = (await call('POST', `/projects/${project}/folders`, { name: 'Clones' })).body.id as string;
+    const sourceId = (await call('POST', `/projects/${project}/flows`, { name: 'Source', folderId: folder })).body.id as string;
+    const draft = (await call('GET', `/flows/${sourceId}/draft`)).body as { flow: { nodes: { id: string; type: string; position: unknown; config: unknown }[]; edges: unknown[] } };
+    const nodes = [...draft.flow.nodes, { id: 'log', type: 'log', label: 'Say', position: { x: 160, y: 0 }, config: { message: "'hi'" } }];
+    expect((await call('PUT', `/flows/${sourceId}/draft`, { revision: 0, flow: { ...draft.flow, nodes } })).status).toBe(200);
+
+    const cloned = await call('POST', `/flows/${sourceId}/clone`, { name: 'Source (copy)' });
+    expect(cloned.status).toBe(201);
+    const id = cloned.body.id as string;
+    expect(id).not.toBe(sourceId);
+    expect((await call('GET', `/flows/${id}`)).body).toMatchObject({ id, name: 'Source (copy)', folderId: folder });
+    const copy = (await call('GET', `/flows/${id}/draft`)).body as { revision: number; flow: { id: string; name: string; nodes: { id: string }[] } };
+    expect(copy.revision).toBe(0);
+    expect(copy.flow).toMatchObject({ id, name: 'Source (copy)' });
+    expect(copy.flow.nodes.map(n => n.id)).toEqual(nodes.map(n => n.id));
+    // the original stays as it was
+    expect((await call('GET', `/flows/${sourceId}/draft`)).body).toMatchObject({ revision: 1, flow: { id: sourceId, name: 'Source' } });
+
+    // a name taken in that folder (any case): 409; another folder (the root here): fine
+    expect((await call('POST', `/flows/${sourceId}/clone`, { name: 'source' })).status).toBe(409);
+    expect((await call('POST', `/flows/${sourceId}/clone`, { name: 'Source', folderId: null })).status).toBe(201);
+    expect((await call('POST', `/flows/${sourceId}/clone`, { name: '' })).status).toBe(400);
+    expect((await call('POST', `/flows/${crypto.randomUUID()}/clone`, { name: 'X' })).status).toBe(404);
+  });
+
   test('errors: 409 for a taken name, 400 for a cycle, 404 for unknown ids', async () => {
     const a = (await call('POST', `/projects/${projectId}/folders`, { name: 'A' })).body.id as string;
     const b = (await call('POST', `/projects/${projectId}/folders`, { name: 'B', parentId: a })).body.id as string;

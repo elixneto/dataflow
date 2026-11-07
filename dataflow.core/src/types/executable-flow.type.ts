@@ -6,6 +6,8 @@ import type {TypeShape} from '../scripts/type-shape';
 export type ExecutableFlow = {
   /** flow id (the Flow Invoker calls another one by id) */
   id?: string;
+  /** its folders and name (`Imports/Bynder/Main`): how a Flow Invoker names it by expression */
+  path?: string;
   project: string;
   flow: string;
   parameters: FlowParameter[];

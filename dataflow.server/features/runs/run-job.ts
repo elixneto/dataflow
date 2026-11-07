@@ -160,6 +160,7 @@ export async function prepareJob(db: Database, keyring: Keyring | undefined, run
       {
         ...(c.flow ? toExecutableFlow(c.flow, projectName) : { project: projectName, flow: c.name, parameters: [], nodes: [], edges: [] }),
         id: c.id,
+        ...(c.path ? { path: c.path } : {}),
         ...(c.inputType ? { inputType: c.inputType } : {}),
         ...(c.unavailable ? { unavailable: c.unavailable } : {}),
       },

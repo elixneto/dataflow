@@ -6,6 +6,7 @@ import type {ComponentLogic} from '#types/component-logic.type';
 import type {Envelope} from '#types/envelope.type';
 import type {ExpressionField} from '#types/expression-field.type';
 import {scriptOutputs, typescriptConfig} from './typescript';
+import {DYNAMIC_TARGET} from './dynamic-target';
 
 /**
  * Script Invoker: for each incoming envelope, calls a function a project script exports (`export function name(...)`),
@@ -13,14 +14,19 @@ import {scriptOutputs, typescriptConfig} from './typescript';
  * its default applies). What it returns goes where a TypeScript component's does: the output key, or with Override
  * the whole DATA. It runs as a TypeScript component that imports the function (the same runner, globals and limits);
  * an exception is an error of the envelope (On error). Always waits for the call: there is no fire and forget.
+ * "By path (expression)": the function is the one an expression on each envelope names (`folders/script#function`);
+ * its arguments are then a plain list, in order (a fixed value is text, an expression any value).
  */
 
 /** an argument as the config keeps it: the parameter's name and type (as the function declares them) and its value */
 export type ScriptArgument = ExpressionField & {name: string; type?: string};
 
 export function scriptInvokerConfig(config: Record<string, unknown>) {
+  const path = config.functionPath as ExpressionField | undefined;
   return {
     target: inputTypeRef(config.function),
+    /** the function named by an expression on each envelope (`folder/script#function`): the function setting is DYNAMIC_TARGET */
+    functionPath: config.function === DYNAMIC_TARGET ? {value: typeof path?.value === 'string' ? path.value : '', expression: path?.expression !== false} as ExpressionField : null,
     arguments: Array.isArray(config.arguments) ? (config.arguments as ScriptArgument[]) : [],
   };
 }
@@ -66,6 +72,10 @@ export const scriptInvoker: ComponentLogic = {
   settings: [
     {key: 'function', label: 'Function', kind: 'script-function', required: true},
     {
+      key: 'functionPath', label: 'Function path', kind: 'value', required: true, default: {value: '', expression: true},
+      placeholder: "'pricing/' + $country + '#total'", when: {key: 'function', values: [DYNAMIC_TARGET]},
+    },
+    {
       key: 'arguments', label: 'Arguments', kind: 'list', itemLabel: 'argument', argumentsOf: 'function',
       item: [
         {key: 'name', label: 'Name', kind: 'text', required: true},
@@ -75,18 +85,37 @@ export const scriptInvoker: ComponentLogic = {
   ],
 
   validate(config) {
-    return scriptInvokerConfig(config).target ? [] : ['has no function selected.'];
+    const {target, functionPath} = scriptInvokerConfig(config);
+    if (functionPath) return functionPath.value.trim() ? [] : ['has no function path.'];
+    return target ? [] : ['has no function selected.'];
   },
 
   async* execute(inputs, config, ctx) {
-    const {target, arguments: args} = scriptInvokerConfig(config);
-    if (!target) throw new Error('No function selected.');
-    const call = await ctx.prepareScript(invokerCode(target.path, target.name));
+    const {target: chosen, functionPath, arguments: args} = scriptInvokerConfig(config);
+    if (!chosen && !functionPath) throw new Error('No function selected.');
+    // one prepared call per function (a function named by expression may differ per envelope)
+    const prepared = new Map<string, ReturnType<typeof ctx.prepareScript>>();
+    const callOf = (target: {path: string; name: string}) => {
+      const code = invokerCode(target.path, target.name);
+      if (!prepared.has(code)) prepared.set(code, ctx.prepareScript(code));
+      return prepared.get(code)!;
+    };
+    const targetOf = (doc: Envelope) => {
+      if (!functionPath) return chosen!;
+      const path = ctx.fieldValue(functionPath, doc);
+      const target = typeof path === 'string' ? inputTypeRef(path.trim()) : null;
+      if (!target) throw new Error(`The function path ${JSON.stringify(path) ?? 'undefined'} is not a script and a function: folders/script#function (e.g. pricing/total#withVat).`);
+      return target;
+    };
     let calls = 0;
     let sent = 0;
+    const called = new Set<string>();
     for await (const doc of inputs['in-0'] ?? []) {
       calls += 1;
       try {
+        const target = targetOf(doc);
+        called.add(`${target.name} (${scriptImport(target.path)})`);
+        const call = await callOf(target);
         const returned = await call(args.map(a => argumentValue(a, doc, ctx)));
         for (const out of scriptOutputs(doc, returned, ctx.node, target.name)) {
           sent += 1;
@@ -96,6 +125,6 @@ export const scriptInvoker: ComponentLogic = {
         yield {error: toError(e), doc};
       }
     }
-    ctx.log('debug', `${calls} call(s) of ${target.name} (${scriptImport(target.path)}), ${sent} envelope(s) out.`);
+    ctx.log('debug', `${calls} call(s) of ${[...called].join(', ') || 'no function'}, ${sent} envelope(s) out.`);
   },
 };
