@@ -5,8 +5,11 @@ import mongodb_pipeline_aggregate from '#scenarios/mongodb-pipeline-aggregate/sc
 import sqlserver_to_mongodb from '#scenarios/sqlserver-to-mongodb/scenario';
 import type { Scenario } from '#perf/scenario';
 
-/* The scenarios, in the order `bun run perf` runs them: the ones without Docker first. */
-
-export const SCENARIOS: Scenario[] = [in_memory_pipeline, flow_invoker_fanout, http_slow_api, mongodb_pipeline_aggregate, sqlserver_to_mongodb];
-
+export const SCENARIOS: Scenario[] = [
+    in_memory_pipeline,
+    flow_invoker_fanout,
+    http_slow_api,
+    mongodb_pipeline_aggregate,
+    sqlserver_to_mongodb,
+];
 export const scenarioById = (id: string): Scenario | undefined => SCENARIOS.find(s => s.id === id);
