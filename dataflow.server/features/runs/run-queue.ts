@@ -1,6 +1,7 @@
 import { getTableColumns } from 'drizzle-orm';
 import type { QueueFlowRequest, RunProgress, RunRecord } from '@dataflow/core';
 import type { Database } from '#shared/database/database';
+import { pgJson } from '#shared/database/jsonb';
 import { RUN_TABLES, runs, type Run, type RunRowStatus, type RunTable } from './run';
 import type { CalledFlow } from './start-run/called-flows';
 
@@ -113,7 +114,7 @@ export async function heartbeat(db: Database, runIds: string[]): Promise<void> {
 export async function saveProgress(db: Database, run: { id: string; table: RunTable }, progress: RunProgress): Promise<void> {
   await db.query(`UPDATE ${run.table} SET progress = $2::text::jsonb, envelopes_in = $3 WHERE id = $1 AND status = 'running'`, [
     run.id,
-    JSON.stringify(progress),
+    pgJson(progress),
     envelopeCounts(progress).envelopesIn ?? null,
   ]);
   await notifyRunEvent(db, { id: run.id, type: 'progress' });
@@ -136,7 +137,7 @@ export async function finishRun(db: Database, run: { id: string; table: RunTable
      WHERE id = $1 AND status IN ('queued', 'running')
      RETURNING id, org_id AS "orgId", root_id AS "rootId", status`,
     [
-      run.id, record.status, JSON.stringify(record), Math.round(record.durationMs),
+      run.id, record.status, pgJson(record), Math.round(record.durationMs),
       usage.startRssBytes ?? null, usage.peakRssBytes ?? null, usage.cpuMs === undefined ? null : Math.round(usage.cpuMs),
       record.error ?? null, envelopesIn ?? null, envelopesOut ?? null,
     ],
@@ -149,7 +150,7 @@ export async function finishRun(db: Database, run: { id: string; table: RunTable
 async function failLost(db: Database, run: QueuedRun, error: string, stillStale?: number): Promise<boolean> {
   const record = lostRecord(run, error);
   const { envelopesIn, envelopesOut } = envelopeCounts(record);
-  const values = [run.id, JSON.stringify(record), Math.round(record.durationMs), error, envelopesIn ?? null, envelopesOut ?? null];
+  const values = [run.id, pgJson(record), Math.round(record.durationMs), error, envelopesIn ?? null, envelopesOut ?? null];
   const [row] = await db.query<{ id: string; orgId: string; rootId: string | null; status: RunRowStatus }>(
     `UPDATE ${run.table} SET status = 'failed', record = $2::text::jsonb, progress = NULL, finished_at = now(), duration_ms = $3,
        error = $4, envelopes_in = $5, envelopes_out = $6

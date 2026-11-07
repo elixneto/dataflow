@@ -206,8 +206,11 @@ export class Supervisor {
           log.debug(`Run ${run.id} ended; a newer test run had replaced it.`);
         }
       } catch (e) {
-        // its heartbeat stops: a supervisor reaps it
         log.error(`Run ${run.id}: its end could not be stored.`, { error: e });
+        // stored as failed, with why, rather than left running until its heartbeat is missed
+        const details = { id: run.id, mode: run.mode, projectName: ended.record.run.project, flowName: ended.record.run.flow, startedAt: started };
+        const reason = `The run ended (${ended.record.status}) but its record could not be stored: ${e instanceof Error ? e.message : String(e)}`;
+        await finishRun(db, run, failedRecord(details, reason), ended.usage).catch(() => {});
       }
 
       this.active.delete(run.id);

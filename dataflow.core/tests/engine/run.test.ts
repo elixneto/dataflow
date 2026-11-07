@@ -67,6 +67,34 @@ test('run cancelled by the signal', async () => {
   expect(r.error).toBe('Run cancelled.');
 });
 
+test('Stop does not wait for a component stuck on something that ignores it: the run ends at once, that component stopped', async () => {
+  const stuck: ExecutableFlow = {
+    project: 'Test', flow: 'Stuck', parameters: [],
+    nodes: [
+      {id: 'start', type: 'start', label: 'Start', config: {acceptsInput: true}},
+      {id: 'ts', type: 'typescript', label: 'Waits forever', config: {code: 'async function process($input) { return null; }'}},
+      {id: 'end', type: 'end', label: 'End', config: {}},
+    ],
+    edges: [
+      {source: 'start', sourcePort: 'out-0', target: 'ts', targetPort: 'in-0'},
+      {source: 'ts', sourcePort: 'out-0', target: 'end', targetPort: 'in-0'},
+    ],
+  };
+  const control = new AbortController();
+  // a script's own wait (its timer, a fetch of its own): the run's signal does not reach it
+  const prepareScript = async () => () => new Promise<never>(() => {});
+  setTimeout(() => control.abort(), 50);
+  const t0 = performance.now();
+  const r = await flowRunner(stuck, {mode: 'execution', id: 't14b', evaluate, signal: control.signal, prepareScript, input: [{a: 1}]});
+  expect(performance.now() - t0).toBeLessThan(1000);
+  expect(r.status).toBe('failed');
+  expect(r.error).toBe('Run cancelled.');
+  const ts = r.components.find(c => c.nodeId === 'ts')!;
+  expect(ts.status).toBe('failed');
+  expect(ts.logs.at(-1)?.message).toBe('Stopped while it was running (Run cancelled.)');
+  expect(ts.end).toBeDefined();
+});
+
 test('End accepts several edges into the same input', async () => {
   const twoPaths: ExecutableFlow = {
     project: 'Test', flow: 'End with several edges', parameters: [],

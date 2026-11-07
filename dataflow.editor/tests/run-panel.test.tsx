@@ -325,9 +325,13 @@ describe("a run's log on its own page", () => {
     expect(logs({ text: 'nothing like it' })).toContain('No log lines with &quot;nothing like it&quot; at info and up.');
   });
 
-  test('without a canvas to focus, its lines are not buttons', () => {
-    expect(logs({})).not.toContain('<button');
-    expect(logs({}, () => {})).toContain('<button');
+  test('without a canvas to focus, its lines are not buttons; with one, a row that shows the component, its text selectable', () => {
+    expect(logs({})).not.toContain('role="button"');
+    const focusable = logs({}, () => {});
+    expect(focusable).toContain('role="button" tabindex="0"');
+    // a <button> would not let its text be selected (copied)
+    expect(focusable).not.toContain('<button');
+    expect(focusable).toContain('select-text');
   });
 
   test("the run's page has the four tabs; its Data has no Pin output (no canvas to pin on)", () => {
@@ -383,6 +387,21 @@ describe('the runs a Flow Invoker called, in the panel', () => {
     const html = panel(withCalls(true));
     expect(html).toMatch(/aria-selected="true"[^>]*>errors<span[^>]*>1<\/span>/);
     expect(html).toMatch(/>Big<\/span>.*Child › Mapper:.*\$x is not defined/);
+  });
+
+  test("the Flow Invoker's line that passes on a called flow's error is not listed again: one error, where it happened", async () => {
+    const { runErrors } = await import('../src/pages/flow-editor/run-view');
+    const record = withCalls(true);
+    const relayed = {
+      ...record,
+      components: record.components.map(c =>
+        c.nodeId === 'f' ? { ...c, logs: [...c.logs, { at: at(3), level: 'error' as const, message: 'The flow "Child" failed: "Mapper": $x is not defined' }] } : c,
+      ),
+    };
+    expect(runErrors(relayed)).toEqual([{ nodeId: 'f', message: '$x is not defined', count: 1, at: at(2), via: 'Child › Mapper' }]);
+    // a call whose record was not kept: its error is only in the relay, which stays
+    const unkept = { ...relayed, components: relayed.components.map(c => (c.nodeId === 'f' ? { ...c, subRuns: [] } : c)) };
+    expect(runErrors(unkept).map(e => e.message)).toEqual(['The flow "Child" failed: "Mapper": $x is not defined']);
   });
 
   test('the Logs tab lists each called run collapsed where it started, with how it went; open, its lines say the flow and the component', () => {

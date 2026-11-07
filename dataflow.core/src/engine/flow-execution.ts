@@ -24,6 +24,8 @@ import type {FlowCurrentRun} from '#types/flow-current-run.type';
 
 /** how often a run's progress goes out (RunOptions.onProgress) */
 const PROGRESS_MS = 250;
+/** after Stop (or the timeout), how long the run waits for its components to end on their own */
+const STOP_GRACE_MS = 250;
 
 async function drain(source: AsyncIterable<Envelope>) {
   for await (const _ of source) { /* dropped */ }
@@ -131,7 +133,11 @@ export class FlowExecution {
 
     // the run as it goes, for whoever follows it (the editor): every PROGRESS_MS while it runs
     const progress = this.options.onProgress ? setInterval(() => this.options.onProgress?.(this.progress()), PROGRESS_MS) : undefined;
-    await Promise.all(this.wf.nodes.map(node => this.runNode(node)));
+    const all = Promise.all(this.wf.nodes.map(node => this.runNode(node)));
+    // Stop or timeout: the components have a moment to end on their own (a call the signal aborts); one still waiting on
+    // something that does not listen (a script's own wait) is not waited for: the run ends now, it as stopped
+    await Promise.race([all, this.stopped.then(() => Promise.race([all, new Promise(resolve => setTimeout(resolve, STOP_GRACE_MS))]))]);
+    this.markStopped();
     clearInterval(progress);
 
     clearTimeout(limit);
@@ -182,6 +188,26 @@ export class FlowExecution {
   interrupt(reason: string) {
     this.failure ??= reason;
     this.abortAll();
+    this.stop();
+  }
+
+  /** settles when the run is stopped from outside (Stop, timeout): it no longer waits for its components then */
+  private stop: () => void = () => {};
+  private readonly stopped = new Promise<void>(resolve => (this.stop = resolve));
+
+  /** after a Stop, the components still at work (not waited for): stopped, their times up to now */
+  private markStopped() {
+    if (!this.failure) return;
+    const now = performance.now();
+    for (const [nodeId, rec] of this.records) {
+      if (rec.status !== 'running') continue;
+      rec.status = 'failed';
+      rec.logs.push({at: new Date().toISOString(), level: 'error', message: `Stopped while it was running (${this.failure})`});
+      const opened = this.opened.get(nodeId) ?? now;
+      rec.start ??= this.isoAt(opened);
+      rec.end = this.isoAt(now);
+      rec.durationMs = Math.round((now - opened) * 100) / 100;
+    }
   }
 
   private abortAll() {

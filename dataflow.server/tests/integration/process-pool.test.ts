@@ -83,14 +83,19 @@ describe('process pool', () => {
     expect(JSON.stringify(record)).not.toContain('w0rker-s3cret');
   });
 
-  test('Stop: the run ends cancelled with what it did so far', async () => {
+  test('Stop: the run ends cancelled with what it did so far, at once (not when its worker is killed)', async () => {
     const execution = pool.run(job('/slow?ms=5000'), () => {});
     await Bun.sleep(700);
+    const asked = performance.now();
     execution.cancel();
     const { record } = await execution.done;
+    // the engine ends it (its call aborted, nothing waited for), well before the kill after cancelGraceMs (1 s here)
+    expect(performance.now() - asked).toBeLessThan(800);
     expect(record.status).toBe('failed');
     expect(record.error).toContain('cancelled');
     expect(record.components.find(c => c.nodeId === 'start')?.status).toBe('completed');
+    // its worker is replaced: the next run gets a new one, and runs
+    expect((await pool.run(job('/fast'), () => {}).done).record.status).toBe('completed');
   });
 
   test('a run past the time limit is killed with its worker; the next run gets a new one', async () => {

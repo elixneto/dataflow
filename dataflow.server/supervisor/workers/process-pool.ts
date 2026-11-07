@@ -26,8 +26,8 @@ type Slot = {
   process: ReturnType<typeof Bun.spawn> | null;
   ready: Promise<void>;
   runs: number;
-  /** the run it has now */
-  current: { job: RunJob; last: RunProgress | null; resolve: (value: Awaited<Execution['done']>) => void; onProgress: (p: RunProgress) => void; hooks: RunHooks; timers: Timer[] } | null;
+  /** the run it has now (`stopped`: Stop was asked for it: its worker is replaced once it ends) */
+  current: { job: RunJob; last: RunProgress | null; resolve: (value: Awaited<Execution['done']>) => void; onProgress: (p: RunProgress) => void; hooks: RunHooks; timers: Timer[]; stopped?: true } | null;
 };
 
 /**
@@ -86,9 +86,11 @@ export function processPool(options: PoolOptions): Executor {
           slot.current.last = message.progress;
           slot.current.onProgress(message.progress);
         } else if (message.type === 'done' && slot.current?.job.id === message.id) {
+          const stopped = slot.current.stopped;
           finish(slot, { record: message.record, usage: message.usage });
-          // replaced between runs when it ran many or grew too much
-          if (slot.runs >= maxRunsPerWorker || (message.usage.peakRssBytes ?? 0) > maxRssBytes) {
+          // replaced between runs when it ran many or grew too much; or when its run was stopped (the run ended without
+          // waiting for what a component still had going: it must not go on in the next run's worker)
+          if (stopped || slot.runs >= maxRunsPerWorker || (message.usage.peakRssBytes ?? 0) > maxRssBytes) {
             retire(slot);
           }
         }
@@ -158,6 +160,7 @@ export function processPool(options: PoolOptions): Executor {
           }
 
           slot.process?.send({ type: 'cancel', id: job.id } satisfies ToWorker);
+          current.stopped = true;
           // the engine stops at its next step; a component stuck in a call does not: its worker goes
           current.timers.push(setTimeout(() => kill('Run cancelled.'), cancelGraceMs));
         },

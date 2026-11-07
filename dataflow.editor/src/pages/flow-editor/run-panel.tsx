@@ -1,4 +1,4 @@
-import {Fragment, useLayoutEffect, useMemo, useRef, useState, type PointerEvent, type ReactNode} from 'react';
+import {Fragment, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent, type ReactNode} from 'react';
 import {
     ChevronDown,
     ChevronRight,
@@ -445,7 +445,7 @@ function ErrorsTab({record, errors, onFocus}: {
                 const c = byId.get(e.nodeId);
                 return (
                     <li key={`${e.nodeId}:${e.message}`} className="border-b last:border-b-0">
-                        <button type="button" onClick={() => onFocus(e.nodeId)}
+                        <FocusRow onFocus={() => onFocus(e.nodeId)}
                                 className="flex w-full items-start gap-3 px-3 py-1.5 text-left hover:bg-accent"
                                 title="Show the component">
                             <CircleX className="mt-0.5 size-3.5 shrink-0 text-destructive" aria-hidden/>
@@ -463,7 +463,7 @@ function ErrorsTab({record, errors, onFocus}: {
                                 className="shrink-0 rounded-full bg-destructive/15 px-1.5 font-mono text-destructive"
                                 title={`${e.count} times`}>×{e.count}</span>}
                             <span className="shrink-0 font-mono text-muted-foreground">{time(e.at)}</span>
-                        </button>
+                        </FocusRow>
                     </li>
                 );
             })}
@@ -573,6 +573,35 @@ function logItems(shown: Shown, match: LogMatch, via = ''): LogItem[] {
 const errorLines = (shown: Shown): number => shown.components.reduce((n, c) => n + c.logs.filter(l => l.level === 'error').length + subRunsOf(c).reduce((m, sub) => m + errorLines(sub.record), 0), 0);
 
 /** the lines, and each called run as a group that opens on its own lines (nested when that one called flows too) */
+/**
+ * A row (an error, a log line) that shows its component when clicked, its text still selectable to copy: a button's
+ * is not. A click that ends a selection in it only selects; Enter or Space shows the component, as a button.
+ */
+function FocusRow({onFocus, className, style, title, children}: {
+    onFocus: () => void;
+    className?: string;
+    style?: CSSProperties;
+    title?: string;
+    children: ReactNode
+}) {
+    return (
+        <div role="button" tabIndex={0} title={title} style={style} className={cn('cursor-pointer select-text', className)}
+             onClick={event => {
+                 const selection = window.getSelection();
+                 if (selection && !selection.isCollapsed && event.currentTarget.contains(selection.anchorNode)) return;
+                 onFocus();
+             }}
+             onKeyDown={event => {
+                 if (event.key === 'Enter' || event.key === ' ') {
+                     event.preventDefault();
+                     onFocus();
+                 }
+             }}>
+            {children}
+        </div>
+    );
+}
+
 function LogList({items, match, onFocus, depth, focus}: {
     items: LogItem[];
     match: LogMatch;
@@ -604,10 +633,10 @@ function LogList({items, match, onFocus, depth, focus}: {
                 return (
                     <li key={i}>
                         {onFocus ? (
-                            <button type="button" onClick={() => onFocus(focus ?? item.nodeId)}
+                            <FocusRow onFocus={() => onFocus(focus ?? item.nodeId)}
                                     className="flex w-full gap-3 px-3 py-0.5 text-left hover:bg-accent" style={indent}>
                                 {cells}
-                            </button>
+                            </FocusRow>
                         ) : (
                             <div className="flex w-full gap-3 px-3 py-0.5 hover:bg-accent/50" style={indent}>{cells}</div>
                         )}

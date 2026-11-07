@@ -1,4 +1,4 @@
-import type { ComponentRun, RunProgress, RunRecord, SubRun } from '@dataflow/core';
+import type { ComponentRun, LogLine, RunProgress, RunRecord, SubRun } from '@dataflow/core';
 
 /** a run as the panel shows it: ended, or still going */
 export type Shown = RunRecord | RunProgress;
@@ -45,10 +45,20 @@ export const queuedRunsOf = (c: ComponentRun): SubRun[] => (c.subRuns ?? []).fil
 /** the End's closing line ("Run … finished (Failed) …"): a summary, not an error of its own */
 const CLOSING_LINE = /^Run \S+ finished \(/;
 
+/** whether a line is an error the engine wrote (not the End's closing line, nor what a component logs at that level) */
+const isError = (c: ComponentRun, line: LogLine) => line.level === 'error' && !line.byComponent && !(c.type === 'end' && CLOSING_LINE.test(line.message));
+
+/**
+ * A Flow Invoker's line that only passes on the error of a flow it called ("The flow "X" failed: …") whose own lines
+ * are in its record: that error is listed where it happened (under this one), not once more at each level up.
+ */
+const relays = (c: ComponentRun, line: LogLine) =>
+  subRunsOf(c).some(sub => line.message.startsWith(`The flow "${sub.flow}" failed: `) && sub.record.components.some(s => s.logs.some(l => isError(s, l))));
+
 /**
  * The run's errors, from the error lines the engine wrote (not the log's other lines, nor what a component logs at
  * the error level, e.g. a Log set to Error): the same message of the same component once, with its count, in the
- * order they first came.
+ * order they first came. An error in a called flow is listed once, where it happened, with the calls down to it.
  */
 export function runErrors(record: Shown): RunError[] {
   const stacked = new Map<string, RunError>();
@@ -56,7 +66,7 @@ export function runErrors(record: Shown): RunError[] {
   const collect = (shown: Shown, nodeId: string | undefined, via: string) => {
     for (const c of shown.components) {
       for (const line of c.logs) {
-        if (line.level !== 'error' || line.byComponent || (c.type === 'end' && CLOSING_LINE.test(line.message))) {
+        if (!isError(c, line) || relays(c, line)) {
           continue;
         }
 
